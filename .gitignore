@@ -1,0 +1,122 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# Django
+*.log
+*.pot
+*.pyc
+db.sqlite3
+db.sqlite3-journal
+media
+staticfiles/
+
+# Environment variables
+.env
+.env.*
+!.env.sample
+.venv
+env/
+venv/
+ENV/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Distribution / packaging
+*.egg-info/
+.installed.cfg
+*.egg
+build/
+dist/
+*.mo
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.pytest_cache/
+.mypy_cache/
+
+# Local development
+local_settings.py
+local.py
+
+# Database migrations - if using consolidated migrations, might want to track these
+# */migrations/*.py
+# */migrations/*.pyc
+# !*/migrations/__init__.py
+
+# Frontend
+node_modules/
+/.pnp
+.pnp.js
+
+# Frontend build files
+/build
+/.next/
+/out/
+.next
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local development
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Supabase
+.supabase/
+
+# AWS
+.aws/
+
+# Secrets
+secrets.json
+*.pem
+*.key
+*.crt
+*.cert
+
+# Python
+*.manifest
+*.spec
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+*~.nib
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+/frontend/build/
+/static/
+
+# Misc
+.DS_Store
+Thumbs.db
