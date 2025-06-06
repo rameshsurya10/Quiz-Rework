@@ -104,21 +104,33 @@ class User(AbstractBaseUser, PermissionsMixin):
 class Teacher(models.Model):
     """Teacher model extending the User model"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='teacher_profile')
-    employee_id = models.CharField(max_length=20, unique=True)
-    specialization = models.CharField(max_length=100, blank=True, null=True)
-    qualification = models.CharField(max_length=100, blank=True, null=True)
-    bio = models.TextField(blank=True, null=True)
-    join_date = models.DateField(blank=True, null=True)
+    teacher_name = models.CharField(max_length=255, unique=False)
+    email = models.CharField(max_length=255, unique=False) 
     phone_number = PhoneNumberField(blank=True, null=True)
-    is_head = models.BooleanField(default=False)
-    departments = models.ManyToManyField('departments.Department', related_name='teachers')
+    join_date = models.DateField(blank=True, null=True)
+    department_ids = models.ManyToManyField('departments.Department', related_name='teachers')
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.CharField(max_length=255, unique=False)
+    last_modified_at = models.DateTimeField(auto_now=True)
+    last_modified_by = models.CharField(max_length=255, unique=False)
+    is_deleted = models.BooleanField(default=False)
+
+    # id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='teacher_profile')
+    # employee_id = models.CharField(max_length=20, unique=True)
+    # specialization = models.CharField(max_length=100, blank=True, null=True)
+    # qualification = models.CharField(max_length=100, blank=True, null=True)
+    # bio = models.TextField(blank=True, null=True)
+    # join_date = models.DateField(blank=True, null=True)
+    # phone_number = PhoneNumberField(blank=True, null=True)
+    # is_head = models.BooleanField(default=False)
+    # departments = models.ManyToManyField('departments.Department', related_name='teachers')
+    # created_at = models.DateTimeField(auto_now_add=True)
+    # updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = 'Teacher'
-        verbose_name_plural = 'Teachers'
+        verbose_name = 'teachers'
+        verbose_name_plural = 'teachers'
     
     def __str__(self):
         return f"{self.user.get_full_name()} ({self.employee_id})"

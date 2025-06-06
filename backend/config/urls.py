@@ -35,17 +35,19 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # JWT token endpoints for frontend authentication (now handled in accounts app)
-    # path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     # path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
     # API endpoints
     path('api/accounts/', include('accounts.urls')),  # User and authentication endpoints
-    path('api/accounts/', include('accounts.urls')),
+    # path('api/accounts/', include('accounts.urls')),
     path('api/documents/', include('documents.urls')),
     path('api/quizzes/', include('quizzes.urls')),
     path('api/ai/', include('ai_processing.urls')),
     path('api/departments/', include('departments.urls')),
     path('api/notifications/', include('notifications.urls')),
+    # path('api/teachers/', include('accounts.urls')),
+
     
     # JWT Authentication
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

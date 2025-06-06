@@ -11,7 +11,12 @@ class Department(models.Model):
     code = models.CharField(max_length=20, unique=True)
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.CharField(max_length=255, unique=False)
+    last_modified_at = models.DateTimeField(auto_now=True)
+    last_modified_by = models.CharField(max_length=255, unique=False)
+
+    # created_at = models.DateTimeField(auto_now_add=True)
+    # updated_at = models.DateTimeField(auto_now=True)
     
     # Department statistics - cached fields for better performance
     student_count = models.IntegerField(default=0)
