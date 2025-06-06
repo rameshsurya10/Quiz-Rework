@@ -95,74 +95,30 @@ const Dashboard = () => {
     const refresh = async () => {
         setIsLoading(true);
         try {
-            // Check if user is authenticated using the apiService helper
-            if (!apiService.isAuthenticated()) {
-                console.error('Not authenticated, redirecting to login');
-                showMessage('Please login to access the dashboard', 'error');
-                setTimeout(() => window.location.href = '/login', 1500);
-                return;
-            }
+            console.log('Fetching dashboard data...');
             
-            // Get current user info
-            const user = apiService.getCurrentUser();
-            console.log('Dashboard: Current user:', user);
-            
-            // Try to fetch quiz data using the CRUD utility from apiService
-            try {
-                console.log(`Attempting to fetch quizzes data`);
-                const quizData = await apiService.useCRUD().read('api/quizzes', 1, 10, search, 
-                    (error) => console.warn('Quiz endpoint error:', error)
-                );
-                
-                if (quizData) {
-                    console.log('Dashboard: Quiz data received:', quizData);
-                    setData(quizData);
-                    if (quizData.extra) {
-                        setExtra(quizData.extra);
-                    }
-                    showMessage("Quiz data loaded successfully", "success");
-                    setIsLoading(false);
-                    return; // Exit if this succeeds
+            const dashboardData = await apiService.useCRUD().read(
+                'api/dashboard',  // Add 'api/' prefix here
+                1,                // page
+                10,               // pageSize
+                {},               // No filters needed
+                (error) => {
+                    console.error('Dashboard endpoint error:', error);
+                    showMessage('Failed to load dashboard data', 'error');
                 }
-            } catch (quizError) {
-                console.log('Dashboard: Quiz endpoint failed, trying dashboard endpoint', quizError);
-            }
-            
-            // Fall back to dashboard endpoint
-            const dashboardData = await apiService.useCRUD().read('dashboard', 1, 10, search,
-                (error) => console.warn('Dashboard endpoint error:', error)
             );
             
-            console.log('Dashboard: Dashboard data received:', dashboardData);
+            console.log('Dashboard data received:', dashboardData);
             
             if (dashboardData) {
                 setData(dashboardData);
-                if (dashboardData.extra) {
-                    setExtra(dashboardData.extra);
-                }
-                showMessage("Dashboard data refreshed successfully", "success");
+                showMessage('Dashboard data loaded successfully', 'success');
             } else {
-                // If no data is returned but no error, use mock data
-                console.log('Dashboard: No data returned, using mock data');
-                // We already have mock data initialized in state
-                showMessage("Using sample dashboard data", "info");
+                showMessage('No data available', 'info');
             }
         } catch (error) {
-            console.error("Error fetching dashboard data:", error);
-            let errorMsg = "Failed to load dashboard data.";
-            
-            if (error.response?.status === 401) {
-                errorMsg = "Your session has expired. Please log in again.";
-                apiService.logoutUser(); // Use default window.location navigation
-            } else if (error.response?.data?.message) {
-                errorMsg = error.response.data.message;
-            } else {
-                // Use mock data on any error
-                errorMsg = "Using sample dashboard data";
-                setTimeout(() => setIsLoading(false), 1000);
-            }
-            
-            showMessage(errorMsg);
+            console.error('Error in refresh:', error);
+            showMessage('Error loading dashboard data', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -188,17 +144,12 @@ const Dashboard = () => {
         };
     }, [search]); // Include search in dependency array to refetch when filter changes
 
-    const handleQuizChange = (event) => {
-        const quizId = event.target.value;
-        setSearch(prevSearch => {
-            const newSearch = { ...prevSearch };
-            if (quizId === 'all') {
-                delete newSearch.quiz_id; // Or set to null if API expects that
-            } else {
-                newSearch.quiz_id = quizId;
-            }
-            return newSearch;
-        });
+    const handleSearchChange = (event) => {
+        const { name, value } = event.target;
+        setSearch(prevSearch => ({
+            ...prevSearch,
+            [name]: value
+        }));
     };
 
     const formatTime = (seconds) => {
@@ -345,14 +296,20 @@ const Dashboard = () => {
     }
     
     return (
-        <FullLayout>
+        <FullLayout hideToolbar>
             <Box sx={{ 
                 background: theme.palette.mode === 'dark' 
                     ? 'linear-gradient(135deg, #121212 0%, #1E1E1E 100%)' 
                     : 'linear-gradient(135deg, #f5f7fa 0%, #eef2f7 100%)',
                 minHeight: '100vh',
-                py: 3,
-                px: { xs: 1, sm: 2, md: 3 }
+                padding: 2, // 16px spacing on all sides
+                overflow: 'auto',
+                '& .MuiContainer-root': {
+                    padding: 2, // 16px spacing
+                    margin: 0,
+                    maxWidth: '100% !important',
+                    width: '100%'
+                }
             }}>
                 <Box maxWidth="1600px" mx="auto">
                     {/* Header with Title and Actions */}
@@ -460,42 +417,6 @@ const Dashboard = () => {
                     <Grid container spacing={3}>
                         {/* Left Side - Main Content */}
                         <Grid item xs={12} lg={showTrendDetails ? 8 : 12}>
-                            {/* Quiz Selector */}
-                            <Card sx={{ mb: 3, borderRadius: 3, boxShadow: 3 }}>
-                                <CardContent>
-                                    <Grid container spacing={2} alignItems="center">
-                                        <Grid item xs={12} sm={4} md={3}>
-                                            <Typography variant="subtitle1" fontWeight="medium">Filter by Quiz</Typography>
-                                        </Grid>
-                                        <Grid item xs={12} sm={8} md={6}>
-                                            <FormControl fullWidth size="small">
-                                                <Select
-                                                    value={search?.quiz_id || 'all'}
-                                                    onChange={handleQuizChange}
-                                                    displayEmpty
-                                                    inputProps={{ 'aria-label': 'Select quiz' }}
-                                                    sx={{
-                                                        borderRadius: 2,
-                                                        bgcolor: 'background.paper',
-                                                        '& .MuiOutlinedInput-notchedOutline': {
-                                                            borderWidth: '1px !important',
-                                                            borderColor: alpha(theme.palette.primary.main, 0.2) + ' !important',
-                                                        },
-                                                    }}
-                                                >
-                                                    <MenuItem value="all">All Quizzes</MenuItem>
-                                                    {extra.map((quiz) => (
-                                                        <MenuItem key={quiz.id} value={quiz.id}>
-                                                            {quiz.name}
-                                                        </MenuItem>
-                                                    ))}
-                                                </Select>
-                                            </FormControl>
-                                        </Grid>
-                                    </Grid>
-                                </CardContent>
-                            </Card>
-
                             {/* Performance Overview */}
                             <Card sx={{ mb: 3, borderRadius: 3, boxShadow: 3 }}>
                                 <CardContent>
