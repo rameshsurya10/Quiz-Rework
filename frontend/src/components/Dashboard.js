@@ -330,22 +330,28 @@ const Dashboard = () => {
                                 {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                             </Typography>
                         </Box>
-                        <Box display="flex" gap={2}>
+                        <Box display="flex" gap={{ xs: 1, sm: 2 }} flexWrap="wrap">
                             {isAdvancedView && (
                                 <Button 
                                     onClick={() => setShowTrendDetails(!showTrendDetails)}
                                     variant={showTrendDetails ? "contained" : "outlined"}
                                     color="primary"
                                     startIcon={<ShowChartIcon />}
+                                    size={isMobile ? "small" : "medium"}
                                     sx={{
                                         borderRadius: '12px',
                                         textTransform: 'none',
-                                        px: 3,
+                                        px: { xs: 2, sm: 3 },
                                         fontWeight: 600,
-                                        letterSpacing: 0.5
+                                        letterSpacing: 0.5,
+                                        whiteSpace: 'nowrap',
+                                        minWidth: 'auto',
+                                        '& .MuiButton-startIcon': {
+                                            mr: { xs: 0.5, sm: 1 }
+                                        }
                                     }}
                                 >
-                                    {showTrendDetails ? "Hide Trends" : "Show Trends"}
+                                    {isMobile ? (showTrendDetails ? 'Hide' : 'Trends') : (showTrendDetails ? 'Hide Trends' : 'Show Trends')}
                                 </Button>
                             )}
                             <Button 
@@ -359,16 +365,22 @@ const Dashboard = () => {
                                 variant={isAdvancedView ? "outlined" : "contained"}
                                 color="primary"
                                 startIcon={<StyleIcon />}
+                                size={isMobile ? "small" : "medium"}
                                 sx={{
                                     borderRadius: '12px',
                                     textTransform: 'none',
-                                    px: 3,
+                                    px: { xs: 2, sm: 3 },
                                     fontWeight: 600,
                                     letterSpacing: 0.5,
-                                    boxShadow: isAdvancedView ? 'none' : theme.shadows[3]
+                                    boxShadow: isAdvancedView ? 'none' : theme.shadows[3],
+                                    whiteSpace: 'nowrap',
+                                    minWidth: 'auto',
+                                    '& .MuiButton-startIcon': {
+                                        mr: { xs: 0.5, sm: 1 }
+                                    }
                                 }}
                             >
-                                {isAdvancedView ? "Simple View" : "Advanced View"}
+                                {isMobile ? (isAdvancedView ? 'Simple' : 'Advanced') : (isAdvancedView ? 'Simple View' : 'Advanced View')}
                             </Button>
                         </Box>
                     </Box>

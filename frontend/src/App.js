@@ -4,7 +4,8 @@ import { ThemeProvider, CssBaseline, CircularProgress, Box } from '@mui/material
 import theme from './theme';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import TeacherSection from './components/TeacherSection';
+import TeacherSection from './components/teachers';
+import FullLayout from './components/FullLayout';
 import apiService from './api';
 
 // Protected route component
@@ -76,7 +77,16 @@ function App() {
           } />
           <Route path="/teachers" element={
             <ProtectedRoute>
-              <TeacherSection />
+              <FullLayout>
+                <TeacherSection />
+              </FullLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/teachers/add" element={
+            <ProtectedRoute>
+              <FullLayout>
+                <TeacherSection initialOpenDialog={true} />
+              </FullLayout>
             </ProtectedRoute>
           } />
           

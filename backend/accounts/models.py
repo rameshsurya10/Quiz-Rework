@@ -102,44 +102,47 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class Teacher(models.Model):
-    """Teacher model extending the User model"""
+    """Teacher model linking to the User model"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    teacher_name = models.CharField(max_length=255, unique=False)
-    email = models.CharField(max_length=255, unique=False) 
-    phone_number = PhoneNumberField(blank=True, null=True)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='teacher_profile')
+    employee_id = models.CharField(max_length=50, unique=True) # From TeacherCreateSerializer
+    specialization = models.CharField(max_length=255, blank=True, null=True) # From TeacherCreateSerializer
+    qualification = models.CharField(max_length=255, blank=True, null=True) # From TeacherCreateSerializer
+    bio = models.TextField(blank=True, null=True)
     join_date = models.DateField(blank=True, null=True)
-    department_ids = models.ManyToManyField('departments.Department', related_name='teachers')
-    created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.CharField(max_length=255, unique=False)
-    last_modified_at = models.DateTimeField(auto_now=True)
-    last_modified_by = models.CharField(max_length=255, unique=False)
-    is_deleted = models.BooleanField(default=False)
+    phone_number = PhoneNumberField(blank=True, null=True)
+    is_head = models.BooleanField(default=False)
+    departments = models.ManyToManyField('departments.Department', related_name='department_teachers') # Field name is 'departments'
 
-    # id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='teacher_profile')
-    # employee_id = models.CharField(max_length=20, unique=True)
-    # specialization = models.CharField(max_length=100, blank=True, null=True)
-    # qualification = models.CharField(max_length=100, blank=True, null=True)
-    # bio = models.TextField(blank=True, null=True)
-    # join_date = models.DateField(blank=True, null=True)
-    # phone_number = PhoneNumberField(blank=True, null=True)
-    # is_head = models.BooleanField(default=False)
-    # departments = models.ManyToManyField('departments.Department', related_name='teachers')
-    # created_at = models.DateTimeField(auto_now_add=True)
-    # updated_at = models.DateTimeField(auto_now=True)
-    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True) # Aligned with serializer
+
+    # Fields from TeacherCreateView logic (created_by, last_modified_by)
+    created_by = models.CharField(max_length=255) 
+    last_modified_by = models.CharField(max_length=255)
+
+    is_deleted = models.BooleanField(default=False) # For soft delete
+
     class Meta:
-        verbose_name = 'teachers'
+        verbose_name = 'teacher' # Singular for verbose_name
         verbose_name_plural = 'teachers'
-    
+        ordering = ['user__first_name', 'user__last_name'] # Sensible default ordering
+
     def __str__(self):
-        return f"{self.user.get_full_name()} ({self.employee_id})"
-    
+        user_fullname = "N/A"
+        employee_id_str = "No ID"
+        # Ensure user and employee_id exist before trying to access them
+        if hasattr(self, 'user') and self.user:
+            user_fullname = self.user.get_full_name()
+        if hasattr(self, 'employee_id') and self.employee_id:
+            employee_id_str = self.employee_id
+        return f"{user_fullname} ({employee_id_str})"
+
     def save(self, *args, **kwargs):
-        # Ensure the user has the correct role
-        if self.user.role != User.Role.TEACHER:
+        # Ensure the user has the correct role when saving
+        if hasattr(self, 'user') and self.user and self.user.role != User.Role.TEACHER:
             self.user.role = User.Role.TEACHER
-            self.user.save()
+            self.user.save() # Save the user object if role changed
         super().save(*args, **kwargs)
 
 

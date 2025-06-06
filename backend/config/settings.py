@@ -44,10 +44,10 @@ INSTALLED_APPS = [
     'accounts',
     'documents',
     'quizzes',
+    'dashboard',
     'ai_processing',
     'departments',
     'notifications',
-    'migrations.apps.MigrationsConfig',
 ]
 
 MIDDLEWARE = [

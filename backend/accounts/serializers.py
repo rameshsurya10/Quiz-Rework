@@ -117,6 +117,22 @@ class TeacherSerializer(serializers.ModelSerializer):
         return [dept.name for dept in obj.departments.all()]
 
 
+class TeacherCreateSerializer(serializers.Serializer):
+    """Serializer for creating a new teacher with user account"""
+    first_name = serializers.CharField(required=True, max_length=150)
+    last_name = serializers.CharField(required=True, max_length=150)
+    email = serializers.EmailField(required=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    department_name = serializers.CharField(required=True, max_length=100)
+    employee_id = serializers.CharField(required=True, max_length=50)
+    # specialization, qualification, bio, and is_head are removed as per user request
+
+    def create(self, validated_data):
+        # This method is not used directly since we're handling creation in the view
+        # But it's required by the serializer
+        pass
+
+
 class StudentSerializer(serializers.ModelSerializer):
     """Serializer for Student model"""
     user = UserSerializer(read_only=True)
