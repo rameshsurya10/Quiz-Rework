@@ -27,7 +27,8 @@ class QuestionSerializer(serializers.ModelSerializer):
         model = Question
         fields = [
             'id', 'question_text', 'question_type', 
-            'explanation', 'difficulty', 'options', 'answer'
+            'explanation', 'difficulty', 'options', 'answer',
+            'source_page'
         ]
 
 
@@ -64,10 +65,12 @@ class GenerateQuestionsSerializer(serializers.Serializer):
         choices=['multiple_choice', 'true_false', 'short_answer'],
         default=['multiple_choice']
     )
-    difficulty = serializers.ChoiceField(
-        choices=['easy', 'medium', 'hard', 'mixed'],
+    complexity = serializers.ChoiceField(
+        choices=['lite', 'medium', 'expert', 'mixed'],
         default='medium'
     )
+    page_start = serializers.IntegerField(required=False, min_value=1)
+    page_end = serializers.IntegerField(required=False, min_value=1)
     batch_name = serializers.CharField(max_length=255)
     batch_description = serializers.CharField(required=False, allow_blank=True)
     

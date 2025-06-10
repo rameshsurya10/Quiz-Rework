@@ -158,6 +158,7 @@ class Student(models.Model):
     phone_number = PhoneNumberField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_deleted = models.BooleanField(default=False)
     
     class Meta:
         verbose_name = 'Student'
@@ -177,13 +178,22 @@ class Student(models.Model):
             self.department.update_counts()
 
 class UserProfile(models.Model):
-    """Extended profile information for users"""
+    """Extended profile information for users with settings"""
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     bio = models.TextField(blank=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     institution = models.CharField(max_length=255, blank=True)
+    
+    # Settings fields
+    email_notifications = models.BooleanField(default=True)
+    push_notifications = models.BooleanField(default=False)
+    dark_mode = models.BooleanField(default=False)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     def __str__(self):
-        return f"{self.user.get_full_name()}'s Profile"
+        return f"{self.user.email}'s profile"
+        
+    class Meta:
+        ordering = ['-created_at']

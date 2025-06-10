@@ -1,7 +1,11 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, serializers
+from django.db.models import Count
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.views import APIView
 from .models import Department
 from accounts.models import Student, Teacher, User
 from .serializers import DepartmentSerializer, DepartmentDetailSerializer
@@ -15,6 +19,27 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     serializer_class = DepartmentSerializer
     permission_classes = [IsAuthenticated]
     
+    # Explicitly define allowed HTTP methods
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
+    
+    def get_queryset(self):
+        return Department.objects.all()
+    
+    @action(detail=False, methods=['post'], url_path='create-department', url_name='create-department')
+    def create_department(self, request):
+        """Create a new department"""
+        return self.create(request)
+
+    def create(self, request, *args, **kwargs):
+        """
+        Handle POST request to create a new department.
+        """
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
     def get_serializer_class(self):
         """Return different serializers for list and detail views"""
         if self.action == 'retrieve':
@@ -26,17 +51,21 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = Department.objects.all()
         
-        if user.is_student:
+        if hasattr(user, 'is_student') and user.is_student: # Check if user has is_student
             # Students can only see their own department
-            queryset = queryset.filter(students__user=user)
-        elif user.is_teacher:
+            student_profile = getattr(user, 'student_profile', None)
+            if student_profile and student_profile.department:
+                 queryset = queryset.filter(pk=student_profile.department.pk)
+            else:
+                 queryset = queryset.none() # No department associated
+        elif hasattr(user, 'is_teacher') and user.is_teacher: # Check if user has is_teacher
             # Teachers can see departments they belong to
             queryset = queryset.filter(teachers__user=user)
             
         return queryset.annotate(
             student_count=Count('students', distinct=True),
             teacher_count=Count('teachers', distinct=True)
-        )
+        ).distinct() # Add distinct to avoid potential duplicate rows from annotate
     
     @action(detail=True, methods=['post'], url_path='bulk-upload-students')
     def bulk_upload_students(self, request, pk=None):

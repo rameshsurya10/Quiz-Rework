@@ -288,10 +288,71 @@ const useCRUD = () => {
   };
 };
 
+// User profile API methods
+const userApi = {
+  // Get current user profile
+  getProfile: async () => {
+    try {
+      const response = await api.get('/api/accounts/profile/');
+      return { data: response.data };
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      throw error;
+    }
+  },
+
+  // Update user profile
+  updateProfile: async (profileData) => {
+    try {
+      const response = await api.patch('/api/accounts/profile/', profileData);
+      // Update local storage if email is updated
+      if (profileData.email) {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        user.email = profileData.email;
+        localStorage.setItem('user', JSON.stringify(user));
+      }
+      return { data: response.data };
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      throw error;
+    }
+  },
+
+  // Change password
+  changePassword: async (passwordData) => {
+    try {
+      await api.post('/api/accounts/change-password/', passwordData);
+      return { success: true };
+    } catch (error) {
+      console.error('Error changing password:', error);
+      throw error;
+    }
+  },
+
+  // Upload profile picture
+  uploadProfilePicture: async (file) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
+    try {
+      const response = await api.patch('/api/accounts/profile/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return { data: response.data };
+    } catch (error) {
+      console.error('Error uploading profile picture:', error);
+      throw error;
+    }
+  }
+};
+
 // Export the API service object
 const apiService = {
   api,
   getBaseUrl,
+  userApi,
   parseToken,
   isTokenValid,
   getUserFromToken,

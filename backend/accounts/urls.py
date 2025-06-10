@@ -7,12 +7,30 @@ from .views import (
     UserDetailView,
     ChangePasswordView,
     UserListView,
+    AvatarUploadView,
 )
 from .teacher_views import TeacherListCreateView, TeacherDetailView
+from .student_views import StudentListCreateView, StudentDetailView
+from rest_framework.response import Response
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 
 app_name = 'accounts'
 
+# Simple test view to verify API routing
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def test_api_view(request):
+    return Response({
+        'status': 'success',
+        'message': 'API endpoint is working correctly',
+        'path': request.path
+    })
+
 urlpatterns = [
+    # Test endpoint
+    path('test/', test_api_view, name='test-api'),
+    
     # Authentication endpoints
     path('login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
@@ -21,10 +39,16 @@ urlpatterns = [
     
     # User endpoints
     path('me/', UserDetailView.as_view(), name='user_detail'),
+    path('me/avatar/', AvatarUploadView.as_view(), name='user_avatar_upload'),
     path('profile/', UserProfileView.as_view(), name='user_profile'),
-    path('users/', UserListView.as_view(), name='user_list'),
+    path('', UserListView.as_view(), name='user_list'),
     
     # Teacher endpoints
     path('teachers/', TeacherListCreateView.as_view(), name='teacher_list_create'),
     path('teachers/<uuid:id>/', TeacherDetailView.as_view(), name='teacher_detail'),
+    
+    # Student endpoints with pagination support
+    path('students/', StudentListCreateView.as_view(), name='student_list_create'),
+    path('students/paginated/', StudentListCreateView.as_view(), {'paginated': True}, name='student_paginated'),
+    path('students/<uuid:id>/', StudentDetailView.as_view(), name='student_detail'),
 ]

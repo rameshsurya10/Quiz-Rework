@@ -12,15 +12,15 @@ export const InfoCard = ({ title, value, icon, color, subtitle, trend, trendValu
   return (
     <Card sx={{ 
       height: '100%',
-      borderRadius: 3,
-      boxShadow: '0 4px 20px 0 rgba(0,0,0,0.05)',
-      background: `linear-gradient(135deg, ${alpha(color || theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.background.paper, 0.5)} 100%)`,
-      backdropFilter: 'blur(10px)',
+      borderRadius: '16px',
+      boxShadow: '0 4px 20px 0 rgba(0,0,0,0.03)',
+      background: `linear-gradient(135deg, ${alpha(color || theme.palette.primary.main, 0.03)} 0%, ${alpha(theme.palette.background.paper, 0.9)} 100%)`,
+      backdropFilter: 'blur(10px)', // Kept from original InfoCard as a potential enhancement
       border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
       transition: 'all 0.3s ease-in-out',
       '&:hover': {
         transform: 'translateY(-5px)',
-        boxShadow: '0 8px 25px 0 rgba(0,0,0,0.1)'
+        boxShadow: '0 8px 30px 0 rgba(0,0,0,0.07)' // Aligned with DashboardStyledCard hover shadow
       }
     }}>
       <CardContent>

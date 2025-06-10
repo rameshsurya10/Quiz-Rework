@@ -4,8 +4,15 @@ import { ThemeProvider, CssBaseline, CircularProgress, Box } from '@mui/material
 import theme from './theme';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import TeacherSection from './components/teachers';
+import TeacherSection from './components/teachers/TeacherSection';
+import StudentSection from './components/students/StudentSection';
+import QuizSection from './components/quizzes/QuizSection';
+import ResultsSection from './components/results/ResultsSection';
+import ProfilePage from './components/profile/ProfilePage';
+import SettingsPage from './components/settings/SettingsPage';
+import DepartmentSection from './departments/DepartmentSection';
 import FullLayout from './components/FullLayout';
+import { SnackbarProvider } from './contexts/SnackbarContext';
 import apiService from './api';
 
 // Protected route component
@@ -64,7 +71,8 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <BrowserRouter>
+      <SnackbarProvider>
+        <BrowserRouter>
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
@@ -90,6 +98,65 @@ function App() {
             </ProtectedRoute>
           } />
           
+          {/* Student Routes */}
+          <Route path="/students" element={
+            <ProtectedRoute>
+              <FullLayout>
+                <StudentSection />
+              </FullLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/students/add" element={
+            <ProtectedRoute>
+              <FullLayout>
+                <StudentSection initialOpenDialog={true} />
+              </FullLayout>
+            </ProtectedRoute>
+          } />
+
+          {/* Quiz Management Route */}
+          <Route path="/quizzes" element={
+            <ProtectedRoute>
+              <QuizSection />
+            </ProtectedRoute>
+          } />
+
+          {/* Results Route */}
+          <Route path="/results" element={
+            <ProtectedRoute>
+              <ResultsSection />
+            </ProtectedRoute>
+          } />
+
+          {/* Profile Page Route - Handles both profile and user management */}
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          }>
+            <Route path="users" element={
+              <ProtectedRoute>
+                <ProfilePage initialTab={1} />
+              </ProtectedRoute>
+            } />
+          </Route>
+
+          {/* Settings Page Route */}
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          } />
+
+          {/* Department Management Route */}
+          <Route path="/departments" element={
+            <ProtectedRoute>
+              <FullLayout>
+                <DepartmentSection />
+              </FullLayout>
+            </ProtectedRoute>
+          } />
+          
           {/* Redirect root to dashboard if authenticated, otherwise to login */}
           <Route path="/" element={
             apiService.isAuthenticated() ? 
@@ -104,7 +171,8 @@ function App() {
               <Navigate to="/login" replace />
           } />
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </SnackbarProvider>
     </ThemeProvider>
   );
 }

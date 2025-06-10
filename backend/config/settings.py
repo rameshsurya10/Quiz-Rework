@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
     'storages',
+    'django_extensions',
     
     # Local apps
     'accounts',
@@ -48,6 +49,8 @@ INSTALLED_APPS = [
     'ai_processing',
     'departments',
     'notifications',
+    'reports',
+    'settings',
 ]
 
 MIDDLEWARE = [
@@ -152,6 +155,10 @@ CORS_ALLOWED_ORIGINS = [
     'http://127.0.0.1:3000',
 ]
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True  # More permissive for development
+CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+CORS_ALLOW_HEADERS = ['*']
+CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 
 # File Storage Configuration (AWS S3 or Supabase)
 # Use Supabase by default if configured

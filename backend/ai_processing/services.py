@@ -139,20 +139,31 @@ class AIQuestionGenerator:
         text: str, 
         num_questions: int, 
         question_types: List[str],
-        difficulty: str
+        complexity: str
     ) -> str:
         """Prepare the prompt for the OpenAI API"""
+        from ai_processing.models import QuestionBatch
         question_type_str = ", ".join(question_types)
         
+        # Get complexity guidelines
+        complexity_guide = QuestionBatch.COMPLEXITY_GUIDES.get(
+            complexity, 
+            QuestionBatch.COMPLEXITY_GUIDES['medium']
+        )
+        
         return f"""
-        Generate {num_questions} {difficulty} difficulty quiz questions based on the following text.
+        Generate {num_questions} {complexity} complexity quiz questions based on the following text.
         Include questions of these types: {question_type_str}.
+        
+        Complexity guidelines for {complexity} questions:
+        {complexity_guide}
         
         For each question:
         1. Create a clear question based on the content
         2. For multiple choice questions, provide 4 options with exactly one correct answer
         3. Clearly indicate the correct answer
         4. Add an explanation for why the answer is correct
+        5. If there are page markers in the text [Page X], reference the page number in the explanation
         
         Return the questions as a JSON array where each question is an object with the following structure:
         - For multiple choice questions:
@@ -162,7 +173,8 @@ class AIQuestionGenerator:
             "options": ["Option A", "Option B", "Option C", "Option D"],
             "correct_answer": "The correct option (exact text)",
             "explanation": "Explanation of why this is the correct answer",
-            "difficulty": "easy/medium/hard"
+            "source_page": "Page number (if available, otherwise null)",
+            "complexity": "{complexity}"
           }}
         
         - For true/false questions:
@@ -171,7 +183,8 @@ class AIQuestionGenerator:
             "question_text": "Statement to evaluate as true or false",
             "correct_answer": true or false,
             "explanation": "Explanation of why this is correct",
-            "difficulty": "easy/medium/hard"
+            "source_page": "Page number (if available, otherwise null)",
+            "complexity": "{complexity}"
           }}
         
         - For short answer questions:
@@ -180,7 +193,8 @@ class AIQuestionGenerator:
             "question_text": "Question requiring a short answer",
             "correct_answer": "The correct answer",
             "explanation": "Explanation of the answer",
-            "difficulty": "easy/medium/hard"
+            "source_page": "Page number (if available, otherwise null)",
+            "complexity": "{complexity}"
           }}
         
         Text to generate questions from:

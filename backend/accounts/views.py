@@ -45,12 +45,37 @@ class UserRegistrationView(generics.CreateAPIView):
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
-    """API view for retrieving and updating user profiles"""
+    """
+    API view for retrieving and updating user profiles and settings
+    Handles both profile information and user settings in one endpoint
+    """
     serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
     
     def get_object(self):
-        return self.request.user.profile
+        # Get or create the user's profile with default settings
+        profile, created = UserProfile.objects.get_or_create(
+            user=self.request.user,
+            defaults={
+                'email_notifications': True,
+                'push_notifications': False,
+                'dark_mode': False
+            }
+        )
+        return profile
+        
+    def perform_update(self, serializer):
+        # Handle file uploads separately
+        avatar = self.request.FILES.get('avatar')
+        if avatar:
+            # Delete old avatar if exists when new one is uploaded
+            profile = self.get_object()
+            if profile.avatar:
+                profile.avatar.delete(save=False)
+            serializer.validated_data['avatar'] = avatar
+            
+        # Save the updated profile
+        serializer.save()
 
 
 class UserDetailView(generics.RetrieveUpdateAPIView):
@@ -60,6 +85,11 @@ class UserDetailView(generics.RetrieveUpdateAPIView):
     
     def get_object(self):
         return self.request.user
+    
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
 
 class ChangePasswordView(APIView):
@@ -86,18 +116,80 @@ class ChangePasswordView(APIView):
 
 
 class UserListView(generics.ListAPIView):
-    """API view for listing users (admin only)"""
+    """API view for listing users with optional role filtering"""
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # Disable pagination for simplicity
     
     def get_queryset(self):
+        queryset = User.objects.all()
         user = self.request.user
-        if user.is_admin:
-            return User.objects.all()
-        elif user.is_teacher:
-            # Teachers can see students and themselves
-            return User.objects.filter(role=User.Role.STUDENT) | User.objects.filter(id=user.id)
-        else:
-            # Students can only see themselves
-            return User.objects.filter(id=user.id)
+        
+        # Apply role filtering if provided in query parameters
+        role = self.request.query_params.get('role')
+        if role:
+            if role.lower() == 'teacher':
+                return queryset.filter(role=User.Role.TEACHER)
+            elif role.lower() == 'student':
+                return queryset.filter(role=User.Role.STUDENT)
+            elif role.lower() == 'admin':
+                return queryset.filter(role=User.Role.ADMIN)
+        
+        # Apply permission-based filtering if no role specified
+        if not user.is_admin:
+            if user.is_teacher:
+                # Teachers can see students and themselves
+                return queryset.filter(role=User.Role.STUDENT) | queryset.filter(id=user.id)
+            else:
+                # Students can only see themselves
+                return queryset.filter(id=user.id)
+        
+        return queryset
+        
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+
+class AvatarUploadView(APIView):
+    """API view for uploading user avatar"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        if 'avatar' not in request.FILES:
+            return Response({'error': 'No avatar file provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        avatar_file = request.FILES['avatar']
+        
+        # Check if file is an image
+        if not avatar_file.content_type.startswith('image/'):
+            return Response({'error': 'File must be an image'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check file size limit (e.g., 2MB)
+        if avatar_file.size > 2 * 1024 * 1024:  # 2MB
+            return Response({'error': 'Image size should be less than 2MB'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get or create user profile
+            profile, created = UserProfile.objects.get_or_create(user=request.user)
+            
+            # Delete old avatar if exists
+            if profile.avatar and hasattr(profile.avatar, 'path'):
+                if profile.avatar.path:
+                    import os
+                    if os.path.exists(profile.avatar.path):
+                        os.remove(profile.avatar.path)
+            
+            # Save new avatar
+            profile.avatar = avatar_file
+            profile.save()
+            
+            return Response({
+                'success': True,
+                'message': 'Avatar updated successfully',
+                'avatar_url': request.build_absolute_uri(profile.avatar.url) if profile.avatar else None
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -6,11 +6,43 @@ from documents.models import Document
 class QuestionBatch(models.Model):
     """Model for a batch of generated questions"""
     DIFFICULTY_CHOICES = [
-        ('easy', 'Easy'),
+        ('lite', 'Lite'),
         ('medium', 'Medium'),
-        ('hard', 'Hard'),
+        ('expert', 'Expert'),
         ('mixed', 'Mixed'),
     ]
+    
+    # Complexity level guides for AI
+    COMPLEXITY_GUIDES = {
+        'lite': """
+            - Focus on basic comprehension and recall
+            - Use straightforward language
+            - Test fundamental concepts
+            - Make options clearly distinct
+            - Include simple explanations
+        """,
+        'medium': """
+            - Test understanding and application
+            - Include some analytical thinking
+            - Use moderate technical language
+            - Require connecting multiple concepts
+            - Provide detailed explanations
+        """,
+        'expert': """
+            - Focus on advanced analysis and synthesis
+            - Use complex scenarios and edge cases
+            - Include technical terminology
+            - Require deep understanding
+            - Test problem-solving abilities
+            - Provide comprehensive explanations
+        """,
+        'mixed': """
+            - Include a mixture of difficulty levels
+            - Cover various cognitive levels (recall, application, analysis)
+            - Mix straightforward and complex language
+            - Test both basic concepts and deeper connections
+        """
+    }
     
     document = models.ForeignKey(
         Document, 
