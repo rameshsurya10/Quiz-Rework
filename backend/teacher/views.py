@@ -98,6 +98,57 @@ class TeacherViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Filter out deleted teachers by default
         return Teacher.objects.filter(is_deleted=False).order_by('name')
+        
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        
+        # Handle department names and codes
+        department_names = data.get('department_names', [])
+        department_codes = data.get('department_code', [])
+        
+        if not department_names and not department_codes:
+            return Response(
+                {'error': 'Either department_names or department_code must be provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        department_ids = []
+        
+        # If department_names is provided, use them
+        if department_names:
+            if isinstance(department_names, str):
+                import json
+                department_names = json.loads(department_names)
+            
+            for dept_name in department_names:
+                dept, _ = Department.objects.get_or_create(
+                    name=dept_name,
+                    defaults={'code': department_codes[department_names.index(dept_name)] 
+                             if department_codes and len(department_codes) > department_names.index(dept_name) 
+                             else f"DEPT{Department.objects.count() + 1}"}
+                )
+                department_ids.append(dept.department_id)
+        
+        data['department_ids'] = department_ids
+        
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Set created_by and last_modified_by
+        serializer.save(
+            created_by=self.request.user.email,
+            last_modified_by=self.request.user.email
+        )
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        
+    def perform_create(self, serializer):
+        # This is kept for backward compatibility
+        serializer.save(
+            created_by=self.request.user.email,
+            last_modified_by=self.request.user.email
+        )
 
     @action(detail=False, methods=['post'])
     def filter_teachers(self, request):
