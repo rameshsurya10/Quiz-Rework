@@ -1,6 +1,7 @@
 from django.core.checks.security import sessions
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, status, viewsets
 from rest_framework.response import Response
+from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 from departments.models import Department
 from .models import Teacher
@@ -85,6 +86,93 @@ class TeacherDetailView(generics.RetrieveUpdateDestroyAPIView):
         instance.is_deleted = True
         instance.save()
         return Response({'message': 'Teacher is deleted successfully'}, status=status.HTTP_200_OK)
+
+class TeacherViewSet(viewsets.ModelViewSet):
+    """
+    A viewset for viewing and editing teacher instances.
+    """
+    serializer_class = TeacherSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'teacher_id'
+
+    def get_queryset(self):
+        # Filter out deleted teachers by default
+        return Teacher.objects.filter(is_deleted=False).order_by('name')
+
+    @action(detail=False, methods=['post'])
+    def filter_teachers(self, request):
+        """
+        Filter teachers by department_id (single or array) and/or teacher_name
+        Expected JSON payload:
+        {
+            "department_id": 1,  # optional (int or array of ints)
+            "teacher_name": "john"  # optional (string)
+        }
+        """
+        try:
+            department_id = request.data.get('department_id')
+            teacher_name = request.data.get('teacher_name', '').strip()
+            
+            # If no filters provided, return all non-deleted teachers
+            if department_id is None and not teacher_name:
+                queryset = self.get_queryset()
+                serializer = self.get_serializer(queryset, many=True)
+                return Response({
+                    'status': 'success',
+                    'message': 'All active teachers retrieved successfully',
+                    'count': queryset.count(),
+                    'data': serializer.data
+                })
+                
+            # Start with base queryset (only non-deleted teachers)
+            queryset = self.get_queryset()
+            
+            # Apply department filter if provided
+            if department_id is not None:
+                if isinstance(department_id, list):
+                    # Handle array of department_ids
+                    from django.db.models import Q
+                    query = Q()
+                    for dept_id in department_id:
+                        if dept_id is not None:  # Skip None values
+                            query |= Q(department_ids__contains=[dept_id])
+                    queryset = queryset.filter(query)
+                else:
+                    # Single department_id
+                    queryset = queryset.filter(department_ids__contains=[department_id])
+            
+            # Apply name filter if provided - using icontains for partial matching
+            if teacher_name:
+                queryset = queryset.filter(name__icontains=teacher_name)
+                
+            # Get the count before pagination
+            total_count = queryset.count()
+            
+            # Apply pagination if needed
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response({
+                    'status': 'success',
+                    'message': 'Teachers retrieved successfully',
+                    'count': total_count,
+                    'data': serializer.data
+                })
+                
+            # If no pagination
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'status': 'success',
+                'message': 'Teachers retrieved successfully',
+                'count': total_count,
+                'data': serializer.data
+            })
+            
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class TeacherListView(generics.ListAPIView):
     """
