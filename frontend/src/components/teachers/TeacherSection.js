@@ -98,53 +98,55 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
   const fetchTeacherData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Use separate try/catch for each API call to prevent one failure from affecting the other
-      let teachersData = [];
-      let deptData = [];
+      // Fetch departments first
+      const [teachersRes, deptsRes] = await Promise.all([
+        teacherApi.getAll().catch(err => {
+          console.error('Error fetching teachers:', err);
+          return { data: { results: [] } };
+        }),
+        departmentApi.getAll().catch(err => {
+          console.error('Error fetching departments:', err);
+          return { data: { results: [] } };
+        })
+      ]);
+
+      const teachersData = Array.isArray(teachersRes.data) 
+        ? teachersRes.data 
+        : (teachersRes.data?.results || []);
       
-      try {
-        const teachersRes = await teacherApi.getAll();
-        teachersData = Array.isArray(teachersRes.data) ? teachersRes.data : (teachersRes.data?.results || []);
-        console.log('Successfully fetched teachers:', teachersData.length);
-      } catch (teacherError) {
-        console.error('Error fetching teachers:', teacherError);
-        // Continue execution even if teacher fetch fails
-      }
-      
-      try {
-        const deptsRes = await departmentApi.getAll();
-        deptData = Array.isArray(deptsRes.data) ? deptsRes.data : (deptsRes.data?.results || []);
-        console.log('Successfully fetched departments:', deptData.length);
-      } catch (deptError) {
-        console.error('Error fetching departments:', deptError);
-        // Continue execution even if department fetch fails
-      }
-      
-      // Process teacher data to ensure consistent format
-      const processedTeachers = teachersData.map(teacher => ({
-        id: teacher.id,
-        name: teacher.full_name || `${teacher.user?.first_name || ''} ${teacher.user?.last_name || ''}`.trim(),
-        position: teacher.specialization || 'Teacher',
-        department: Array.isArray(teacher.departments) && teacher.departments.length > 0 
-          ? teacher.departments[0].name 
-          : 'Unassigned',
-        email: teacher.user?.email || '',
-        phone: teacher.phone_number || '',
-        employee_id: teacher.employee_id || ''
-      }));
-      
+      const deptData = Array.isArray(deptsRes.data)
+        ? deptsRes.data
+        : (deptsRes.data?.results || []);
+
+      console.log('Fetched data:', { teachers: teachersData.length, departments: deptData.length });
+
+      // Process teacher data to match our form structure
+      const processedTeachers = teachersData.map(teacher => {
+        // Handle both possible response formats
+        const userData = teacher.user || teacher;
+        const department = teacher.department || 
+                         (Array.isArray(teacher.departments) && teacher.departments[0]) ||
+                         { id: null, name: 'Unassigned' };
+        
+        return {
+          id: teacher.id,
+          name: teacher.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
+          email: userData.email || '',
+          phone: userData.phone || userData.phone_number || '',
+          department: typeof department === 'string' ? department : department.name,
+          departmentId: typeof department === 'object' ? department.id : null
+        };
+      });
+
       setTeacherData(processedTeachers);
-      
-      // Process department data
       setDepartments(deptData);
       
       // Update stats
-      setStats({
+      setStats(prev => ({
+        ...prev,
         totalTeachers: processedTeachers.length,
-        activeTeachers: processedTeachers.filter(t => t.active !== false).length,
-        departments: deptData.length,
-        averageRating: 4.0 // Placeholder until we have real rating data
-      });
+        departments: deptData.length
+      }));
       
     } catch (error) {
       console.error('Error in overall fetchTeacherData process:', error);
@@ -200,26 +202,38 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
 
   const handleFormSubmit = async (data) => {
     try {
-      // Add new teacher through API
-      await teacherApi.create({
-        first_name: data.firstName,
-        last_name: data.lastName,
+      setIsLoading(true);
+      
+      // Prepare teacher data for the API
+      const teacherData = {
+        first_name: data.name.split(' ')[0],
+        last_name: data.name.split(' ').slice(1).join(' ') || ' ', // Handle single name
         email: data.email,
-        phone_number: data.phone || '',
-        department_name: data.department,
-        employee_id: data.employeeId || `EMP-${Math.floor(Math.random() * 10000)}`
-      });
+        phone: data.phone,
+        role: 'teacher',
+        department: data.departmentId || data.department, // Can be ID or name depending on API
+        is_active: true
+      };
+
+      console.log('Submitting teacher data:', teacherData);
+      
+      // Add new teacher through API
+      const response = await teacherApi.create(teacherData);
+      console.log('Teacher created:', response.data);
       
       showMessage('Teacher added successfully');
       setOpenDialog(false);
-      fetchTeacherData(); // Refresh the list
+      await fetchTeacherData(); // Refresh the list
     } catch (error) {
       console.error('Error adding teacher:', error);
       const errorMessage = error.response?.data?.error || 
+                         error.response?.data?.email?.[0] ||
                          error.response?.data?.message || 
                          error.response?.data?.detail ||
-                         'Failed to add teacher';
+                         'Failed to add teacher. Please check the form and try again.';
       showMessage(errorMessage, 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -523,31 +537,32 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                 try {
                   // Format data for the API
                   const teacherData = {
-                    first_name: data.first_name,
-                    last_name: data.last_name,
+                    first_name: data.name.split(' ')[0],
+                    last_name: data.name.split(' ').slice(1).join(' ') || ' ', // Handle single name
                     email: data.email,
                     phone: data.phone,
-                    department: data.department,
-                    employee_id: data.employee_id,
-                    position: data.position
+                    department: data.departmentId || data.department,
+                    role: 'teacher',
+                    is_active: true
                   };
                   
                   // Call the API
                   await teacherApi.create(teacherData);
-                  
-                  // Show success message
                   showMessage('Teacher added successfully');
                   setOpenDialog(false);
-                  fetchTeacherData(); // Refresh the list
+                  await fetchTeacherData();
                 } catch (error) {
                   console.error('Error adding teacher:', error);
                   const errorMessage = error.response?.data?.error || 
+                                     error.response?.data?.email?.[0] ||
                                      error.response?.data?.message || 
                                      error.response?.data?.detail ||
-                                     'Failed to add teacher';
+                                     'Failed to add teacher. Please check the form and try again.';
                   showMessage(errorMessage, 'error');
                 }
               }}
+              onCancel={() => setOpenDialog(false)}
+              isSubmitting={isLoading}
             />
           </DialogContent>
         </Dialog>

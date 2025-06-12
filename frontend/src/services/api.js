@@ -115,23 +115,24 @@ api.interceptors.response.use(
 
 // API methods
 export const studentApi = {
-  getAll: (params) => api.get('/api/accounts/students/', { params }),
-  getById: (id) => api.get(`/api/accounts/students/${id}/`),
-  create: (data) => api.post('/api/accounts/students/', data),
-  update: (id, data) => api.put(`/api/accounts/students/${id}/`, data),
-  delete: (id) => api.delete(`/api/accounts/students/${id}/`),
-  bulkCreate: (data) => api.post('/api/accounts/students/bulk-create/', data),
+  getAll: (params) => api.get('/api/students/', { params }),
+  getById: (id) => api.get(`/api/students/${id}/`),
+  create: (data) => api.post('/api/students/', data),
+  update: (id, data) => api.put(`/api/students/${id}/`, data),
+  delete: (id) => api.delete(`/api/students/${id}/`),
+  bulkCreate: (data) => api.post('/api/students/create_student/', data),
   // Add a test endpoint to check connectivity
-  test: () => api.get('/api/accounts/test/'),
+  test: () => api.get('/api/students/'),
 };
 
 export const teacherApi = {
-  getAll: (params) => api.get('/api/accounts/teachers/', { params }),
-  getById: (id) => api.get(`/api/accounts/teachers/${id}/`),
-  create: (data) => api.post('/api/accounts/teachers/', data),
-  update: (id, data) => api.put(`/api/accounts/teachers/${id}/`, data),
-  delete: (id) => api.delete(`/api/accounts/teachers/${id}/`),
-  bulkCreate: (data) => api.post('/api/accounts/teachers/bulk-create/', data),
+  getAll: (params) => api.get('/api/teachers/', { params }),
+  getById: (id) => api.get(`/api/teachers/${id}/`),
+  create: (data) => api.post('/api/teachers/', data),
+  update: (id, data) => api.put(`/api/teachers/${id}/`, data),
+  delete: (id) => api.delete(`/api/teachers/${id}/`),
+  bulkCreate: (data) => api.post('/api/teachers/bulk-create/', data),
+  filterTeachers: (data) => api.post('/api/teachers/filter_teachers/', data),
 };
 
 export const departmentApi = {
@@ -165,10 +166,10 @@ export const userApi = {
   toggleStatus: (id, data) => api.patch(`/api/accounts/${id}/status/`, data),
   
   // Student-specific endpoints
-  getAllStudents: (params) => api.get('/api/accounts/students/', { params }),
+  getAllStudents: (params) => api.get('/api/students/', { params }),
   
   // Teacher-specific endpoints
-  getAllTeachers: (params) => api.get('/api/accounts/teachers/', { params }),
+  getAllTeachers: (params) => api.get('/api/teacher/teachers/', { params }),
 
   // Profile specific endpoints for the current authenticated user
   getProfile: () => api.get('/api/accounts/me/'),

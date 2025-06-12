@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -10,24 +9,18 @@ import {
   Select,
   MenuItem,
   FormHelperText,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  IconButton
+  CircularProgress
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { departmentApi } from '../../services/api';
 
-const TeacherForm = ({ teacher = null, onSubmit, isSubmitting = false }) => {
+const TeacherForm = ({ teacher = null, onSubmit, onCancel, isSubmitting = false }) => {
   const [formData, setFormData] = useState({
-    first_name: teacher?.first_name || '',
-    last_name: teacher?.last_name || '',
+    name: teacher?.name || '',
     email: teacher?.email || '',
     phone: teacher?.phone || '',
     department: teacher?.department || '',
-    employee_id: teacher?.employee_id || '',
-    position: teacher?.position || ''
+    departmentId: teacher?.departmentId || ''
   });
   
   const [isNewDepartment, setIsNewDepartment] = useState(false);
@@ -35,24 +28,37 @@ const TeacherForm = ({ teacher = null, onSubmit, isSubmitting = false }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const isCreatingTeacher = !teacher;
   
   useEffect(() => {
-    // Fetch departments when component mounts
     const fetchDepartments = async () => {
+      setIsLoading(true);
       try {
         const response = await departmentApi.getAll();
-        // Ensure we have an array from the API response
         const departmentsData = Array.isArray(response.data) 
           ? response.data 
           : (response.data?.results || []);
         setDepartments(departmentsData);
+        
+        if (teacher?.departmentId) {
+          setFormData(prev => ({
+            ...prev,
+            departmentId: teacher.departmentId
+          }));
+        }
       } catch (error) {
         console.error('Error fetching departments:', error);
+        setErrors(prev => ({
+          ...prev,
+          department: 'Failed to load departments. Please try again.'
+        }));
+      } finally {
+        setIsLoading(false);
       }
     };
     
     fetchDepartments();
-  }, []);
+  }, [teacher]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -60,46 +66,54 @@ const TeacherForm = ({ teacher = null, onSubmit, isSubmitting = false }) => {
       ...prev,
       [name]: value
     }));
+    
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
   };
 
   const handleDepartmentChange = (event) => {
+    const selectedValue = event.target.value;
+    const selectedDept = departments.find(dept => dept.id === selectedValue);
+    
     setFormData(prev => ({
       ...prev,
-      department: event.target.value,
+      department: selectedDept ? selectedDept.name : '',
+      departmentId: selectedValue
     }));
+    
+    if (errors.department) {
+      setErrors(prev => ({
+        ...prev,
+        department: ''
+      }));
+    }
   };
 
   const validate = () => {
     const newErrors = {};
     
-    // Required fields validation
-    if (!formData.first_name.trim()) newErrors.first_name = 'First name is required';
-    if (!formData.last_name.trim()) newErrors.last_name = 'Last name is required';
+    if (!formData.name.trim()) newErrors.name = 'Name is required';
     
-    // Email validation
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
-    } else if (!formData.email.includes('@')) {
-      newErrors.email = 'Invalid email format';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email';
     }
     
-    // Phone validation
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
     }
     
-    // Department validation
     if (isNewDepartment) {
       if (!formData.department || !formData.department.trim()) {
         newErrors.department = 'Please enter a department name';
       }
     } else if (!formData.department) {
       newErrors.department = 'Please select a department';
-    }
-    
-    // Employee ID validation
-    if (!formData.employee_id.trim()) {
-      newErrors.employee_id = 'Employee ID is required';
     }
     
     setErrors(newErrors);
@@ -109,55 +123,57 @@ const TeacherForm = ({ teacher = null, onSubmit, isSubmitting = false }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // First validate all fields
-    if (!validate()) {
-      // If validation fails, don't proceed
-      return;
-    }
+    if (!validate()) return;
     
-    // If we're creating a new department, handle that first
     if (isNewDepartment) {
       const success = await handleCreateDepartment(formData.department);
-      if (!success) return; // Stop if department creation failed
-    } else if (!formData.department) {
-      setErrors(prev => ({ 
-        ...prev, 
-        department: 'Please select or create a department' 
-      }));
-      return;
+      if (!success) return;
     }
     
-    // If we get here, all validations passed
-    onSubmit(formData);
+    try {
+      await onSubmit({
+        ...formData,
+        department: formData.departmentId || formData.department
+      });
+    } catch (error) {
+      console.error('Error submitting form:', error);
+    }
   };
 
-  const handleCreateDepartment = async (deptName) => {
-    if (!deptName || !deptName.trim()) {
-      setErrors(prev => ({ ...prev, department: 'Department name is required' }));
+  const handleCreateDepartment = async (departmentName) => {
+    if (!departmentName?.trim()) {
+      setErrors(prev => ({
+        ...prev,
+        department: 'Please enter a department name'
+      }));
       return false;
     }
 
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const response = await departmentApi.create({ name: deptName });
-      const newDept = response.data;
+      const response = await departmentApi.create({ name: departmentName });
+      const newDepartment = response.data;
       
-      // Update departments list and select the new department
-      setDepartments(prev => [...prev, newDept]);
+      setDepartments(prev => [...prev, newDepartment]);
+      
       setFormData(prev => ({
         ...prev,
-        department: newDept.id
+        department: newDepartment.name,
+        departmentId: newDepartment.id
       }));
       
-      setErrors(prev => ({ ...prev, department: undefined }));
       setIsNewDepartment(false);
       return true;
     } catch (error) {
-      console.error('Create department error:', error);
-      const errorMsg = error.response?.data?.name?.[0] || 
-                     error.response?.data?.detail || 
-                     'Failed to create department. Please try again.';
-      setErrors(prev => ({ ...prev, department: errorMsg }));
+      console.error('Error creating department:', error);
+      const errorMessage = error.response?.data?.name?.[0] ||
+                         error.response?.data?.detail ||
+                         'Failed to create department';
+      
+      setErrors(prev => ({
+        ...prev,
+        department: errorMessage
+      }));
       return false;
     } finally {
       setIsLoading(false);
@@ -166,144 +182,124 @@ const TeacherForm = ({ teacher = null, onSubmit, isSubmitting = false }) => {
 
   const handleCancel = (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    // Call onSubmit with null to indicate cancellation
-    if (onSubmit) {
-      onSubmit(null);
+    if (onCancel) {
+      onCancel();
+    } else {
+      // Default behavior if no onCancel handler provided
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        department: '',
+        departmentId: ''
+      });
+      setErrors({});
+      setIsNewDepartment(false);
     }
   };
 
-  const isCreatingTeacher = !teacher;
-
   return (
-    <Box component="form" onSubmit={handleSubmit} noValidate sx={{ p: 3 }} onClick={(e) => e.stopPropagation()}>
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6}>
+    <Box component="form" onSubmit={handleSubmit} noValidate sx={{ p: 3 }}>
+      <Grid container spacing={3}>
+        <Grid item xs={12} sm={8}>
           <TextField
             fullWidth
-            label="First Name"
-            name="first_name"
-            value={formData.first_name}
+            label="Full Name"
+            name="name"
+            value={formData.name}
             onChange={handleInputChange}
-            error={!!errors.first_name}
-            helperText={errors.first_name}
+            error={!!errors.name}
+            helperText={errors.name}
             required
+            margin="normal"
           />
         </Grid>
-        <Grid item xs={12} sm={6}>
+        <Grid item xs={12} sm={4}>
           <TextField
             fullWidth
-            label="Last Name"
-            name="last_name"
-            value={formData.last_name}
-            onChange={handleInputChange}
-            error={!!errors.last_name}
-            helperText={errors.last_name}
-            required
-          />
-        </Grid>
-      </Grid>
-
-      <Box sx={{ mb: 3 }}>
-        <TextField
-          fullWidth
-          label="Email"
-          name="email"
-          type="email"
-          value={formData.email}
-          onChange={handleInputChange}
-          error={!!errors.email}
-          helperText={errors.email}
-          required
-        />
-      </Box>
-
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Phone"
+            label="Mobile Number"
             name="phone"
             value={formData.phone}
             onChange={handleInputChange}
             error={!!errors.phone}
             helperText={errors.phone}
             required
+            margin="normal"
           />
         </Grid>
-
-      </Grid>
-
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6}>
+        
+        <Grid item xs={12}>
           <TextField
             fullWidth
-            label="Employee ID"
-            name="employee_id"
-            value={formData.employee_id}
+            label="Email"
+            name="email"
+            type="email"
+            value={formData.email}
             onChange={handleInputChange}
-            error={!!errors.employee_id}
-            helperText={errors.employee_id}
+            error={!!errors.email}
+            helperText={errors.email}
             required
+            margin="normal"
           />
         </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Position"
-            name="position"
-            value={formData.position}
-            onChange={handleInputChange}
-            error={!!errors.position}
-            helperText={errors.position}
-          />
-        </Grid>
-      </Grid>
-      
-      {/* Department Field (Dropdown or Inline Add) */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6}>
-          {!isNewDepartment ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <FormControl
+        
+        <Grid item xs={12}>
+          {isNewDepartment ? (
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mt: 2 }}>
+              <TextField
                 fullWidth
+                label="New Department Name"
+                value={formData.department}
+                onChange={(e) => setFormData(prev => ({ ...prev, department: e.target.value }))}
                 error={!!errors.department}
-                required
-                sx={{
-                  '& .MuiInputBase-root': {
-                    height: 56, // Match TextField height
-                  },
+                helperText={errors.department}
+                autoFocus
+                margin="normal"
+              />
+              <Button 
+                variant="contained" 
+                onClick={async (e) => {
+                  e.preventDefault();
+                  const success = await handleCreateDepartment(formData.department);
+                  if (success) setFormData(prev => ({ ...prev, department: '' }));
                 }}
+                disabled={isLoading}
+                sx={{ mt: 2, height: 56, minWidth: 100 }}
               >
-                <InputLabel id="department-select-label" shrink={true}>
-                  Department
-                </InputLabel>
+                {isLoading ? 'Adding...' : 'Add'}
+              </Button>
+              <Button 
+                variant="outlined" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  setIsNewDepartment(false);
+                  setErrors(prev => ({ ...prev, department: undefined }));
+                }}
+                disabled={isLoading}
+                sx={{ mt: 2, height: 56 }}
+              >
+                Cancel
+              </Button>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mt: 2 }}>
+              <FormControl 
+                fullWidth 
+                error={!!errors.department} 
+                required
+                sx={{ flex: 1 }}
+                margin="normal"
+              >
+                <InputLabel>Department</InputLabel>
                 <Select
-                  labelId="department-select-label"
-                  value={formData.department || ''}
+                  value={formData.departmentId || ''}
                   onChange={handleDepartmentChange}
                   label="Department"
                   displayEmpty
                   inputProps={{ 'aria-label': 'Select department' }}
-                  renderValue={(selected) => {
-                    if (!selected) {
-                      return <span style={{ opacity: 0.7 }}>Select a department</span>;
-                    }
-                    const dept = departments.find(d => d.id === selected);
-                    return dept ? dept.name : '';
-                  }}
-                  MenuProps={{
-                    PaperProps: {
-                      style: {
-                        maxHeight: 200,
-                        marginTop: 8,
-                        zIndex: 1300,
-                      }
-                    }
-                  }}
                 >
-                  <MenuItem value="">
-                    <em>No departments available</em>
+                  <MenuItem value="" disabled>
+                    <em>Select a department</em>
                   </MenuItem>
                   {departments.map((dept) => (
                     <MenuItem key={dept.id} value={dept.id}>
@@ -315,133 +311,49 @@ const TeacherForm = ({ teacher = null, onSubmit, isSubmitting = false }) => {
                   <FormHelperText>{errors.department}</FormHelperText>
                 )}
               </FormControl>
-              <Button
-                type="button"
-                variant="contained"
-                size="small"
-                onClick={() => {
+              <Button 
+                variant="outlined" 
+                startIcon={<AddIcon />}
+                onClick={(e) => {
+                  e.preventDefault();
                   setIsNewDepartment(true);
                   setFormData(prev => ({ ...prev, department: '' }));
-                }}
-                sx={{
-                  minWidth: 40,
-                  minHeight: 40,
-                  p: 0,
-                  fontSize: '0.75rem',
-                  borderRadius: 1,
-                }}
-                title="Add new department"
-              >
-                <AddIcon fontSize="small" />
-              </Button>
-            </Box>
-          ) : (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <TextField
-                fullWidth
-                label="New Department Name"
-                value={formData.department}
-                onChange={(e) => setFormData(prev => ({ ...prev, department: e.target.value }))}
-                error={!!errors.department}
-                helperText={errors.department}
-                autoFocus
-                size="medium"
-                sx={{
-                  '& .MuiInputBase-root': {
-                    height: 56
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="contained"
-                size="small"
-                onClick={async () => {
-                  const success = await handleCreateDepartment(formData.department);
-                  if (success) {
-                    handleSubmit({ preventDefault: () => {} });
-                  }
+                  setErrors(prev => ({ ...prev, department: undefined }));
                 }}
                 disabled={isLoading}
-                sx={{
-                  minWidth: 40,
-                  minHeight: 40,
-                  p: 0,
-                  fontSize: '0.75rem',
-                  borderRadius: 1,
-                }}
+                sx={{ mt: 2, height: 56 }}
               >
-                {isLoading ? '...' : 'Save'}
-              </Button>
-              <Button
-                type="button"
-                variant="outlined"
-                size="small"
-                onClick={() => {
-                  setIsNewDepartment(false);
-                  setFormData(prev => ({ ...prev, department: '' }));
-                }}
-                sx={{
-                  minWidth: 40,
-                  minHeight: 40,
-                  p: 0,
-                  fontSize: '0.75rem',
-                  borderRadius: 1,
-                }}
-              >
-                Cancel
+                New
               </Button>
             </Box>
           )}
         </Grid>
+        
+        <Grid item xs={12} sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={handleCancel}
+            disabled={isLoading || isSubmitting}
+            sx={{ minWidth: 120 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            disabled={isLoading || isSubmitting}
+            sx={{ minWidth: 120 }}
+          >
+            {isSubmitting ? (
+              <>
+                <CircularProgress size={20} sx={{ mr: 1, color: 'inherit' }} />
+                Saving...
+              </>
+            ) : isCreatingTeacher ? 'Create' : 'Update'}
+          </Button>
+        </Grid>
       </Grid>
-      
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 4 }}>
-        <Button 
-          type="button"
-          onClick={handleCancel}
-          variant="outlined" 
-          color="secondary"
-          size="small"
-          sx={{
-            height: 36,
-            minWidth: 80,
-            textTransform: 'none',
-            fontSize: '0.875rem',
-            borderColor: 'grey.400',
-            color: 'text.primary',
-            '&:hover': {
-              borderColor: 'grey.600',
-              backgroundColor: 'action.hover',
-            },
-          }}
-        >
-          Cancel
-        </Button>
-        <Button 
-          type="submit"
-          variant="contained" 
-          color="primary" 
-          size="small"
-          disabled={isSubmitting || Object.keys(errors).length > 0}
-          sx={{
-            height: 36,
-            minWidth: 80,
-            textTransform: 'none',
-            fontSize: '0.875rem',
-            boxShadow: 'none',
-            '&:hover': {
-              boxShadow: 'none'
-            },
-            '&.Mui-disabled': {
-              backgroundColor: 'action.disabledBackground',
-              color: 'action.disabled'
-            }
-          }}
-        >
-          {isSubmitting ? 'Saving...' : (teacher ? 'Update' : 'Save')}
-        </Button>
-      </Box>
     </Box>
   );
 };

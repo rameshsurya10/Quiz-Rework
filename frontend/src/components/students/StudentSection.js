@@ -115,7 +115,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
       let deptData = [];
       
       try {
-        const studentsRes = await userApi.getAllStudents({ page_size: 1000 });
+        const studentsRes = await studentApi.getAll({ page_size: 1000 });
         studentsData = Array.isArray(studentsRes.data) ? studentsRes.data : (studentsRes.data?.results || []);
         console.log('Successfully fetched students:', studentsData.length);
       } catch (studentError) {

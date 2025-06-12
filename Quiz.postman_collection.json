@@ -1,0 +1,917 @@
+{
+	"info": {
+		"_postman_id": "9ef11ba7-067e-4633-be17-54e01c52b8e0",
+		"name": "Quiz",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "29768087"
+	},
+	"item": [
+		{
+			"name": "quize",
+			"item": [
+				{
+					"name": "create quize",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjIxNjI5LCJpYXQiOjE3NDk2MTgwMjksImp0aSI6IjkyZTBmYzQyMWZiZjRhMTI4MjJmNjBkMDNlODVkNzJkIiwidXNlcl9pZCI6MX0.F8nv6QHnTR8JMK9ljuVnXmQxVvfLpXEfFA1d-AMXtLU",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"document_id\" : 4,\r\n    \"title\" : \"Deepika5\",\r\n    \"description\" : \"Deepika5\",\r\n    \"time_limit_minutes\" :30,\r\n    \"passing_score\" : 25,\r\n    \"max_attempts\" :3,\r\n    \"start_date\" :  \"2025-06-11\",\r\n    \"end_date\" : \"2025-06-11\",\r\n    \"departments\" : [6],\r\n    \"question_batch\" : [6]\r\n}\r\n\r\n// {\r\n//     \"document_id\": 1,\r\n//     \"title\": \"My AI-Generated Quiz\",\r\n//     \"description\": \"Quiz generated from document content\",\r\n//     \"time_limit_minutes\": 45,\r\n//     \"passing_score\": 75,\r\n//     \"max_attempts\": 2,\r\n//     \"shuffle_questions\": true,\r\n//     \"show_answers\": true,\r\n//     \"start_date\": \"2025-06-15T00:00:00Z\",\r\n//     \"end_date\": \"2025-06-30T23:59:59Z\",\r\n//     \"departments\": [1, 2],\r\n//     \"num_questions\": 15,\r\n//     \"complexity\": \"medium\",\r\n//     \"page_start\": 1,\r\n//     \"page_end\": 5,\r\n//     \"is_published\": false\r\n// }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8000/api/quizzes/create/",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"quizzes",
+								"create",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get_all_quize",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NTQwOTEwLCJpYXQiOjE3NDk1MzczMTAsImp0aSI6IjY0OWE0OWNiYmJkYjRkYTliYWU1ZGQ5MTJhMDhlNzRmIiwidXNlcl9pZCI6MX0.-EW__ky7TG1DsVjImf6Nge_IAH7Cc_nWQDhQoGhxVyQ",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://127.0.0.1:8000\\api\\quizzes\\",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"quizzes",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "single quize",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NTQwOTEwLCJpYXQiOjE3NDk1MzczMTAsImp0aSI6IjY0OWE0OWNiYmJkYjRkYTliYWU1ZGQ5MTJhMDhlNzRmIiwidXNlcl9pZCI6MX0.-EW__ky7TG1DsVjImf6Nge_IAH7Cc_nWQDhQoGhxVyQ",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://127.0.0.1:8000/api/quiz/90dfb5a1-5ccc-4692-8d6d-8df31b7f5fab/questions/",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"quiz",
+								"90dfb5a1-5ccc-4692-8d6d-8df31b7f5fab",
+								"questions",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "quize filter",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NTYyOTczLCJpYXQiOjE3NDk1NTkzNzMsImp0aSI6IjgxMjZkMDFiOTA1MTQ4ZTA5MTA2YTRiODdiZTM5ZDEzIiwidXNlcl9pZCI6MX0.mG7MA8499vhWJjeD65_TpG5kUsvVtZQefdXQP7lAd5k",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/C:/Users/Deepika/Downloads/10th english book.pdf"
+								},
+								{
+									"key": "num_questions",
+									"value": "5",
+									"type": "text"
+								},
+								{
+									"key": "difficulty",
+									"value": "medium",
+									"type": "text"
+								},
+								{
+									"key": "",
+									"value": "",
+									"type": "text",
+									"disabled": true
+								}
+							]
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8000/api/quizzes/generate-from-file/",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"quizzes",
+								"generate-from-file",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "teacher",
+			"item": [
+				{
+					"name": "create teacher",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjQ1MjQ0LCJpYXQiOjE3NDk2NDE2NDQsImp0aSI6ImU1NjA1M2QzYTE4YTQ5ZmY5NGQzZTllNTFhNDM2NjZmIiwidXNlcl9pZCI6MX0.SIe3NHi9ZUKxY6tomWaDuO_aHXI_4ukVoUeeRL7fqgY",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"deepika3\",\r\n    \"email\": \"deepikaks3@gmail.com\",\r\n    \"phone\": \"1367667890\",\r\n    \"department_ids\": [\"English\",\"Computer Science\"], \r\n    \"join_date\": \"2025-06-13\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/teachers/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"teachers",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get_all_teacher",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjQ2OTMxLCJpYXQiOjE3NDk2NDMzMzEsImp0aSI6IjUzZGU5NThmMTdkMTQ0NDBhODVmNzVmMjE0Y2U3ZGRmIiwidXNlcl9pZCI6MX0.Vf2l9DK24U-hrEKWlIul6oyfWA5W-4eqTUxsiSDLzWs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8000/api/teachers/",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"teachers",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get teacher id",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjQ2OTMxLCJpYXQiOjE3NDk2NDMzMzEsImp0aSI6IjUzZGU5NThmMTdkMTQ0NDBhODVmNzVmMjE0Y2U3ZGRmIiwidXNlcl9pZCI6MX0.Vf2l9DK24U-hrEKWlIul6oyfWA5W-4eqTUxsiSDLzWs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/teachers/2",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"teachers",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update teacher",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjQ2OTMxLCJpYXQiOjE3NDk2NDMzMzEsImp0aSI6IjUzZGU5NThmMTdkMTQ0NDBhODVmNzVmMjE0Y2U3ZGRmIiwidXNlcl9pZCI6MX0.Vf2l9DK24U-hrEKWlIul6oyfWA5W-4eqTUxsiSDLzWs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"deepikatest3\",\r\n    \"email\": \"deepikakstest3@gmail.com\",\r\n    \"phone\": \"36766909090\",\r\n    \"department_ids\": [\"English\",\"Maths\"], \r\n    \"join_date\": \"2025-05-13\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/teachers/3/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"teachers",
+								"3",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete teacher",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjQ2OTMxLCJpYXQiOjE3NDk2NDMzMzEsImp0aSI6IjUzZGU5NThmMTdkMTQ0NDBhODVmNzVmMjE0Y2U3ZGRmIiwidXNlcl9pZCI6MX0.Vf2l9DK24U-hrEKWlIul6oyfWA5W-4eqTUxsiSDLzWs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/teachers/3/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"teachers",
+								"3",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "filter teacher",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NzE1NTEzLCJpYXQiOjE3NDk3MTE5MTMsImp0aSI6IjljMWViOTZlMDc5NTRmYmNiZmFkNjRlNTM5YjRlYjRkIiwidXNlcl9pZCI6MX0.zGv7UpTeu33BfhU1ZJR5VIU57ZcMn5XKRGf8yy7m4rk",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"department_id\": [2],\r\n    // \"department_id\": null,\r\n    // \"student_name\": \"\"\r\n    \"teacher_name\": \"deepika1\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/teachers/filter_teachers/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"teachers",
+								"filter_teachers",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "department",
+			"item": [
+				{
+					"name": "create department",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjQ2OTMxLCJpYXQiOjE3NDk2NDMzMzEsImp0aSI6IjUzZGU5NThmMTdkMTQ0NDBhODVmNzVmMjE0Y2U3ZGRmIiwidXNlcl9pZCI6MX0.Vf2l9DK24U-hrEKWlIul6oyfWA5W-4eqTUxsiSDLzWs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"name\": \"Science\",\r\n  \"code\": \"SC101\",\r\n  \"teacher_id\" : null,\r\n//   \"teacher_id\" : 1,\r\n  \"description\": \"Science Department\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/departments/create-department/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"departments",
+								"create-department",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get all department",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NzA3MDk1LCJpYXQiOjE3NDk3MDM0OTUsImp0aSI6IjU5ZjRlYTRjNWE1NjQyMWRhZjdhODAzMDdjNGIxMTRkIiwidXNlcl9pZCI6MX0.JUTUrkKSZO3aStCXPg-hv1iv31OaFYNpe3JGUaszYcA",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/departments/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"departments",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "department_id",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjQ2OTMxLCJpYXQiOjE3NDk2NDMzMzEsImp0aSI6IjUzZGU5NThmMTdkMTQ0NDBhODVmNzVmMjE0Y2U3ZGRmIiwidXNlcl9pZCI6MX0.Vf2l9DK24U-hrEKWlIul6oyfWA5W-4eqTUxsiSDLzWs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/departments/2",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"departments",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update department",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjQ2OTMxLCJpYXQiOjE3NDk2NDMzMzEsImp0aSI6IjUzZGU5NThmMTdkMTQ0NDBhODVmNzVmMjE0Y2U3ZGRmIiwidXNlcl9pZCI6MX0.Vf2l9DK24U-hrEKWlIul6oyfWA5W-4eqTUxsiSDLzWs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"name\": \"Social Science\",\r\n  \"code\": \"SS101\",\r\n//   \"teacher_id\" : null,\r\n  \"teacher_id\" : 2,\r\n  \"description\": \"Social Science Department\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/departments/2/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"departments",
+								"2",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete department",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NjQ2OTMxLCJpYXQiOjE3NDk2NDMzMzEsImp0aSI6IjUzZGU5NThmMTdkMTQ0NDBhODVmNzVmMjE0Y2U3ZGRmIiwidXNlcl9pZCI6MX0.Vf2l9DK24U-hrEKWlIul6oyfWA5W-4eqTUxsiSDLzWs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/departments/4/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"departments",
+								"4",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "students",
+			"item": [
+				{
+					"name": "create student",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NzE4OTAzLCJpYXQiOjE3NDk3MTUzMDMsImp0aSI6Ijg1MDFlZDQ5ZDhmMjRhNmNiY2QxMzQ1MmY1OTA3NjJjIiwidXNlcl9pZCI6MX0.Oe1VLUnY1ydSFIF4rMOTEPQqdHXf4GWhlj2Hac5jaI4",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"name\": \"Deepika9\",\r\n  \"email\": \"deepika09@gmail.com\",\r\n  \"phone\": \"1234097390\",\r\n  \"department_id\": 2\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://127.0.0.1:8000/api/students/create_student",
+							"protocol": "http",
+							"host": [
+								"127",
+								"0",
+								"0",
+								"1"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"students",
+								"create_student"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get all students",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NzE4OTAzLCJpYXQiOjE3NDk3MTUzMDMsImp0aSI6Ijg1MDFlZDQ5ZDhmMjRhNmNiY2QxMzQ1MmY1OTA3NjJjIiwidXNlcl9pZCI6MX0.Oe1VLUnY1ydSFIF4rMOTEPQqdHXf4GWhlj2Hac5jaI4",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/students/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"students",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "students_id",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NzExODkyLCJpYXQiOjE3NDk3MDgyOTIsImp0aSI6IjQyZTE0MzcyMDIwZjQxNDlhYWQ2YTI0MWZhNDA5ZWRiIiwidXNlcl9pZCI6MX0.P4_taztS-DaRgSGS22H2IgJUNFU3EL1rCdkswKUJebs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/students/2",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"students",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "update students",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NzExODkyLCJpYXQiOjE3NDk3MDgyOTIsImp0aSI6IjQyZTE0MzcyMDIwZjQxNDlhYWQ2YTI0MWZhNDA5ZWRiIiwidXNlcl9pZCI6MX0.P4_taztS-DaRgSGS22H2IgJUNFU3EL1rCdkswKUJebs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"name\": \"Deepikatest7\",\r\n  \"email\": \"deepika017@gmail.com\",\r\n  \"phone\": \"1344577390\",\r\n  \"department_id\": 3\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/students/2/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"students",
+								"2",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete students",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NzExODkyLCJpYXQiOjE3NDk3MDgyOTIsImp0aSI6IjQyZTE0MzcyMDIwZjQxNDlhYWQ2YTI0MWZhNDA5ZWRiIiwidXNlcl9pZCI6MX0.P4_taztS-DaRgSGS22H2IgJUNFU3EL1rCdkswKUJebs",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/students/4/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"students",
+								"4",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "filter student",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5NzE1NTEzLCJpYXQiOjE3NDk3MTE5MTMsImp0aSI6IjljMWViOTZlMDc5NTRmYmNiZmFkNjRlNTM5YjRlYjRkIiwidXNlcl9pZCI6MX0.zGv7UpTeu33BfhU1ZJR5VIU57ZcMn5XKRGf8yy7m4rk",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"department_id\": 2,\r\n    // \"department_id\": null,\r\n    // \"student_name\": \"\"\r\n    \"student_name\": \"Deepika4\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/students/filter_students/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"students",
+								"filter_students",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "login",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"email\": \"sdcharly@gmail.com\",\r\n  \"password\": \"sdcharly@1708\",\r\n  \"role\": \"ADMIN\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8000/api/token/",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"token",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "token",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/token/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"token",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "page_list",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQ5MjA1MTIxLCJpYXQiOjE3NDkyMDE1MjEsImp0aSI6ImI5NGE4NWE3OGFjYjQ2ZjA4NWNmODU0ZjVjNzJiYzU4IiwidXNlcl9pZCI6MX0.MKXGacWg1wjRnnn6X6lDBRMlbWA-ce3EUTGA21QYlnQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://127.0.0.1:8000/api/quizzes/range/2/5/",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"quizzes",
+						"range",
+						"2",
+						"5",
+						""
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
