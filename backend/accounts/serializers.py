@@ -114,11 +114,3 @@ class PasswordChangeSerializer(serializers.Serializer):
         if attrs['new_password'] != attrs['confirm_password']:
             raise serializers.ValidationError({'confirm_password': 'Passwords do not match'})
         return attrs
-
-
-class DepartmentSerializer(serializers.ModelSerializer):
-    """Serializer for Department model"""
-    class Meta:
-        model = Department
-        fields = ('id', 'name', 'description', 'created_at', 'updated_at')
-        read_only_fields = ('id', 'created_at', 'updated_at')

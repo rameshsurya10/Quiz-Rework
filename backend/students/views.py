@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
 from .models import Student
 from .serializers import StudentSerializer
+from .serializers import StudentBulkUploadSerializer
 
 class StudentViewSet(viewsets.ModelViewSet):
     """
@@ -14,18 +15,69 @@ class StudentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     lookup_field = 'student_id'
 
-    def get_queryset(self):
-        # Filter out deleted students by default
-        return Student.objects.filter(is_deleted=False)
-    
-    def perform_create(self, serializer):
-        # Add created_by and last_modified_by from request user
-        user_identifier = getattr(self.request.user, 'username', 
-                               getattr(self.request.user, 'email', 'system'))
-        serializer.save(
-            created_by=user_identifier,
-            last_modified_by=user_identifier
+    queryset = Student.objects.filter(is_deleted=False)
+    serializer_class = StudentSerializer
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['post'], url_path='bulk-upload')
+    def bulk_upload(self, request):
+        serializer = StudentBulkUploadSerializer(
+            data=request.data,
+            context={'request': request}
         )
+        
+        if serializer.is_valid():
+            result = serializer.save()
+            return Response({
+                'status': 'success',
+                'message': result['message'],
+                'data': {
+                    'total_rows': result['total_rows'],
+                    'success_count': result['success_count'],
+                    'error_count': result['error_count'],
+                    'errors': result['errors']
+                }
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response({
+            'status': 'error',
+            'message': 'Validation failed',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], url_path='download-template')
+    def download_template(self, request):
+        # Create a sample Excel file
+        data = {
+            'name': ['John Doe', 'Jane Smith'],
+            'email': ['john@example.com', 'jane@example.com'],
+            'phone': ['1234567890', '9876543210'],
+            'department_id': [1, 2]
+        }
+        
+        df = pd.DataFrame(data)
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Students')
+            worksheet = writer.sheets['Students']
+            worksheet.set_column('A:D', 20)
+        
+        output.seek(0)
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename=student_upload_template.xlsx'
+        return response
+    
+    # def perform_create(self, serializer):
+    #     # Add created_by and last_modified_by from request user
+    #     user_identifier = getattr(self.request.user, 'username', 
+    #                            getattr(self.request.user, 'email', 'system'))
+    #     serializer.save(
+    #         created_by=user_identifier,
+    #         last_modified_by=user_identifier
+    #     )
     
     def perform_update(self, serializer):
         # Update last_modified_by
