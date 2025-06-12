@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import UserProfile, Teacher, Student
+from .models import UserProfile
 from departments.models import Department
 
 User = get_user_model()
@@ -122,80 +122,3 @@ class DepartmentSerializer(serializers.ModelSerializer):
         model = Department
         fields = ('id', 'name', 'description', 'created_at', 'updated_at')
         read_only_fields = ('id', 'created_at', 'updated_at')
-
-
-class TeacherSerializer(serializers.ModelSerializer):
-    """Serializer for Teacher model"""
-    user = UserSerializer(read_only=True)
-    user_id = serializers.UUIDField(write_only=True, required=False)
-    full_name = serializers.SerializerMethodField()
-    departments = DepartmentSerializer(many=True, read_only=True)
-    
-    class Meta:
-        model = Teacher
-        fields = (
-            'id', 'user', 'user_id', 'employee_id',
-            'phone_number', 'departments', 'full_name',
-            'created_at', 'updated_at'
-        )
-        read_only_fields = ('id', 'created_at', 'updated_at')
-    
-    def get_full_name(self, obj):
-        return f"{obj.user.first_name} {obj.user.last_name}".strip()
-
-
-class TeacherCreateSerializer(serializers.Serializer):
-    """Serializer for creating a new teacher with user account"""
-    first_name = serializers.CharField(required=True, max_length=150)
-    last_name = serializers.CharField(required=True, max_length=150)
-    email = serializers.EmailField(required=True)
-    phone_number = serializers.CharField(required=False, allow_blank=True, max_length=20)
-    department_name = serializers.CharField(required=True, max_length=100)
-    employee_id = serializers.CharField(required=True, max_length=50)
-    # specialization, qualification, bio, and is_head are removed as per user request
-
-    def create(self, validated_data):
-        # This method is not used directly since we're handling creation in the view
-        # But it's required by the serializer
-        pass
-
-
-class StudentSerializer(serializers.ModelSerializer):
-    """Serializer for Student model"""
-    user = UserSerializer(read_only=True)
-    user_id = serializers.UUIDField(write_only=True, required=False)
-    full_name = serializers.SerializerMethodField()
-    department_name = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Student
-        fields = (
-            'id', 'user', 'user_id', 'student_id', 'department',
-            'department_name', 'enrollment_date', 'graduation_year',
-            'phone_number', 'full_name', 'created_at', 'updated_at'
-        )
-        read_only_fields = ('id', 'created_at', 'updated_at')
-    
-    def get_full_name(self, obj):
-        return obj.user.get_full_name()
-    
-    def get_department_name(self, obj):
-        if obj.department:
-            return obj.department.name
-        return None
-
-
-class StudentCreateSerializer(serializers.Serializer):
-    """Serializer for creating a new student with user account"""
-    # User fields
-    first_name = serializers.CharField(required=True, max_length=150)
-    last_name = serializers.CharField(required=True, max_length=150)
-    email = serializers.EmailField(required=True)
-    password = serializers.CharField(required=True, write_only=True, min_length=8)
-    
-    # Student fields
-    student_id = serializers.CharField(required=True, max_length=20)
-    department = serializers.UUIDField(required=True)
-    phone_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    enrollment_date = serializers.DateField(required=False, allow_null=True)
-    graduation_year = serializers.IntegerField(required=False, allow_null=True)

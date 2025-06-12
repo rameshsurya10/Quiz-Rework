@@ -7,7 +7,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.views import APIView
 from .models import Department
-from accounts.models import Student, Teacher, User
+from accounts.models import  User
 from .serializers import DepartmentSerializer, DepartmentDetailSerializer
 from django.db.models import Count, Q
 import csv
@@ -22,62 +22,34 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     # Explicitly define allowed HTTP methods
     http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
     
-
+    def get_queryset(self):
+        """Return only departments where is_deleted is False."""
+        queryset = Department.objects.filter(is_deleted=False)
+        user = self.request.user
+        # Optionally, keep your role-based filtering here if needed
+        # For now, just return all non-deleted departments
+        return queryset
+    
+    def get_serializer_class(self):
+        """Return different serializers for list and detail views"""
+        if self.action == 'retrieve':
+            return DepartmentDetailSerializer
+        return DepartmentSerializer
+    
+    @action(detail=False, methods=['post'], url_path='create-department', url_name='create-department')
+    def create_department(self, request):
+        """Create a new department"""
+        return self.create(request)
 
     def create(self, request, *args, **kwargs):
         """
-        Handle POST request to create a new department with teachers.
+        Handle POST request to create a new department.
         """
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            department = serializer.save()
+            serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-    def update(self, request, *args, **kwargs):
-        """
-        Handle PUT/PATCH request to update a department with teachers.
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def get_serializer_class(self):
-        """Return the appropriate serializer based on the action"""
-        if self.action == 'list':
-            return DepartmentSerializer
-        return DepartmentDetailSerializer
-    
-    def get_queryset(self):
-        """
-        Return a queryset of departments, filtered and optimized.
-
-        - Prefetches related teachers and quizzes to reduce DB queries.
-        - Annotates student and teacher counts.
-        - Filters based on user role.
-        """
-        user = self.request.user
-        queryset = Department.objects.all().prefetch_related('teachers', 'quizzes')
-        
-        if hasattr(user, 'is_student') and user.is_student: # Check if user has is_student
-            # Students can only see their own department
-            student_profile = getattr(user, 'student_profile', None)
-            if student_profile and student_profile.department:
-                 queryset = queryset.filter(pk=student_profile.department.pk)
-            else:
-                 queryset = queryset.none() # No department associated
-        elif hasattr(user, 'is_teacher') and user.is_teacher: # Check if user has is_teacher
-            # Teachers can see departments they belong to
-            queryset = queryset.filter(teachers__user=user)
-            
-        return queryset.annotate(
-            student_count=Count('students', distinct=True),
-            teacher_count=Count('teachers', distinct=True)
-        ).distinct() # Add distinct to avoid potential duplicate rows from annotate
     
     @action(detail=True, methods=['post'], url_path='bulk-upload-students')
     def bulk_upload_students(self, request, pk=None):
@@ -98,7 +70,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             )
         
         success_count, error_count, errors = Department.bulk_upload_students(
-            department_id=department.id,
+            department_id=department.department_id,
             csv_file=csv_file
         )
         
@@ -121,7 +93,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         
         student_ids = request.data['student_ids']
         delete_count, error_count, errors = Department.bulk_delete_students(
-            department_id=department.id,
+            department_id=department.department_id,
             student_ids=student_ids
         )
         
@@ -150,7 +122,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         from accounts.serializers import TeacherSerializer
         serializer = TeacherSerializer(teachers, many=True)
         return Response(serializer.data)
-        
+    
     @action(detail=True, methods=['get'], url_path='dashboard')
     def dashboard(self, request, pk=None):
         """Get dashboard stats for department"""
@@ -178,3 +150,37 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             'attempt_count': attempts,
             'passing_rate': passing_rate,
         })
+
+    def update(self, request, *args, **kwargs):
+        """
+        Handle PUT/PATCH request to update a department and update teacher's department_ids if teacher_id is provided.
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        teacher_id = serializer.validated_data.pop('teacher_id', None)
+        self.perform_update(serializer)
+        # Update teacher's department_ids if teacher_id is provided
+        if teacher_id:
+            try:
+                from teacher.models import Teacher
+                teacher = Teacher.objects.get(teacher_id=teacher_id)
+                dept_ids = teacher.department_ids or []
+                if instance.department_id not in dept_ids:
+                    dept_ids.append(instance.department_id)
+                    teacher.department_ids = dept_ids
+                    teacher.save()
+            except Teacher.DoesNotExist:
+                pass  # Optionally, raise a validation error if you want
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Soft delete: set is_deleted=True for the department instead of deleting from DB.
+        Return a success message in the response.
+        """
+        instance = self.get_object()
+        instance.is_deleted = True
+        instance.save()
+        return Response({'message': 'Department deleted successfully'}, status=status.HTTP_200_OK)

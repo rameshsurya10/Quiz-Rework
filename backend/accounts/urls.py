@@ -1,4 +1,4 @@
-from django.urls import path, include
+from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     CustomTokenObtainPairView,
@@ -9,9 +9,9 @@ from .views import (
     UserListView,
     AvatarUploadView,
 )
-from .teacher_views import TeacherListCreateView, TeacherDetailView
-from .student_views import StudentListCreateView, StudentDetailView
+
 from rest_framework.response import Response
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 
@@ -41,14 +41,5 @@ urlpatterns = [
     path('me/', UserDetailView.as_view(), name='user_detail'),
     path('me/avatar/', AvatarUploadView.as_view(), name='user_avatar_upload'),
     path('profile/', UserProfileView.as_view(), name='user_profile'),
-    path('', UserListView.as_view(), name='user_list'),
-    
-    # Teacher endpoints
-    path('teachers/', TeacherListCreateView.as_view(), name='teacher_list_create'),
-    path('teachers/<uuid:id>/', TeacherDetailView.as_view(), name='teacher_detail'),
-    
-    # Student endpoints with pagination support
-    path('students/', StudentListCreateView.as_view(), name='student_list_create'),
-    path('students/paginated/', StudentListCreateView.as_view(), {'paginated': True}, name='student_paginated'),
-    path('students/<uuid:id>/', StudentDetailView.as_view(), name='student_detail'),
+    path('', UserListView.as_view(), name='user_list'),    
 ]

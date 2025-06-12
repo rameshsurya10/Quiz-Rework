@@ -1,73 +1,79 @@
 from rest_framework import serializers
 from .models import Department
-from accounts.models import Teacher
-from quizzes.models import Quiz
-
-class TeacherDetailSerializer(serializers.ModelSerializer):
-    """Serializer for detailed teacher information for embedding."""
-    name = serializers.CharField(source='user.get_full_name', read_only=True)
-    email = serializers.EmailField(source='user.email', read_only=True)
-
-    class Meta:
-        model = Teacher
-        fields = ['id', 'name', 'email', 'employee_id', 'specialization', 'is_head']
-
-class QuizInDepartmentSerializer(serializers.ModelSerializer):
-    """Serializer for basic quiz info within a department."""
-    class Meta:
-        model = Quiz
-        fields = ['id', 'title', 'is_published', 'start_date', 'end_date']
+# from accounts.models import Teacher, Student
 
 class DepartmentSerializer(serializers.ModelSerializer):
-    """Basic Department serializer with stats and write-only teachers."""
-    student_count = serializers.IntegerField(read_only=True)
-    teacher_count = serializers.IntegerField(read_only=True)
-    teacher_ids = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Teacher.objects.all(),
-        source='teachers',
-        required=False,
-        write_only=True,
-        help_text="List of teacher IDs to associate with the department."
-    )
-    
+    """Basic Department serializer matching the model fields"""
+    department_id = serializers.IntegerField(read_only=True)
+    uuid = serializers.UUIDField(read_only=True)
+    created_by = serializers.CharField(required=False, allow_blank=True)
+    last_modified_by = serializers.CharField(required=False, allow_blank=True)
+    is_deleted = serializers.BooleanField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    last_modified_at = serializers.DateTimeField(read_only=True)
+    teacher_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+
     class Meta:
         model = Department
         fields = [
-            'id', 'name', 'code', 'description', 'icon', 'color',
-            'student_count', 'teacher_count', 'created_at', 'last_modified_at',
-            'teacher_ids'
+            'department_id', 'uuid', 'name', 'code', 'description',
+            'created_at', 'created_by', 'last_modified_at', 'last_modified_by', 'is_deleted', 'teacher_id'
         ]
-        read_only_fields = ['created_at', 'last_modified_at', 'student_count', 'teacher_count']
-    
+        read_only_fields = ['department_id', 'uuid', 'created_at', 'last_modified_at', 'is_deleted']
+
     def create(self, validated_data):
-        teachers = validated_data.pop('teachers', [])
+        teacher_id = validated_data.pop('teacher_id', None)
+        request = self.context.get('request', None)
+        user_email = 'system'
+        if request and hasattr(request, 'user') and request.user and request.user.is_authenticated:
+            user_email = request.user.email
+        if not validated_data.get('created_by'):
+            validated_data['created_by'] = user_email
+        if not validated_data.get('last_modified_by'):
+            validated_data['last_modified_by'] = user_email
         department = super().create(validated_data)
-        if teachers:
-            department.teachers.set(teachers)
+        # Assign department to teacher if teacher_id is provided
+        if teacher_id:
+            try:
+                from teacher.models import Teacher
+                teacher = Teacher.objects.get(teacher_id=teacher_id)
+                dept_ids = teacher.department_ids or []
+                if department.department_id not in dept_ids:
+                    dept_ids.append(department.department_id)
+                    teacher.department_ids = dept_ids
+                    teacher.save()
+            except Teacher.DoesNotExist:
+                pass  # Optionally, raise a validation error if you want
         return department
-    
-    def update(self, instance, validated_data):
-        teachers = validated_data.pop('teachers', None)
-        instance = super().update(instance, validated_data)
-        if teachers is not None:
-            instance.teachers.set(teachers)
-        return instance
 
 class DepartmentDetailSerializer(DepartmentSerializer):
-    """Detailed Department serializer with full teachers and quizzes list."""
-    teachers = TeacherDetailSerializer(many=True, read_only=True)
-    quizzes = QuizInDepartmentSerializer(many=True, read_only=True)
-    head_teacher = TeacherDetailSerializer(read_only=True, source='get_head_teacher')
-    
-    class Meta(DepartmentSerializer.Meta):
-        fields = [
-            'id', 'name', 'code', 'description', 'icon', 'color',
-            'student_count', 'teacher_count', 'created_at', 'last_modified_at',
-            'teachers', 'quizzes', 'head_teacher'
-        ]
-        read_only_fields = DepartmentSerializer.Meta.read_only_fields + ['teachers', 'quizzes', 'head_teacher']
+    """Detailed Department serializer (extend as needed)"""
+    teachers = serializers.SerializerMethodField()
 
-    def get_head_teacher(self, obj):
-        """Get head teacher of department if exists."""
-        return obj.teachers.filter(is_head=True).first()
+    class Meta(DepartmentSerializer.Meta):
+        fields = DepartmentSerializer.Meta.fields + ['teachers']
+
+    def get_teachers(self, obj):
+        from teacher.models import Teacher
+        teachers = Teacher.objects.filter(
+            department_ids__contains=[obj.department_id],
+            is_deleted=False
+        )
+        return [
+            {
+                'teacher_id': teacher.teacher_id,
+                'name': teacher.name
+            }
+            for teacher in teachers
+        ]
+
+class BulkUploadStudentSerializer(serializers.Serializer):
+    """Serializer for bulk student upload"""
+    file = serializers.FileField()
+    
+class BulkDeleteStudentSerializer(serializers.Serializer):
+    """Serializer for bulk student deletion"""
+    student_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=True
+    )
