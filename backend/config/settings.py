@@ -3,11 +3,14 @@ from datetime import timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
-
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+env_path = os.path.join(BASE_DIR, '.env')
+load_dotenv(env_path)
+print(f"Loading environment variables from: {env_path}")
+print(f"OPENAI_API_KEY exists: {os.getenv('OPENAI_API_KEY') is not None}")
 
 # Supabase settings
 SUPABASE_URL = os.getenv('SUPABASE_URL')
@@ -19,7 +22,7 @@ USE_SUPABASE_STORAGE = os.getenv('USE_SUPABASE_STORAGE', 'False') == 'True'
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-dev-key-change-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+DEBUG = True
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -44,7 +47,10 @@ INSTALLED_APPS = [
     # Local apps
     'accounts',
     'documents',
+    'teacher',
+    'students',
     'quizzes',
+    # 'quize',
     'dashboard',
     'ai_processing',
     'departments',

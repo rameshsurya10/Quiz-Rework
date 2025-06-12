@@ -6,37 +6,21 @@ import io
 
 class Department(models.Model):
     """Department model for organizing teachers and students"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    department_id = models.AutoField(primary_key=True)  # Integer primary key
     name = models.CharField(max_length=100)
-    code = models.CharField(max_length=20, unique=True)
+    code = models.CharField(max_length=20)
     description = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
     created_by = models.CharField(max_length=255, unique=False)
-    last_modified_at = models.DateTimeField(auto_now=True)
+    last_modified_at = models.DateTimeField(auto_now=True, null=True)
     last_modified_by = models.CharField(max_length=255, unique=False)
+    is_deleted = models.BooleanField(default=False)
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # UUID field for reference
 
-    # created_at = models.DateTimeField(auto_now_add=True)
-    # updated_at = models.DateTimeField(auto_now=True)
-    
-    # Department statistics - cached fields for better performance
-    student_count = models.IntegerField(default=0)
-    teacher_count = models.IntegerField(default=0)
-    document_count = models.IntegerField(default=0)
-    quiz_count = models.IntegerField(default=0)
-    
-    # Icons and UI settings
-    icon = models.CharField(max_length=50, default="school")
-    color = models.CharField(max_length=20, default="#4285F4")
-    
-    # Many-to-many relationship with teachers
-    teachers = models.ManyToManyField(
-        'accounts.Teacher',
-        related_name='departments',
-        blank=True,
-        help_text='Teachers who belong to this department'
-    )
+
     
     class Meta:
+        db_table = 'department'
         verbose_name = 'Department'
         verbose_name_plural = 'Departments'
         ordering = ['name']
@@ -66,7 +50,7 @@ class Department(models.Model):
         """
         from accounts.models import User, Student
         
-        department = cls.objects.get(id=department_id)
+        department = cls.objects.get(department_id=department_id)
         decoded_file = csv_file.read().decode('utf-8')
         io_string = io.StringIO(decoded_file)
         reader = csv.DictReader(io_string)
@@ -121,7 +105,7 @@ class Department(models.Model):
         """
         from accounts.models import Student
         
-        department = cls.objects.get(id=department_id)
+        department = cls.objects.get(department_id=department_id)
         delete_count = 0
         error_count = 0
         errors = []

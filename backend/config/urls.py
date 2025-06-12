@@ -64,7 +64,8 @@ urlpatterns = [
     path('api/ai/', include('ai_processing.urls')),
     path('api/departments/', include('departments.urls')),
     path('api/notifications/', include('notifications.urls')),
-    # path('api/teachers/', include('accounts.urls')),
+    path('api/students/', include('students.url')),
+    path('api/', include('teacher.urls')),
 
     
     # JWT Authentication
