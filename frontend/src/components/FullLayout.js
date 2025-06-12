@@ -258,6 +258,12 @@ const FullLayout = ({ children, hideToolbar = false }) => {
           path: '/results',
           activePaths: ['/results', '/results/*']
         },
+        {
+          name: 'Student Reports',
+          icon: <AssessmentIcon />, // Or a more specific icon if available
+          path: '/student-reports',
+          activePaths: ['/student-reports']
+        },
       ]
     },
     {

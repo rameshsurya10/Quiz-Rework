@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { teacherApi, departmentApi } from '../../services/api';
 import { alpha } from '@mui/material/styles';
+import TeacherForm from './TeacherForm';
 import { 
   Grid, Typography, Card, CardContent, Box, 
   Button, TextField, Dialog, DialogActions, 
@@ -9,6 +10,7 @@ import {
   Snackbar, Alert, useTheme, useMediaQuery, Container,
   CircularProgress, InputAdornment, Avatar, Paper, CardActionArea, Divider
 } from "@mui/material";
+import CloseIcon from '@mui/icons-material/Close';
 import { motion, AnimatePresence } from 'framer-motion';
 import { styled } from '@mui/material/styles';
 import { 
@@ -441,125 +443,112 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
           onClose={() => setOpenDialog(false)}
           fullWidth
           maxWidth="md"
+          disableEscapeKeyDown={false}
+          disableScrollLock={true}
+          PaperProps={{
+            sx: {
+              maxHeight: '90vh',
+              minHeight: '60vh',
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+              '& .MuiDialogTitle-root': {
+                position: 'sticky',
+                top: 0,
+                zIndex: 2,
+                bgcolor: 'background.paper',
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+              },
+              '& .MuiDialogContent-root': {
+                flex: '1 1 auto',
+                overflowY: 'auto',
+                position: 'relative',
+                '&::-webkit-scrollbar': {
+                  width: '6px'
+                },
+                '&::-webkit-scrollbar-track': {
+                  background: 'transparent'
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  background: theme.palette.action.hover,
+                  borderRadius: '3px'
+                },
+                '&::-webkit-scrollbar-thumb:hover': {
+                  background: theme.palette.action.selected
+                },
+                '& .MuiFormControl-root': {
+                  zIndex: 'auto',
+                  position: 'relative'
+                }
+              }
+            }
+          }}
         >
-          <DialogTitle>Add New Teacher</DialogTitle>
-          <DialogContent>
-            <Box component="form" onSubmit={(e) => {
-                e.preventDefault();
-                if (!validateForm()) return;
-                handleFormSubmit(formData);
-              }} sx={{ mt: 2 }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="First Name"
-                    name="firstName"
-                    value={formData.firstName}
-                    onChange={handleInputChange}
-                    error={!!formErrors.firstName}
-                    helperText={formErrors.firstName}
-                    margin="normal"
-                    required
-                    autoFocus
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Last Name"
-                    name="lastName"
-                    value={formData.lastName}
-                    onChange={handleInputChange}
-                    error={!!formErrors.lastName}
-                    helperText={formErrors.lastName}
-                    margin="normal"
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    error={!!formErrors.email}
-                    helperText={formErrors.email}
-                    margin="normal"
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Phone"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    margin="normal"
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth margin="normal" error={!!formErrors.department}>
-                    <InputLabel id="department-select-label">Department *</InputLabel>
-                    <Select
-                      labelId="department-select-label"
-                      name="department"
-                      value={formData.department}
-                      onChange={handleInputChange}
-                      label="Department *"
-                      required
-                    >
-                      {departments.length > 0 ? (
-                        departments.map((dept) => (
-                          <MenuItem key={dept.id} value={dept.id}>
-                            {dept.name}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled value="">
-                          No departments available
-                        </MenuItem>
-                      )}
-                    </Select>
-                    {formErrors.department && (
-                      <FormHelperText>{formErrors.department}</FormHelperText>
-                    )}
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Employee ID"
-                    name="employeeId"
-                    value={formData.employeeId}
-                    onChange={handleInputChange}
-                    margin="normal"
-                    required
-                    error={!!formErrors.employeeId}
-                    helperText={formErrors.employeeId}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Position"
-                    name="position"
-                    value={formData.position}
-                    onChange={handleInputChange}
-                    margin="normal"
-                  />
-                </Grid>
-              </Grid>
-              <DialogActions sx={{ mt: 3, justifyContent: 'flex-end' }}>
-                <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-                <Button type="submit" variant="contained" color="primary">
-                  Add Teacher
-                </Button>
-              </DialogActions>
-            </Box>
+          <DialogTitle sx={{ 
+            p: 2,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            bgcolor: 'background.paper',
+            color: 'text.primary',
+            borderBottom: '1px solid',
+            borderColor: 'divider'
+          }}>
+            Add New Teacher
+            <IconButton 
+              onClick={() => setOpenDialog(false)}
+              sx={{ color: 'primary.contrastText' }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ 
+            p: 3,
+            flex: '1 1 auto',
+            overflowY: 'auto',
+            '& .MuiFormControl-root': {
+              mb: 2
+            }
+          }}>
+            <TeacherForm 
+              onSubmit={async (data) => {
+                // If data is null, it means the form was cancelled
+                if (data === null) {
+                  setOpenDialog(false);
+                  return;
+                }
+
+                try {
+                  // Format data for the API
+                  const teacherData = {
+                    first_name: data.first_name,
+                    last_name: data.last_name,
+                    email: data.email,
+                    phone: data.phone,
+                    department: data.department,
+                    employee_id: data.employee_id,
+                    position: data.position
+                  };
+                  
+                  // Call the API
+                  await teacherApi.create(teacherData);
+                  
+                  // Show success message
+                  showMessage('Teacher added successfully');
+                  setOpenDialog(false);
+                  fetchTeacherData(); // Refresh the list
+                } catch (error) {
+                  console.error('Error adding teacher:', error);
+                  const errorMessage = error.response?.data?.error || 
+                                     error.response?.data?.message || 
+                                     error.response?.data?.detail ||
+                                     'Failed to add teacher';
+                  showMessage(errorMessage, 'error');
+                }
+              }}
+            />
           </DialogContent>
         </Dialog>
 

@@ -22,34 +22,46 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     # Explicitly define allowed HTTP methods
     http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
     
-    def get_queryset(self):
-        return Department.objects.all()
-    
-    @action(detail=False, methods=['post'], url_path='create-department', url_name='create-department')
-    def create_department(self, request):
-        """Create a new department"""
-        return self.create(request)
+
 
     def create(self, request, *args, **kwargs):
         """
-        Handle POST request to create a new department.
+        Handle POST request to create a new department with teachers.
         """
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            department = serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    def update(self, request, *args, **kwargs):
+        """
+        Handle PUT/PATCH request to update a department with teachers.
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     def get_serializer_class(self):
-        """Return different serializers for list and detail views"""
-        if self.action == 'retrieve':
-            return DepartmentDetailSerializer
-        return DepartmentSerializer
+        """Return the appropriate serializer based on the action"""
+        if self.action == 'list':
+            return DepartmentSerializer
+        return DepartmentDetailSerializer
     
     def get_queryset(self):
-        """Filter departments based on user role"""
+        """
+        Return a queryset of departments, filtered and optimized.
+
+        - Prefetches related teachers and quizzes to reduce DB queries.
+        - Annotates student and teacher counts.
+        - Filters based on user role.
+        """
         user = self.request.user
-        queryset = Department.objects.all()
+        queryset = Department.objects.all().prefetch_related('teachers', 'quizzes')
         
         if hasattr(user, 'is_student') and user.is_student: # Check if user has is_student
             # Students can only see their own department

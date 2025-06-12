@@ -15,6 +15,7 @@ const getAuthHeaders = () => {
 };
 
 // Quiz API services
+// Quiz API services
 export const quizService = {
   // Get all documents available for quiz creation
   getDocuments: async () => {
@@ -80,14 +81,43 @@ export const quizService = {
   },
 
   // Get quiz details including questions
-  getQuizDetails: async (quizId) => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/quizzes/${quizId}/`, getAuthHeaders());
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching quiz details:', error);
-      throw error;
-    }
+  getQuizDetails(quizId) {
+    return axios.get(`${API_BASE_URL}/quizzes/${quizId}/`, getAuthHeaders())
+      .then(response => response.data)
+      .catch(error => {
+        console.error('Error fetching quiz details:', error);
+        throw error;
+      });
+  },
+
+  // Get quiz report summary
+  getQuizReport(quizId) {
+    return axios.get(`${API_BASE_URL}/quizzes/${quizId}/report/`, getAuthHeaders())
+      .then(response => response.data)
+      .catch(error => {
+        console.error('Error fetching quiz report:', error);
+        throw error;
+      });
+  },
+
+  // Get student performance for a quiz
+  getStudentPerformance(quizId) {
+    return axios.get(`${API_BASE_URL}/quizzes/${quizId}/student-performance/`, getAuthHeaders())
+      .then(response => response.data)
+      .catch(error => {
+        console.error('Error fetching student performance:', error);
+        throw error;
+      });
+  },
+
+  // Get question analysis for a quiz
+  getQuestionAnalysis(quizId) {
+    return axios.get(`${API_BASE_URL}/quizzes/${quizId}/question-analysis/`, getAuthHeaders())
+      .then(response => response.data)
+      .catch(error => {
+        console.error('Error fetching question analysis:', error);
+        throw error;
+      });
   },
 
   // Get quiz questions with optional page filtering

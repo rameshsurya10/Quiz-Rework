@@ -1,59 +1,73 @@
 from rest_framework import serializers
 from .models import Department
-from accounts.models import Teacher, Student
+from accounts.models import Teacher
+from quizzes.models import Quiz
+
+class TeacherDetailSerializer(serializers.ModelSerializer):
+    """Serializer for detailed teacher information for embedding."""
+    name = serializers.CharField(source='user.get_full_name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+
+    class Meta:
+        model = Teacher
+        fields = ['id', 'name', 'email', 'employee_id', 'specialization', 'is_head']
+
+class QuizInDepartmentSerializer(serializers.ModelSerializer):
+    """Serializer for basic quiz info within a department."""
+    class Meta:
+        model = Quiz
+        fields = ['id', 'title', 'is_published', 'start_date', 'end_date']
 
 class DepartmentSerializer(serializers.ModelSerializer):
-    """Basic Department serializer with stats"""
+    """Basic Department serializer with stats and write-only teachers."""
     student_count = serializers.IntegerField(read_only=True)
     teacher_count = serializers.IntegerField(read_only=True)
+    teacher_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Teacher.objects.all(),
+        source='teachers',
+        required=False,
+        write_only=True,
+        help_text="List of teacher IDs to associate with the department."
+    )
     
     class Meta:
         model = Department
-        fields = ['id', 'name', 'code', 'description', 'icon', 'color',
-                 'student_count', 'teacher_count', 'created_at', 'updated_at']
-        read_only_fields = ['created_at', 'updated_at']
+        fields = [
+            'id', 'name', 'code', 'description', 'icon', 'color',
+            'student_count', 'teacher_count', 'created_at', 'last_modified_at',
+            'teacher_ids'
+        ]
+        read_only_fields = ['created_at', 'last_modified_at', 'student_count', 'teacher_count']
+    
+    def create(self, validated_data):
+        teachers = validated_data.pop('teachers', [])
+        department = super().create(validated_data)
+        if teachers:
+            department.teachers.set(teachers)
+        return department
+    
+    def update(self, instance, validated_data):
+        teachers = validated_data.pop('teachers', None)
+        instance = super().update(instance, validated_data)
+        if teachers is not None:
+            instance.teachers.set(teachers)
+        return instance
 
 class DepartmentDetailSerializer(DepartmentSerializer):
-    """Detailed Department serializer with teachers list"""
-    teachers = serializers.SerializerMethodField()
-    head_teacher = serializers.SerializerMethodField()
+    """Detailed Department serializer with full teachers and quizzes list."""
+    teachers = TeacherDetailSerializer(many=True, read_only=True)
+    quizzes = QuizInDepartmentSerializer(many=True, read_only=True)
+    head_teacher = TeacherDetailSerializer(read_only=True, source='get_head_teacher')
     
     class Meta(DepartmentSerializer.Meta):
-        fields = DepartmentSerializer.Meta.fields + ['teachers', 'head_teacher']
-    
-    def get_teachers(self, obj):
-        """Get summarized list of teachers in department"""
-        teachers = Teacher.objects.filter(departments=obj)[:10]  # Limit to 10 for performance
-        return [{
-            'id': str(teacher.id),
-            'name': teacher.user.get_full_name(),
-            'email': teacher.user.email,
-            'employee_id': teacher.employee_id,
-            'specialization': teacher.specialization,
-            'is_head': teacher.is_head
-        } for teacher in teachers]
-    
-    def get_head_teacher(self, obj):
-        """Get head teacher of department if exists"""
-        head = Teacher.objects.filter(departments=obj, is_head=True).first()
-        if not head:
-            return None
-        
-        return {
-            'id': str(head.id),
-            'name': head.user.get_full_name(),
-            'email': head.user.email,
-            'employee_id': head.employee_id,
-            'phone_number': str(head.phone_number) if head.phone_number else None
-        }
+        fields = [
+            'id', 'name', 'code', 'description', 'icon', 'color',
+            'student_count', 'teacher_count', 'created_at', 'last_modified_at',
+            'teachers', 'quizzes', 'head_teacher'
+        ]
+        read_only_fields = DepartmentSerializer.Meta.read_only_fields + ['teachers', 'quizzes', 'head_teacher']
 
-class BulkUploadStudentSerializer(serializers.Serializer):
-    """Serializer for bulk student upload"""
-    file = serializers.FileField()
-    
-class BulkDeleteStudentSerializer(serializers.Serializer):
-    """Serializer for bulk student deletion"""
-    student_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        required=True
-    )
+    def get_head_teacher(self, obj):
+        """Get head teacher of department if exists."""
+        return obj.teachers.filter(is_head=True).first()

@@ -112,7 +112,6 @@ class Teacher(models.Model):
     join_date = models.DateField(blank=True, null=True)
     phone_number = PhoneNumberField(blank=True, null=True)
     is_head = models.BooleanField(default=False)
-    departments = models.ManyToManyField('departments.Department', related_name='department_teachers') # Field name is 'departments'
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True) # Aligned with serializer

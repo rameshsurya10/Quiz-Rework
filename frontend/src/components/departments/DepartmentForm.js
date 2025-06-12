@@ -1,82 +1,66 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   TextField,
   Button,
-  Typography,
-  Paper,
-  Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Chip,
+  OutlinedInput,
   FormHelperText,
-  IconButton,
-  useTheme,
-  styled
+  CircularProgress
 } from '@mui/material';
-import { CloudUpload, AddCircle } from '@mui/icons-material';
-import { useDropzone } from 'react-dropzone';
-import axios from 'axios';
+import { userApi } from '../../services/api';
 
-const DropzoneArea = styled(Paper)(({ theme, isDragActive }) => ({
-  border: `2px dashed ${isDragActive ? theme.palette.primary.main : theme.palette.divider}`,
-  borderRadius: theme.shape.borderRadius,
-  padding: theme.spacing(4),
-  textAlign: 'center',
-  cursor: 'pointer',
-  backgroundColor: isDragActive ? theme.palette.action.hover : theme.palette.background.paper,
-  transition: 'all 0.3s ease',
-  marginBottom: theme.spacing(3),
-  '&:hover': {
-    borderColor: theme.palette.primary.main,
-  },
-}));
-
-const DepartmentForm = ({ department = null, onSubmit, isSubmitting = false }) => {
-  const theme = useTheme();
+const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = false }) => {
   const [formData, setFormData] = useState({
-    name: department?.name || '',
-    code: department?.code || '',
-    description: department?.description || '',
-    icon: department?.icon || 'school',
-    color: department?.color || '#4285F4',
-    studentCsvFile: null
+    name: '',
+    teachers: [],
   });
-  
+  const [teachers, setTeachers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
 
-  const onDrop = useCallback((acceptedFiles) => {
-    if (acceptedFiles && acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
-      setFormData(prev => ({
-        ...prev,
-        studentCsvFile: file
-      }));
-    }
+  useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        const response = await userApi.getAllTeachers();
+        setTeachers(response.data.results || response.data || []);
+      } catch (error) {
+        console.error('Error fetching teachers:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTeachers();
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'text/csv': ['.csv'],
-    },
-    multiple: false
-  });
+  useEffect(() => {
+    if (department) {
+      setFormData({
+        name: department.name || '',
+        teachers: department.teachers?.map(t => t.id) || [],
+      });
+    } else {
+      setFormData({ name: '', teachers: [] });
+    }
+  }, [department]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleTeacherChange = (event) => {
+    const { value } = event.target;
+    setFormData(prev => ({ ...prev, teachers: typeof value === 'string' ? value.split(',') : value }));
   };
 
   const validate = () => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Department name is required';
-    if (!formData.code.trim()) newErrors.code = 'Department code is required';
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -84,12 +68,20 @@ const DepartmentForm = ({ department = null, onSubmit, isSubmitting = false }) =
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validate()) {
-      onSubmit(formData);
+      const payload = {
+        name: formData.name,
+        teacher_ids: formData.teachers,
+      };
+      onSubmit(payload);
     }
   };
 
+  if (loading) {
+    return <Box display="flex" justifyContent="center" p={3}><CircularProgress /></Box>;
+  }
+
   return (
-    <Box component="form" onSubmit={handleSubmit}>
+    <Box component="form" onSubmit={handleSubmit} sx={{ p: 2 }}>
       <TextField
         fullWidth
         label="Department Name"
@@ -98,100 +90,58 @@ const DepartmentForm = ({ department = null, onSubmit, isSubmitting = false }) =
         onChange={handleInputChange}
         margin="normal"
         error={!!errors.name}
-        helperText={errors.name}
+        helperText={errors.name || 'Enter the name of the department'}
         sx={{ mb: 3 }}
+        required
+        variant="outlined"
       />
-
-      <TextField
-        fullWidth
-        label="Department Code"
-        name="code"
-        value={formData.code}
-        onChange={handleInputChange}
-        margin="normal"
-        error={!!errors.code}
-        helperText={errors.code}
-        sx={{ mb: 3 }}
-      />
-
-      {!department && (
-        <DropzoneArea 
-          {...getRootProps()} 
-          isDragActive={isDragActive}
-          elevation={isDragActive ? 8 : 1}
+      <FormControl fullWidth sx={{ mb: 3 }} variant="outlined">
+        <InputLabel id="teachers-label">Teachers</InputLabel>
+        <Select
+          labelId="teachers-label"
+          id="teachers-select"
+          multiple
+          value={formData.teachers}
+          onChange={handleTeacherChange}
+          input={<OutlinedInput label="Teachers" />}
+          renderValue={(selected) => (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {selected.map((value) => {
+                const teacher = teachers.find(t => t.id === value);
+                return teacher ? (
+                  <Chip 
+                    key={value} 
+                    label={`${teacher.user?.first_name || ''} ${teacher.user?.last_name || ''}`}
+                    size="small"
+                  />
+                ) : null;
+              })}
+            </Box>
+          )}
         >
-          <input {...getInputProps()} />
-          <CloudUpload fontSize="large" color="action" sx={{ mb: 1 }} />
-          <Typography variant="h6" gutterBottom>
-            {formData.studentCsvFile ? formData.studentCsvFile.name : "Drag 'n' drop CSV file with student information"}
-          </Typography>
-          <Typography variant="body2" color="textSecondary">
-            {formData.studentCsvFile ? 'Click to change file' : 'or click to select files'}
-          </Typography>
-          <Typography variant="caption" color="textSecondary" sx={{ mt: 2, display: 'block' }}>
-            Format: email,first_name,last_name,student_id
-          </Typography>
-        </DropzoneArea>
-      )}
-
-      <TextField
-        fullWidth
-        label="Description"
-        name="description"
-        value={formData.description}
-        onChange={handleInputChange}
-        multiline
-        rows={4}
-        margin="normal"
-        sx={{ mb: 3 }}
-      />
-
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Icon Name"
-            name="icon"
-            value={formData.icon}
-            onChange={handleInputChange}
-            margin="normal"
-            helperText="Material icon name (e.g., 'school', 'book')"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Color"
-            name="color"
-            type="color"
-            value={formData.color}
-            onChange={handleInputChange}
-            margin="normal"
-          />
-        </Grid>
-      </Grid>
-
-      <Button
-        type="submit"
-        variant="contained"
-        color="primary"
-        size="large"
-        fullWidth
-        disabled={isSubmitting}
-        sx={{
-          py: 1.5,
-          borderRadius: '12px',
-          textTransform: 'none',
-          fontSize: '1.1rem',
-          fontWeight: 'bold',
-          background: 'linear-gradient(45deg, #7B1FA2 30%, #9C27B0 90%)',
-          '&:hover': {
-            background: 'linear-gradient(45deg, #6A1B9A 30%, #8E24AA 90%)',
-          },
-        }}
-      >
-        {isSubmitting ? 'Saving...' : department ? 'UPDATE DEPARTMENT' : 'CREATE DEPARTMENT'}
-      </Button>
+          {teachers.map((teacher) => (
+            <MenuItem key={teacher.id} value={teacher.id}>
+              {`${teacher.user?.first_name || ''} ${teacher.user?.last_name || ''}`}
+              {teacher.employee_id ? ` (${teacher.employee_id})` : ''}
+            </MenuItem>
+          ))}
+        </Select>
+        <FormHelperText>Select one or more teachers for this department</FormHelperText>
+      </FormControl>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3 }}>
+        {onCancel && (
+          <Button variant="outlined" onClick={onCancel} disabled={isSubmitting}>Cancel</Button>
+        )}
+        <Button
+          type="submit"
+          variant="contained"
+          color="primary"
+          disabled={isSubmitting}
+          startIcon={isSubmitting ? <CircularProgress size={20} /> : null}
+        >
+          {isSubmitting ? 'Saving...' : (department ? 'Update Department' : 'Create Department')}
+        </Button>
+      </Box>
     </Box>
   );
 };

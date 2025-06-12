@@ -1,5 +1,8 @@
 {
   "dependencies": {
+    "@supabase/supabase-js": "^2.50.0",
+    "node-fetch": "^2.7.0",
+    "pg": "^8.16.0",
     "recharts": "^2.15.3"
   }
 }

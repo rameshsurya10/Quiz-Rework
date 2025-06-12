@@ -19,11 +19,13 @@ import {
   Search as SearchIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
-  Visibility as VisibilityIcon
+  Visibility as VisibilityIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { studentApi, departmentApi, userApi } from '../../services/api';
 import { alpha } from '@mui/material/styles';
 import { format, parseISO } from 'date-fns';
+import StudentForm from './StudentForm';
 
 // Styled Components
 const DashboardStyledCard = styled(Card)(({ theme }) => ({
@@ -84,20 +86,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
   const [filteredStudents, setFilteredStudents] = useState([]);
   
   // Form State
-  const [formData, setFormData] = useState({
-    id: '',
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
-    student_id: '',
-    department: '',
-    enrollment_date: format(new Date(), 'yyyy-MM-dd'),
-    graduation_year: (new Date().getFullYear() + 4).toString(),
-    address: ''
-  });
-  
-  const [formErrors, setFormErrors] = useState({});
+  const [editingStudent, setEditingStudent] = useState(null);
   
   // Table and Filter State
   const [page, setPage] = useState(0);
@@ -344,27 +333,15 @@ const StudentSection = ({ initialOpenDialog = false }) => {
   // Handle dialog close
   const handleDialogClose = () => {
     setOpenDialog(false);
-    // Reset form with a small delay to allow dialog close animation
+    // Clear editing state
     setTimeout(() => {
-      setFormData({
-        id: '',
-        first_name: '',
-        last_name: '',
-        email: '',
-        phone: '',
-        student_id: '',
-        department: '',
-        enrollment_date: format(new Date(), 'yyyy-MM-dd'),
-        graduation_year: (new Date().getFullYear() + 4).toString(),
-        address: ''
-      });
-      setFormErrors({});
+      setEditingStudent(null);
     }, 300);
   };
 
   // Handle edit student
   const handleEdit = (student) => {
-    setFormData({
+    setEditingStudent({
       id: student.id,
       first_name: student.first_name,
       last_name: student.last_name,
@@ -408,27 +385,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
   };
 
   // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    // Validate form
-    const errors = {};
-    if (!formData.first_name.trim()) errors.first_name = 'First name is required';
-    if (!formData.last_name.trim()) errors.last_name = 'Last name is required';
-    if (!formData.email) {
-      errors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      errors.email = 'Email is invalid';
-    }
-    if (!formData.student_id) errors.student_id = 'Student ID is required';
-    if (!formData.department) errors.department = 'Department is required';
-    if (!formData.enrollment_date) errors.enrollment_date = 'Enrollment date is required';
-
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      return;
-    }
-
+  const handleSubmit = async (formData) => {
     try {
       setIsSubmitting(true);
 
@@ -447,15 +404,15 @@ const StudentSection = ({ initialOpenDialog = false }) => {
 
       // Add password for new students
       let tempPassword = '';
-      if (!formData.id) {
+      if (!editingStudent?.id) {
         tempPassword = Math.random().toString(36).slice(-8) + 
                       Math.random().toString(36).slice(-8).toUpperCase();
         studentData.password = tempPassword;
       }
 
       // Make API call
-      if (formData.id) {
-        await studentApi.update(formData.id, studentData);
+      if (editingStudent?.id) {
+        await studentApi.update(editingStudent.id, studentData);
         showMessage('Student updated successfully');
       } else {
         await studentApi.create(studentData);
@@ -472,6 +429,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
                          error.response?.data?.email?.[0] || // Handle email validation errors
                          'Failed to save student. Please try again.';
       showMessage(errorMessage, 'error');
+      throw error; // Re-throw to let StudentForm handle the error
     } finally {
       setIsSubmitting(false);
     }
@@ -736,160 +694,39 @@ const StudentSection = ({ initialOpenDialog = false }) => {
           onClose={handleDialogClose}
           maxWidth="sm"
           fullWidth
+          PaperProps={{
+            style: {
+              maxHeight: '90vh',
+              overflow: 'hidden'
+            }
+          }}
         >
-          <form onSubmit={handleSubmit}>
-            <DialogTitle>
-              {formData.id ? 'Edit Student' : 'Add New Student'}
-            </DialogTitle>
-            <DialogContent dividers>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="First Name"
-                    name="first_name"
-                    value={formData.first_name}
-                    onChange={(e) => setFormData({...formData, first_name: e.target.value})}
-                    margin="normal"
-                    error={!!formErrors.first_name}
-                    helperText={formErrors.first_name}
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Last Name"
-                    name="last_name"
-                    value={formData.last_name}
-                    onChange={(e) => setFormData({...formData, last_name: e.target.value})}
-                    margin="normal"
-                    error={!!formErrors.last_name}
-                    helperText={formErrors.last_name}
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    margin="normal"
-                    error={!!formErrors.email}
-                    helperText={formErrors.email}
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Student ID"
-                    name="student_id"
-                    value={formData.student_id}
-                    onChange={(e) => setFormData({...formData, student_id: e.target.value})}
-                    margin="normal"
-                    error={!!formErrors.student_id}
-                    helperText={formErrors.student_id}
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <FormControl 
-                    fullWidth 
-                    margin="normal"
-                    error={!!formErrors.department}
-                    required
-                  >
-                    <InputLabel>Department</InputLabel>
-                    <Select
-                      name="department"
-                      value={formData.department}
-                      onChange={(e) => setFormData({...formData, department: e.target.value})}
-                      label="Department"
-                    >
-                      {departments.map((dept) => (
-                        <MenuItem key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {formErrors.department && (
-                      <FormHelperText>{formErrors.department}</FormHelperText>
-                    )}
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Enrollment Date"
-                    name="enrollment_date"
-                    type="date"
-                    value={formData.enrollment_date}
-                    onChange={(e) => setFormData({...formData, enrollment_date: e.target.value})}
-                    margin="normal"
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    error={!!formErrors.enrollment_date}
-                    helperText={formErrors.enrollment_date}
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Graduation Year"
-                    name="graduation_year"
-                    type="number"
-                    value={formData.graduation_year}
-                    onChange={(e) => setFormData({...formData, graduation_year: e.target.value})}
-                    margin="normal"
-                    InputProps={{
-                      inputProps: { min: new Date().getFullYear(), max: new Date().getFullYear() + 10 }
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Phone"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    margin="normal"
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Address"
-                    name="address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({...formData, address: e.target.value})}
-                    margin="normal"
-                    multiline
-                    rows={3}
-                  />
-                </Grid>
-              </Grid>
-            </DialogContent>
-            <DialogActions sx={{ p: 2 }}>
-              <Button onClick={handleDialogClose}>
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                variant="contained" 
-                disabled={isSubmitting}
-                startIcon={isSubmitting ? <CircularProgress size={20} /> : null}
-              >
-                {formData.id ? 'Update' : 'Create'} Student
-              </Button>
-            </DialogActions>
-          </form>
+          <DialogTitle>
+            {editingStudent?.id ? 'Edit Student' : 'Add New Student'}
+            <IconButton
+              aria-label="close"
+              onClick={handleDialogClose}
+              sx={{
+                position: 'absolute',
+                right: 8,
+                top: 8,
+                color: (theme) => theme.palette.grey[500],
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent dividers sx={{ overflow: 'hidden' }}>
+            <Box sx={{ maxHeight: 'calc(90vh - 150px)', overflowY: 'auto', pr: 1 }}>
+              <StudentForm 
+                student={editingStudent} 
+                onSubmit={handleSubmit} 
+                onCancel={handleDialogClose}
+                isSubmitting={isSubmitting}
+                showAddress={false}
+              />
+            </Box>
+          </DialogContent>
         </Dialog>
 
         {/* Snackbar for notifications */}

@@ -22,7 +22,6 @@ const StudentForm = ({ student = null, onSubmit, isSubmitting = false }) => {
     email: student?.email || '',
     student_id: student?.student_id || '',
     department: student?.department || '',
-    address: student?.address || '',
     phone: student?.phone || ''
   });
   
@@ -54,11 +53,15 @@ const StudentForm = ({ student = null, onSubmit, isSubmitting = false }) => {
   const validate = () => {
     const newErrors = {};
     if (!formData.first_name.trim()) newErrors.first_name = 'First name is required';
-    if (!formData.last_name.trim()) newErrors.last_name = 'Last name is required';
     if (!formData.email.trim()) newErrors.email = 'Email is required';
     if (!formData.email.includes('@')) newErrors.email = 'Invalid email format';
     if (!formData.student_id.trim()) newErrors.student_id = 'Student ID is required';
     if (!formData.department) newErrors.department = 'Department is required';
+    if (!formData.phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!/^[0-9]{10}$/.test(formData.phone)) {
+      newErrors.phone = 'Phone number must be 10 digits';
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -89,13 +92,11 @@ const StudentForm = ({ student = null, onSubmit, isSubmitting = false }) => {
         <Grid item xs={12} sm={6}>
           <TextField
             fullWidth
-            label="Last Name"
+            label="Last Name (Optional)"
             name="last_name"
             value={formData.last_name}
             onChange={handleInputChange}
             margin="normal"
-            error={!!errors.last_name}
-            helperText={errors.last_name}
           />
         </Grid>
       </Grid>
@@ -149,23 +150,13 @@ const StudentForm = ({ student = null, onSubmit, isSubmitting = false }) => {
 
       <TextField
         fullWidth
-        label="Phone"
+        label="Phone *"
         name="phone"
         value={formData.phone}
         onChange={handleInputChange}
         margin="normal"
-        sx={{ mb: 3 }}
-      />
-
-      <TextField
-        fullWidth
-        label="Address"
-        name="address"
-        value={formData.address}
-        onChange={handleInputChange}
-        multiline
-        rows={3}
-        margin="normal"
+        error={!!errors.phone}
+        helperText={errors.phone || '10-digit phone number'}
         sx={{ mb: 3 }}
       />
 

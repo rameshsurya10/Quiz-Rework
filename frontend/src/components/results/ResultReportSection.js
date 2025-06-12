@@ -48,7 +48,7 @@ import ShareIcon from '@mui/icons-material/Share';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import SearchIcon from '@mui/icons-material/Search';
-import { reportService } from '../../services/reportService';
+import { quizService } from '../../services/quizService';
 
 // TabPanel component for tab content
 function TabPanel(props) {
@@ -95,15 +95,15 @@ const ResultReportSection = ({ quizId }) => {
         setLoading(true);
         
         // Fetch summary data
-        const summary = await reportService.getQuizReport(quizId);
+        const summary = await quizService.getQuizReport(quizId);
         setReportData(summary);
         
         // Fetch student performance data
-        const students = await reportService.getStudentPerformance(quizId);
+        const students = await quizService.getStudentPerformance(quizId);
         setStudentData(students);
         
         // Fetch question analysis data
-        const questions = await reportService.getQuestionAnalysis(quizId);
+        const questions = await quizService.getQuestionAnalysis(quizId);
         setQuestionData(questions);
         
         setLoading(false);

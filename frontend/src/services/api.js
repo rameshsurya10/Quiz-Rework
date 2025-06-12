@@ -137,8 +137,8 @@ export const teacherApi = {
 export const departmentApi = {
   getAll: (params) => api.get('/api/departments/', { params }),
   getById: (id) => api.get(`/api/departments/${id}/`),
-  create: (data) => api.post('/api/departments/create-department/', data), // Updated to use hyphen
-  update: (id, data) => api.put(`/api/departments/${id}/`),
+  create: (data) => api.post('/api/departments/', data),
+  update: (id, data) => api.put(`/api/departments/${id}/`, data),
   delete: (id) => api.delete(`/api/departments/${id}/`),
 };
 
@@ -200,6 +200,14 @@ export const settingsApi = {
 
 export const dashboardApi = {
   getStats: () => api.get('/api/dashboard/data/'),
+};
+
+export const reportApi = {
+  // Assumes an endpoint like /api/reports/student/{studentId}/
+  // This endpoint should return data like: { studentName, quizzesTaken, averageScore, recentActivity, etc. }
+  getStudentReport: (studentId) => api.get(`/api/reports/student/${studentId}/`),
+  // You might also want an endpoint to get all reports or reports with filters
+  // getAllReports: (params) => api.get('/api/reports/', { params }),
 };
 
 export default api;

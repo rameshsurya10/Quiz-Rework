@@ -3,7 +3,7 @@ import {
   Container, Box, Typography, Button, Paper, Chip, useTheme,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TablePagination, TableSortLabel, IconButton, TextField, InputAdornment,
-  Dialog, DialogTitle, DialogContent, DialogActions, Divider, Tooltip, Avatar,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Divider, Tooltip, Avatar,
   CircularProgress, MenuItem, Select, FormControl, InputLabel
 } from '@mui/material';
 import { 
@@ -17,10 +17,11 @@ import {
   Visibility as VisibilityIcon,
   Close as CloseIcon
 } from '@mui/icons-material';
-import { PageHeader, ConfirmationDialog, EmptyState } from '../common';
-import { departmentApi, userApi } from '../services/api';
-import { useSnackbar } from '../contexts/SnackbarContext';
+import { PageHeader, EmptyState } from '../common';
+import { departmentApi, userApi } from '../../services/api';
+import { useSnackbar } from '../../contexts/SnackbarContext';
 import { motion } from 'framer-motion';
+import DepartmentForm from './DepartmentForm';
 
 const DepartmentSection = () => {
   const theme = useTheme();
@@ -81,29 +82,39 @@ const DepartmentSection = () => {
     setOrderBy(property);
   };
 
-  const handleDelete = async () => {
-    if (!selectedDept) return;
+  const handleSaveDepartment = async (formData) => {
     try {
-      await departmentApi.delete(selectedDept.id);
-      setDepartments(departments.filter(dept => dept.id !== selectedDept.id));
-      showSnackbar('Department deleted successfully', 'success');
-    } catch (error) {
-      console.error('Failed to delete department:', error);
-      showSnackbar('Failed to delete department', 'error');
-    } finally {
-      setOpenDeleteDialog(false);
+      let savedDepartment;
+      if (selectedDept?.id) {
+        savedDepartment = await departmentApi.update(selectedDept.id, formData);
+        showSnackbar('Department updated successfully!', 'success');
+        setDepartments(departments.map(d => d.id === selectedDept.id ? savedDepartment.data : d));
+      } else {
+        savedDepartment = await departmentApi.create(formData);
+        showSnackbar('Department created successfully!', 'success');
+        setDepartments([savedDepartment.data, ...departments]);
+      }
+      setOpenFormDialog(false);
       setSelectedDept(null);
+    } catch (error) {
+      console.error('Failed to save department:', error);
+      showSnackbar(error.response?.data?.detail || 'Failed to save department', 'error');
     }
   };
 
-  const handleSaveDepartment = (savedDepartment) => {
-    if (selectedDept) {
-      setDepartments(departments.map(d => d.id === savedDepartment.id ? savedDepartment : d));
-    } else {
-      setDepartments([savedDepartment, ...departments]);
+  const handleDelete = async () => {
+    if (!selectedDept) return;
+    
+    try {
+      await departmentApi.delete(selectedDept.id);
+      showSnackbar('Department deleted successfully!', 'success');
+      setDepartments(departments.filter(d => d.id !== selectedDept.id));
+      setOpenDeleteDialog(false);
+      setSelectedDept(null);
+    } catch (error) {
+      console.error('Failed to delete department:', error);
+      showSnackbar(error.response?.data?.detail || 'Failed to delete department', 'error');
     }
-    setOpenFormDialog(false);
-    setSelectedDept(null);
   };
 
   const filteredDepartments = departments.filter(dept => 
@@ -138,16 +149,20 @@ const DepartmentSection = () => {
   const paginatedDepartments = sortedDepartments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
-    <Container maxWidth={false} sx={{ py: 3 }}>
-      <PageHeader
-        title="Departments"
-        subtitle="Manage academic departments and their staff"
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <PageHeader 
+        title="Departments" 
+        subtitle="Manage academic departments and their details"
         actions={[
-          <Button
+          <Button 
             key="add-department"
-            variant="contained"
+            variant="contained" 
+            color="primary"
             startIcon={<AddIcon />}
-            onClick={() => { setSelectedDept(null); setOpenFormDialog(true); }}
+            onClick={() => {
+              setSelectedDept(null);
+              setOpenFormDialog(true);
+            }}
           >
             Add Department
           </Button>
@@ -240,23 +255,46 @@ const DepartmentSection = () => {
         </Paper>
       )}
 
-      <ConfirmationDialog
+      {/* Delete Confirmation Dialog */}
+      <Dialog
         open={openDeleteDialog}
         onClose={() => setOpenDeleteDialog(false)}
-        onConfirm={handleDelete}
-        title="Delete Department"
-        content={`Are you sure you want to delete department: ${selectedDept?.name}? This action cannot be undone.`}
-      />
+      >
+        <DialogTitle>Delete Department</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete department: {selectedDept?.name}? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={handleDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-      {openFormDialog && (
-        <DepartmentFormDialog
-          open={openFormDialog}
-          onClose={() => { setOpenFormDialog(false); setSelectedDept(null); }}
-          department={selectedDept}
-          teachers={teachers}
-          onSave={handleSaveDepartment}
-        />
-      )}
+      {/* Department Form Dialog */}
+      <Dialog 
+        open={openFormDialog}
+        onClose={() => {
+          setOpenFormDialog(false);
+          setSelectedDept(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedDept ? 'Edit Department' : 'Create New Department'}
+        </DialogTitle>
+        <DialogContent>
+          <DepartmentForm 
+            department={selectedDept} 
+            onSubmit={handleSaveDepartment}
+            isSubmitting={false}
+          />
+        </DialogContent>
+      </Dialog>
 
       {openDetailsDialog && selectedDept && (
         <DepartmentDetailsDialog
@@ -269,118 +307,6 @@ const DepartmentSection = () => {
   );
 };
 
-const DepartmentFormDialog = ({ open, onClose, department, teachers, onSave }) => {
-  const { showSnackbar } = useSnackbar();
-  const [formData, setFormData] = useState({
-    name: '',
-    code: '',
-    description: '',
-    head_teacher_id: ''
-  });
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (department) {
-      setFormData({
-        name: department.name || '',
-        code: department.code || '',
-        description: department.description || '',
-        head_teacher_id: department.head_teacher?.id || ''
-      });
-    } else {
-      setFormData({ name: '', code: '', description: '', head_teacher_id: '' });
-    }
-  }, [department]);
-
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    try {
-      const payload = { ...formData };
-      if (!payload.head_teacher_id) delete payload.head_teacher_id; // Send null or omit if not selected
-      
-      let response;
-      if (department?.id) {
-        response = await departmentApi.update(department.id, payload);
-        showSnackbar('Department updated successfully!', 'success');
-      } else {
-        response = await departmentApi.create(payload);
-        showSnackbar('Department created successfully!', 'success');
-      }
-      onSave(response.data);
-      onClose();
-    } catch (error) {
-      console.error('Failed to save department:', error);
-      showSnackbar(error.response?.data?.detail || 'Failed to save department', 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        {department ? 'Edit Department' : 'Add New Department'}
-        <IconButton onClick={onClose}><CloseIcon /></IconButton>
-      </DialogTitle>
-      <form onSubmit={handleSubmit}>
-        <DialogContent dividers>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
-            <TextField
-              name="name"
-              label="Department Name"
-              value={formData.name}
-              onChange={handleChange}
-              fullWidth required autoFocus
-              disabled={isSaving}
-            />
-            <TextField
-              name="code"
-              label="Department Code"
-              value={formData.code}
-              onChange={handleChange}
-              fullWidth required
-              disabled={isSaving}
-            />
-            <FormControl fullWidth disabled={isSaving}>
-              <InputLabel id="head_teacher_label">Head of Department (Optional)</InputLabel>
-              <Select
-                labelId="head_teacher_label"
-                name="head_teacher_id"
-                value={formData.head_teacher_id}
-                label="Head of Department (Optional)"
-                onChange={handleChange}
-              >
-                <MenuItem value=""><em>None</em></MenuItem>
-                {teachers.map(teacher => (
-                  <MenuItem key={teacher.id} value={teacher.id}>{teacher.name || teacher.username}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              name="description"
-              label="Description (Optional)"
-              value={formData.description}
-              onChange={handleChange}
-              fullWidth multiline rows={3}
-              disabled={isSaving}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: '16px 24px' }}>
-          <Button onClick={onClose} disabled={isSaving}>Cancel</Button>
-          <Button type="submit" variant="contained" disabled={isSaving} startIcon={isSaving ? <CircularProgress size={20} /> : null}>
-            {isSaving ? 'Saving...' : (department ? 'Save Changes' : 'Create Department')}
-          </Button>
-        </DialogActions>
-      </form>
-    </Dialog>
-  );
-};
 
 const DepartmentDetailsDialog = ({ open, onClose, department }) => {
   const theme = useTheme();

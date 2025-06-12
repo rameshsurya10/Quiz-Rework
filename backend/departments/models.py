@@ -28,6 +28,14 @@ class Department(models.Model):
     icon = models.CharField(max_length=50, default="school")
     color = models.CharField(max_length=20, default="#4285F4")
     
+    # Many-to-many relationship with teachers
+    teachers = models.ManyToManyField(
+        'accounts.Teacher',
+        related_name='departments',
+        blank=True,
+        help_text='Teachers who belong to this department'
+    )
+    
     class Meta:
         verbose_name = 'Department'
         verbose_name_plural = 'Departments'

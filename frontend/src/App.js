@@ -10,7 +10,8 @@ import QuizSection from './components/quizzes/QuizSection';
 import ResultsSection from './components/results/ResultsSection';
 import ProfilePage from './components/profile/ProfilePage';
 import SettingsPage from './components/settings/SettingsPage';
-import DepartmentSection from './departments/DepartmentSection';
+import DepartmentSection from './components/departments/DepartmentSection';
+import StudentReportSection from './components/results/StudentReportSection'; // Added for student reports
 import FullLayout from './components/FullLayout';
 import { SnackbarProvider } from './contexts/SnackbarContext';
 import apiService from './api';
@@ -145,6 +146,13 @@ function App() {
           <Route path="/settings" element={
             <ProtectedRoute>
               <SettingsPage />
+            </ProtectedRoute>
+          } />
+
+          {/* Student Reports Route */}
+          <Route path="/student-reports" element={
+            <ProtectedRoute>
+              <StudentReportSection />
             </ProtectedRoute>
           } />
 
