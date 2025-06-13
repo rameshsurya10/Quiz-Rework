@@ -61,6 +61,7 @@ urlpatterns = [
     # path('api/accounts/', include('accounts.urls')),
     path('api/documents/', include('documents.urls')),
     path('api/quizzes/', include('quizzes.urls')),
+    path('api/quiz/', include('quiz.urls')),  # Add this line for the quiz app
     path('api/ai/', include('ai_processing.urls')),
     path('api/departments/', include('departments.urls')),
     path('api/notifications/', include('notifications.urls')),
