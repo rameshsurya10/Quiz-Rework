@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'notifications',
     'reports',
     'settings',
+    'quiz',
 ]
 
 MIDDLEWARE = [
@@ -165,6 +166,13 @@ CORS_ALLOW_ALL_ORIGINS = True  # More permissive for development
 CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 CORS_ALLOW_HEADERS = ['*']
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
+
+# Media files (user-uploaded files)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'upload')
+
+# Create upload directory if it doesn't exist
+os.makedirs(MEDIA_ROOT, exist_ok=True)
 
 # File Storage Configuration (AWS S3 or Supabase)
 # Use Supabase by default if configured
