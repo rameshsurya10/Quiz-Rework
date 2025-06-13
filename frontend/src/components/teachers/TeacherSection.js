@@ -84,15 +84,7 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
     departments: 0,
     averageRating: 0
   });
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    department: '',
-    employeeId: ''
-  });
-  const [formErrors, setFormErrors] = useState({});
+  
 
   // Fetch teacher data from the API
   const fetchTeacherData = useCallback(async () => {
@@ -169,72 +161,14 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
     setSnackbar({ open: true, message, severity });
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Clear error when user types
-    if (formErrors[name]) {
-      setFormErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
-    }
+  const handleTeacherCreateSuccess = async () => {
+    showMessage('Teacher added successfully!');
+    setOpenDialog(false);
+    await fetchTeacherData(); // Refresh the list of teachers
   };
 
-  const validateForm = () => {
-    const errors = {};
-    if (!formData.firstName.trim()) errors.firstName = 'First name is required';
-    if (!formData.lastName.trim()) errors.lastName = 'Last name is required';
-    if (!formData.email.trim()) {
-      errors.email = 'Email is required';
-    } else if (!/^\S+@\S+\.\S+$/.test(formData.email)) {
-      errors.email = 'Please enter a valid email';
-    }
-    if (!formData.department) errors.department = 'Department is required';
-    
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleFormSubmit = async (data) => {
-    try {
-      setIsLoading(true);
-      
-      // Prepare teacher data for the API
-      const teacherData = {
-        first_name: data.name.split(' ')[0],
-        last_name: data.name.split(' ').slice(1).join(' ') || ' ', // Handle single name
-        email: data.email,
-        phone: data.phone,
-        role: 'teacher',
-        department: data.departmentId || data.department, // Can be ID or name depending on API
-        is_active: true
-      };
-
-      console.log('Submitting teacher data:', teacherData);
-      
-      // Add new teacher through API
-      const response = await teacherApi.create(teacherData);
-      console.log('Teacher created:', response.data);
-      
-      showMessage('Teacher added successfully');
-      setOpenDialog(false);
-      await fetchTeacherData(); // Refresh the list
-    } catch (error) {
-      console.error('Error adding teacher:', error);
-      const errorMessage = error.response?.data?.error || 
-                         error.response?.data?.email?.[0] ||
-                         error.response?.data?.message || 
-                         error.response?.data?.detail ||
-                         'Failed to add teacher. Please check the form and try again.';
-      showMessage(errorMessage, 'error');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleTeacherCreateCancel = () => {
+    setOpenDialog(false);
   };
 
   return (
@@ -369,16 +303,12 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
               <Typography variant="h6" gutterBottom>
                 No teachers found
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Get started by adding a new teacher
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setOpenDialog(true)}
-              >
-                Add Teacher
-              </Button>
+              <DialogContent sx={{ p: 0, '& .MuiDialogContent-root': { padding: 0 } }}>
+                <TeacherForm 
+                  onSuccess={handleTeacherCreateSuccess} 
+                  onCancel={handleTeacherCreateCancel} 
+                />
+              </DialogContent>
             </Paper>
           ) : (
             <Grid container spacing={3}>
@@ -519,50 +449,14 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
             </IconButton>
           </DialogTitle>
           <DialogContent sx={{ 
-            p: 3,
+            padding: 0, // Use padding: 0 as TeacherForm has its own padding
             flex: '1 1 auto',
-            overflowY: 'auto',
-            '& .MuiFormControl-root': {
-              mb: 2
-            }
+            overflowY: 'auto'
+            // Removed MuiFormControl-root style, TeacherForm manages internal spacing
           }}>
             <TeacherForm 
-              onSubmit={async (data) => {
-                // If data is null, it means the form was cancelled
-                if (data === null) {
-                  setOpenDialog(false);
-                  return;
-                }
-
-                try {
-                  // Format data for the API
-                  const teacherData = {
-                    first_name: data.name.split(' ')[0],
-                    last_name: data.name.split(' ').slice(1).join(' ') || ' ', // Handle single name
-                    email: data.email,
-                    phone: data.phone,
-                    department: data.departmentId || data.department,
-                    role: 'teacher',
-                    is_active: true
-                  };
-                  
-                  // Call the API
-                  await teacherApi.create(teacherData);
-                  showMessage('Teacher added successfully');
-                  setOpenDialog(false);
-                  await fetchTeacherData();
-                } catch (error) {
-                  console.error('Error adding teacher:', error);
-                  const errorMessage = error.response?.data?.error || 
-                                     error.response?.data?.email?.[0] ||
-                                     error.response?.data?.message || 
-                                     error.response?.data?.detail ||
-                                     'Failed to add teacher. Please check the form and try again.';
-                  showMessage(errorMessage, 'error');
-                }
-              }}
-              onCancel={() => setOpenDialog(false)}
-              isSubmitting={isLoading}
+              onSuccess={handleTeacherCreateSuccess}
+              onCancel={handleTeacherCreateCancel}
             />
           </DialogContent>
         </Dialog>

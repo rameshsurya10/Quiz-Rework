@@ -42,6 +42,7 @@ const DepartmentSection = () => {
   const [selectedDept, setSelectedDept] = useState(null);
   const [openFormDialog, setOpenFormDialog] = useState(false);
   const [openDetailsDialog, setOpenDetailsDialog] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchDepartments = useCallback(async () => {
     try {
@@ -85,12 +86,13 @@ const DepartmentSection = () => {
   };
 
   const handleSaveDepartment = async (formData) => {
+    setIsSubmitting(true);
     try {
       let savedDepartment;
-      if (selectedDept?.id) {
-        savedDepartment = await departmentApi.update(selectedDept.id, formData);
+      if (selectedDept?.department_id) {
+        savedDepartment = await departmentApi.update(selectedDept.department_id, formData);
         showSnackbar('Department updated successfully!', 'success');
-        setDepartments(departments.map(d => d.id === selectedDept.id ? savedDepartment.data : d));
+        setDepartments(departments.map(d => d.department_id === selectedDept.department_id ? savedDepartment.data : d));
       } else {
         savedDepartment = await departmentApi.create(formData);
         showSnackbar('Department created successfully!', 'success');
@@ -101,6 +103,8 @@ const DepartmentSection = () => {
     } catch (error) {
       console.error('Failed to save department:', error);
       showSnackbar(error.response?.data?.detail || 'Failed to save department', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -108,9 +112,9 @@ const DepartmentSection = () => {
     if (!selectedDept) return;
     
     try {
-      await departmentApi.delete(selectedDept.id);
+      await departmentApi.delete(selectedDept.department_id);
       showSnackbar('Department deleted successfully!', 'success');
-      setDepartments(departments.filter(d => d.id !== selectedDept.id));
+      setDepartments(departments.filter(d => d.department_id !== selectedDept.department_id));
       setOpenDeleteDialog(false);
       setSelectedDept(null);
     } catch (error) {
@@ -184,6 +188,27 @@ const DepartmentSection = () => {
         />
       </Box>
 
+      {/* Form Dialog for Add/Edit Department */}
+      <Dialog 
+        open={openFormDialog} 
+        onClose={() => { if (!isSubmitting) { setOpenFormDialog(false); setSelectedDept(null); } }} 
+        maxWidth="md" 
+        fullWidth
+      >
+        <DialogTitle>{selectedDept?.department_id ? 'Edit Department' : 'Add New Department'}</DialogTitle>
+        <DialogContent>
+          {/* Render DepartmentForm only when the dialog is open to ensure fresh state/fetch for teachers */}
+          {openFormDialog && (
+            <DepartmentForm 
+              onSubmit={handleSaveDepartment} 
+              onCancel={() => { setOpenFormDialog(false); setSelectedDept(null); }}
+              initialData={selectedDept}
+              isSubmitting={isSubmitting}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>
       ) : departments.length === 0 ? (
@@ -210,7 +235,7 @@ const DepartmentSection = () => {
               </TableHead>
               <TableBody>
                 {paginatedDepartments.map((dept) => (
-                  <TableRow hover key={dept.id}>
+                  <TableRow hover key={dept.department_id}>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Avatar sx={{ bgcolor: theme.palette.primary.light, mr: 1.5 }}>
@@ -274,28 +299,6 @@ const DepartmentSection = () => {
             Delete
           </Button>
         </DialogActions>
-      </Dialog>
-
-      {/* Department Form Dialog */}
-      <Dialog 
-        open={openFormDialog}
-        onClose={() => {
-          setOpenFormDialog(false);
-          setSelectedDept(null);
-        }}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          {selectedDept ? 'Edit Department' : 'Create New Department'}
-        </DialogTitle>
-        <DialogContent>
-          <DepartmentForm 
-            department={selectedDept} 
-            onSubmit={handleSaveDepartment}
-            isSubmitting={false}
-          />
-        </DialogContent>
       </Dialog>
 
       {openDetailsDialog && selectedDept && (
