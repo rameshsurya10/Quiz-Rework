@@ -39,36 +39,45 @@ class QuizSerializer(serializers.ModelSerializer):
     class Meta:
         model = Quiz
         fields = [
-            'quiz_id', 'title', 'description', 'uploadedfiles',
-            'is_published', 'published_at', 'time_limit_minutes',
-            'passing_score', 'max_attempts', 'start_date', 'end_date',
-            'department', 'department_id', 'department_name', 'created_at', 
-            'created_by', 'created_by_name', 'last_modified_at',
-            'last_modified_by', 'last_modified_by_name', 'creator', 
-            'creator_name', 'is_deleted'
+            'quiz_id', 'title', 'description', 'no_of_questions',
+            'question_type', 'pages', 'department', 'quiz_date',
+            'is_active', 'created_at', 'created_by', 'last_modified_at',
+            'last_modified_by', 'is_deleted'
         ]
-        read_only_fields = [
-            'quiz_id', 'created_at', 'created_by', 'created_by_name',
-            'last_modified_at', 'last_modified_by', 'last_modified_by_name',
-            'is_deleted', 'published_at', 'department_name', 'creator_name'
-        ]
+        read_only_fields = ['quiz_id', 'created_at', 'last_modified_at']
         extra_kwargs = {
-            'department': {'write_only': True},
-            'creator': {'write_only': True}
+            'pages': {'required': False, 'default': []}
         }
-    
-    def validate(self, data):
-        """
-        Validate that start_date is before end_date if both are provided
-        """
-        start_date = data.get('start_date')
-        end_date = data.get('end_date')
-        
-        if start_date and end_date and start_date >= end_date:
-            raise serializers.ValidationError(
-                "End date must be after start date"
-            )
-        return data
+
+    def validate_quiz_date(self, value):
+        """Validate that quiz_date is not in the past"""
+        if value < timezone.now():
+            raise serializers.ValidationError("Quiz date cannot be in the past")
+        return value
+
+    def validate_pages(self, value):
+        """Validate the pages format"""
+        if not value:  # Handle empty list or None
+            return []
+            
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Pages must be a list")
+            
+        for page_range in value:
+            if not isinstance(page_range, str):
+                raise serializers.ValidationError("Each page range must be a string")
+            # Validate format like "23-45,56-60"
+            parts = page_range.split(',')
+            for part in parts:
+                if '-' not in part:
+                    raise serializers.ValidationError("Page ranges must be in format 'start-end'")
+                try:
+                    start, end = map(int, part.split('-'))
+                    if start > end:
+                        raise serializers.ValidationError("Start page must be less than end page")
+                except ValueError:
+                    raise serializers.ValidationError("Page numbers must be integers")
+        return value
 
 class QuizCreateSerializer(serializers.ModelSerializer):
     """Serializer for quiz creation"""

@@ -213,8 +213,20 @@ elif os.getenv('USE_S3', 'False') == 'True':
     PRIVATE_MEDIA_LOCATION = 'media/private'
     PRIVATE_FILE_STORAGE = 'config.storage_backends.PrivateMediaStorage'
 
-# OpenAI API settings
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# OpenAI API Key
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
+if not OPENAI_API_KEY:
+    print("WARNING: OPENAI_API_KEY not found in environment variables")
+    print("Please set OPENAI_API_KEY in your .env file")
+elif not OPENAI_API_KEY.startswith('sk-') or OPENAI_API_KEY.startswith('sk-proj-'):
+    print("WARNING: Invalid OpenAI API key format")
+    print("API key should start with 'sk-' (not 'sk-proj-')")
+    print("Please get a valid API key from: https://platform.openai.com/account/api-keys")
+    print("Current key starts with:", OPENAI_API_KEY[:10] + "...")
+    # Set to None to prevent invalid key usage
+    OPENAI_API_KEY = None
+else:
+    print("OpenAI API Key found:", OPENAI_API_KEY[:10] + "...")
 
 # Supabase settings
 SUPABASE_URL = os.getenv('SUPABASE_URL')
@@ -243,3 +255,8 @@ try:
     from .local_settings import *
 except ImportError:
     pass
+
+# OpenAI Settings
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+if not OPENAI_API_KEY:
+    print("Warning: OPENAI_API_KEY not found in environment variables")
