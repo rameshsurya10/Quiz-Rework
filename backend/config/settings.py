@@ -49,7 +49,6 @@ INSTALLED_APPS = [
     'documents',
     'teacher',
     'students',
-    'quizzes',
     # 'quize',
     'dashboard',
     'ai_processing',

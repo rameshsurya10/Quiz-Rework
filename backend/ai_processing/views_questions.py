@@ -7,7 +7,7 @@ from django.db.models import Count, Q
 
 from .models import QuestionBatch, Question, Option
 from .serializers import QuestionSerializer, QuestionBatchDetailSerializer
-from quizzes.models import Quiz
+from quiz.models import Quiz
 from accounts.permissions import IsTeacherOrAdmin, IsOwnerOrAdminOrReadOnly
 
 logger = logging.getLogger(__name__)

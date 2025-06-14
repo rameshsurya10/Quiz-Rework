@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from . import views
 
 router = DefaultRouter()
-router.register(r'quizzes', views.QuizReportViewSet, basename='quiz-reports')
+router.register(r'quiz', views.QuizReportViewSet, basename='quiz-reports')
 
 urlpatterns = [
     path('', include(router.urls)),

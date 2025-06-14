@@ -15,13 +15,12 @@ urlpatterns = [
     path('<int:quiz_id>/', views.QuizRetrieveUpdateDestroyView.as_view(), name='quiz-detail'),
     path('<int:quiz_id>/publish/', views.QuizPublishView.as_view(), name='quiz-publish'),
     # path('<int:quiz_id>/generate-from-prompt/', views.QuizQuestionGenerateFromPromptView.as_view(), name='quiz-generate-from-prompt'),
-    path('<int:quiz_id>/generate-from-existing-file/', views.QuizQuestionGenerateFromExistingFileView.as_view(), name='quiz-generate-from-existing-file'),
     
     # File management endpoints
     path('<int:quiz_id>/files/', views.QuizFileUploadView.as_view(), name='quiz-files-list'),
     path('<int:quiz_id>/files/upload/', views.QuizFileUploadView.as_view(), name='quiz-file-upload'),
     path('<int:quiz_id>/files/<str:file_id>/', views.QuizFileUploadView.as_view(), name='quiz-file-detail'),
     # Quiz question generation endpoint
-    path('<int:quiz_id>/generate-questions/', views.QuizQuestionGenerateView.as_view(), name='quiz-generate-questions'),
+    path('<int:quiz_id>/generate_question/', views.QuizQuestionGenerateFromExistingFileView.as_view(), name='quiz-generate-from-existing-file'),
     path('', include(router.urls)),
 ]

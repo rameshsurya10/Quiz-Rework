@@ -182,11 +182,14 @@ class QuizListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         """Return quizzes created by the user or all quizzes for admins"""
-        queryset = Quiz.objects.filter(is_deleted=False)
-        if not self.request.user.is_admin:
-            queryset = queryset.filter(creator=self.request.user)
+        # This line ensures only non-deleted quizzes are fetched
+        queryset = Quiz.objects.filter(is_deleted=False) 
         
-        # Add department filter if provided
+        # If the user is authenticated and is not a staff/superuser (admin),
+        # filter quizzes to show only those they created (matched by email).
+        if self.request.user and self.request.user.is_authenticated and not self.request.user.is_staff and not self.request.user.is_superuser:
+            queryset = queryset.filter(created_by=self.request.user.email)
+        
         department_id = self.request.query_params.get('department_id')
         if department_id:
             queryset = queryset.filter(department_id=department_id)
@@ -249,8 +252,14 @@ class QuizListCreateView(generics.ListCreateAPIView):
             )
 
     def perform_create(self, serializer):
-        """Set the creator and created_by fields"""
-        serializer.save()
+        """Set the creator and created_by fields using the authenticated user's details."""
+        user = self.request.user
+        # Use get_full_name() for the creator's name and email for created_by
+        creator_name = user.get_full_name() if hasattr(user, 'get_full_name') else str(user) 
+        created_by_email = user.email
+        
+        # Pass these directly to save, they will be included in the instance creation.
+        serializer.save(creator=creator_name, created_by=created_by_email)
 
 
 class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
@@ -323,88 +332,6 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         instance.is_deleted = True
         instance.last_modified_by = self.request.user
         instance.save()
-
-
-class QuizQuestionGenerateView(APIView):
-    """
-    API endpoint to generate questions for a quiz using OpenAI and LangGraph
-    """
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, quiz_id):
-        import openai
-        import os
-        try:
-            from langgraph.graph import Graph
-        except ImportError:
-            return Response({"error": "LangGraph not installed."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Set OpenAI API key (for openai>=1.0.0, pass to client)
-        api_key = os.environ.get('OPENAI_API_KEY')
-        print("API Key: ", api_key)
-        if not api_key:
-            return Response({"error": "OpenAI API key not set in environment."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        client = openai.OpenAI(api_key=api_key)
-        print("Client: ", client)
-
-        quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
-        if not quiz.uploadedfiles or len(quiz.uploadedfiles) == 0:
-            return Response({"error": "No uploaded files found for this quiz."}, status=status.HTTP_404_NOT_FOUND)
-
-        # For simplicity, use the first uploaded file
-        file_info = quiz.uploadedfiles[0]
-        print("File Info: ", file_info)
-        file_path = file_info.get('path')
-        print("File Path: ", file_path)
-        if not file_path:
-            return Response({"error": "File path not found in uploaded file info."}, status=status.HTTP_404_NOT_FOUND)
-
-        # Try to read the file content (always look in backend/upload/)
-        abs_file_path = os.path.join(settings.BASE_DIR, 'backend', file_path)
-        print("Absolute File Path: ", abs_file_path)
-        if not os.path.exists(abs_file_path):
-            return Response({"error": f"File does not exist on server: {abs_file_path}"}, status=status.HTTP_404_NOT_FOUND)
-        import os
-        file_ext = os.path.splitext(abs_file_path)[1].lower()
-        print("File Extension: ", file_ext)
-        try:
-            if file_ext == '.pdf':
-                from PyPDF2 import PdfReader
-                pdf = PdfReader(abs_file_path)
-                print("PDF: ", pdf)
-                file_content = "\n".join(page.extract_text() or '' for page in pdf.pages)
-                print("if File Content: ", file_content)
-            elif file_ext == '.txt':
-                with open(abs_file_path, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
-                print("else File Content: ", file_content)
-            else:
-                return Response({"error": f"Unsupported file type: {file_ext}"}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({"error": f"Could not read file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Use OpenAI to generate questions
-        try:
-            prompt = f"Generate 5 quiz questions based on the following content:\n{file_content}"
-            print("Prompt: ", prompt)
-            client = openai.OpenAI()
-            print("Client: ", client)
-            print("success")
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "system", "content": "You are a quiz generator."},
-                          {"role": "user", "content": prompt}]
-            )
-            print("Response: ", response)
-            questions = response.choices[0].message.content
-            print("Questions: ", questions)
-        except Exception as e:
-            return Response({"error": f"OpenAI API error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({
-            "quiz_id": quiz.quiz_id,
-            "questions": questions
-        })
 
 
 class QuizPublishView(APIView):
@@ -570,21 +497,21 @@ class QuizQuestionGenerateFromPromptView(APIView):
         except Exception as e:
             return Response(
                 {"error": f"Error generating questions: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
 class QuizQuestionGenerateFromExistingFileView(APIView):
     """
-    API endpoint to generate questions for a quiz using a prompt and an existing file
+    API endpoint to generate questions for a quiz using an existing file.
+    GET: Generates questions based on quiz_type and no_of_questions.
     """
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
     parser_classes = (JSONParser,)
 
-    # Default prompts based on difficulty
     DEFAULT_PROMPTS = {
         'easy': """
-            Generate 5 easy multiple choice questions that:
+            Generate {num_questions} easy multiple choice questions that:
             - Focus on basic comprehension and recall
             - Use straightforward language
             - Test fundamental concepts
@@ -592,7 +519,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
             - Include simple explanations
         """,
         'medium': """
-            Generate 5 medium difficulty multiple choice questions that:
+            Generate {num_questions} medium difficulty multiple choice questions that:
             - Test understanding and application
             - Include some analytical thinking
             - Use moderate technical language
@@ -600,13 +527,20 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
             - Provide detailed explanations
         """,
         'hard': """
-            Generate 5 challenging multiple choice questions that:
+            Generate {num_questions} challenging multiple choice questions that:
             - Focus on advanced analysis and synthesis
             - Use complex scenarios and edge cases
             - Include technical terminology
             - Require deep understanding
             - Test problem-solving abilities
             - Provide comprehensive explanations
+        """,
+        'mixed': """
+            Generate {num_questions} multiple choice questions with a mix of difficulties (easy, medium, hard) that:
+            - Cover a range of cognitive skills from recall to analysis
+            - Vary in complexity and language
+            - Test both fundamental and advanced concepts
+            - Provide appropriate explanations for each question based on its difficulty
         """
     }
 
@@ -617,164 +551,145 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
         return quiz
 
     def extract_text_from_pdf(self, file_path):
-        """Extract text from PDF file"""
+        """Helper method to extract text from a PDF file."""
         try:
             with open(file_path, 'rb') as file:
                 pdf_reader = PyPDF2.PdfReader(file)
                 text = ""
                 for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
+                    extracted_page_text = page.extract_text()
+                    if extracted_page_text:
+                        text += extracted_page_text + "\n"
                 return text
         except Exception as e:
-            raise Exception(f"Error reading PDF file: {str(e)}")
+            # Log the exception for debugging
+            print(f"Error reading PDF file {file_path}: {str(e)}")
+            # It's often better to return None or empty string and handle it in the calling function
+            # rather than raising a generic Exception that might be caught unintentionally.
+            # For now, let's keep the raise to see if it's handled, but this could be refined.
+            raise Exception(f"Error reading PDF file. Please ensure it's a valid PDF.")
 
     def get(self, request, quiz_id, format=None):
         """
-        Get the list of available files for the quiz
+        Generate questions based on quiz_type and no_of_questions using the stored file.
         """
         quiz = self.get_quiz(quiz_id)
         
-        if not quiz.uploadedfiles:
-            return Response(
-                {"error": "No files found for this quiz"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-            
-        return Response({
-            "quiz_id": quiz.quiz_id,
-            "files": quiz.uploadedfiles
-        })
+        quiz_type = quiz.quiz_type.lower() if quiz.quiz_type else 'easy'
+        num_questions = quiz.no_of_questions if quiz.no_of_questions and quiz.no_of_questions > 0 else 5 # Default to 5 questions
 
-    def post(self, request, quiz_id, format=None):
-        """
-        Generate questions based on difficulty type using the stored file
-        """
-        quiz = self.get_quiz(quiz_id)
+        prompt_template = self.DEFAULT_PROMPTS.get(quiz_type, self.DEFAULT_PROMPTS['easy'])
+        prompt = prompt_template.format(num_questions=num_questions)
         
-        # Get difficulty type from request or default to 'easy'
-        difficulty = request.data.get('type', 'easy').lower()
-        if difficulty not in self.DEFAULT_PROMPTS:
-            difficulty = 'easy'
-            
-        # Use the default prompt for the selected difficulty
-        prompt = self.DEFAULT_PROMPTS[difficulty]
-        
-        # Get the file info from quiz's uploadedfiles
         if not quiz.uploadedfiles:
             return Response(
-                {"error": "No files found for this quiz"},
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "No files found for this quiz. Please upload a file first."},
+                status=status.HTTP_400_BAD_REQUEST
             )
             
-        # Use the first file in the uploadedfiles list
+        # Use the first file in the uploadedfiles list (consider enhancing for multiple files)
         file_info = quiz.uploadedfiles[0]
-        if not file_info:
+        if not file_info or 'path' not in file_info:
             return Response(
-                {"error": "No file found in quiz"},
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "Invalid file information associated with the quiz."},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            # Get the file path
-            file_path = os.path.join(settings.BASE_DIR, 'backend', file_info['path'])
+            # Construct the full absolute file path
+            # Assuming file_info['path'] is relative like 'upload/filename.pdf'
+            abs_file_path = os.path.join(settings.BASE_DIR, 'backend', file_info['path'])
             
-            if not os.path.exists(file_path):
+            if not os.path.exists(abs_file_path):
                 return Response(
-                    {"error": "File not found on server"},
+                    {"error": f"File not found on server at path: {abs_file_path}"},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Read the file content based on file type
-            file_extension = os.path.splitext(file_path)[1].lower()
+            file_extension = os.path.splitext(abs_file_path)[1].lower()
+            file_content = ""
             if file_extension == '.pdf':
-                file_content = self.extract_text_from_pdf(file_path)
-            else:
-                # For text files
-                with open(file_path, 'r', encoding='utf-8') as file:
+                file_content = self.extract_text_from_pdf(abs_file_path)
+            elif file_extension in ['.txt', '.md']:
+                with open(abs_file_path, 'r', encoding='utf-8') as file:
                     file_content = file.read()
-
-            # Get API key from settings
-            api_key = settings.OPENAI_API_KEY
-            print("API Key from settings:", api_key[:10] + "..." if api_key else "None")
-            
-            if not api_key:
+            else:
                 return Response(
-                    {"error": "OpenAI API key not found or invalid. Please check your .env file and ensure you have a valid API key from https://platform.openai.com/account/api-keys"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    {"error": f"Unsupported file type: {file_extension}. Please use PDF, TXT, or MD."}, 
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-
-            # Validate API key format
-            if not api_key.startswith('sk-') or api_key.startswith('sk-proj-'):
-                return Response(
-                    {"error": "Invalid API key format. OpenAI API keys should start with 'sk-' (not 'sk-proj-'). Please get a valid API key from https://platform.openai.com/account/api-keys"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-
-            # Clean the API key (remove any whitespace or special characters)
-            api_key = api_key.strip()
-            print("Cleaned API Key:", api_key[:10] + "...")
-
-            # Initialize OpenAI client with explicit API key
-            try:
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://api.openai.com/v1"
-                )
-                print("OpenAI client initialized")
-            except Exception as client_error:
-                print(f"Error initializing OpenAI client: {str(client_error)}")
-                return Response(
-                    {"error": f"Failed to initialize OpenAI client: {str(client_error)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-
-            # Create a more structured prompt
-            system_prompt = f"""You are a quiz generator. Create {difficulty} level questions based on the following content.
             
-            Content to use:
-            {file_content[:2000]}  # Limit content to first 2000 characters to avoid token limits
+            if not file_content.strip():
+                 return Response(
+                    {"error": "Could not extract text from the file or the file is empty."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # The 'prompt' variable already contains the difficulty-specific guidelines and num_questions.
+            # The system_prompt_for_api will be the main instruction to OpenAI.
+            system_prompt_for_api = f"""
+            You are a helpful AI assistant that generates quiz questions.
+            Your task is to generate multiple-choice questions based *only* on the provided text content, adhering to the user's guidelines for difficulty, number of questions, and format.
             
-            Guidelines for {difficulty} questions:
+            Guidelines for question generation (from user):
             {prompt}
             
-            Create exactly 5 multiple choice questions.
-            Each question should have 4 options.
-            Make sure the correct answer is clearly marked.
-            Provide a brief explanation for each answer.
+            Text content to use for generating questions:
+            ---BEGIN TEXT CONTENT---
+            {file_content}
+            ---END TEXT CONTENT---
             
-            Format your response as a JSON array with this exact structure:
-            [
-                {{
-                    "question_type": "multiple_choice",
-                    "question_text": "Question here",
-                    "options": ["A", "B", "C", "D"],
-                    "correct_answer": "Correct option letter",
-                    "explanation": "Brief explanation"
+            You MUST output a single JSON object. This JSON object must have a key named "questions", and its value must be an array of question objects.
+            Each question object in the "questions" array must have the following structure:
+            - "question_type": "multiple_choice" (string)
+            - "question_text": "The question itself, derived from the text content." (string)
+            - "options": An array of 4 strings representing the choices. (array of strings)
+            - "correct_answer": The exact string of the correct option. (string)
+            - "explanation": "A brief explanation of why the answer is correct, based on the text content." (string)
+            
+            Example of the expected JSON object output:
+            {{ 
+              "questions": [
+                {{ 
+                  "question_type": "multiple_choice",
+                  "question_text": "What is the capital of France?",
+                  "options": ["Berlin", "Madrid", "Paris", "Rome"],
+                  "correct_answer": "Paris",
+                  "explanation": "Paris is the capital and most populous city of France."
+                }},
+                {{ 
+                  "question_type": "multiple_choice",
+                  "question_text": "Another question?",
+                  "options": ["Opt1", "Opt2", "Opt3", "Opt4"],
+                  "correct_answer": "Opt2",
+                  "explanation": "Explanation here."
                 }}
-            ]
+              ]
+            }}
+            Generate the questions now based on the provided text content and guidelines, ensuring your entire response is this single JSON object.
             """
-            print("System Prompt: ", system_prompt)
-            print("testinggg")
-            print("client_one: ", client)
+            
+            client = OpenAI(api_key=settings.OPENAI_API_KEY) # Initialize OpenAI client
+            print("System Prompt Sent to OpenAI: ", system_prompt_for_api) # For debugging
 
             try:
-                # Test API key with a simple request first
-                test_response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": "Say hello"}],
-                    max_tokens=5
-                )
-                print("Test API call successful")
+                # Test API key with a simple request first (optional, can be removed for production)
+                # test_response = client.chat.completions.create(
+                #     model="gpt-3.5-turbo",
+                #     messages=[{"role": "user", "content": "Say hello"}],
+                #     max_tokens=5
+                # )
+                # print("Test API call successful")
 
                 # Generate questions using OpenAI
                 response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[
-                        {"role": "system", "content": "You are a quiz generator that creates questions in JSON format."},
-                        {"role": "user", "content": system_prompt}
+                        {"role": "system", "content": system_prompt_for_api}
+                        # No user message needed if system prompt is comprehensive
                     ],
                     temperature=0.5,
-                    max_tokens=1000,
+                    max_tokens=1500, # Increased max_tokens slightly
                     response_format={"type": "json_object"}
                 )
                 print("Response: ", response)
@@ -807,7 +722,8 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                     "message": "Questions generated successfully",
                     "file": file_info,
                     "quiz_id": quiz.quiz_id,
-                    "difficulty": difficulty,
+                    "quiz_type": quiz_type, # Use quiz_type which is defined
+                    "num_questions_generated": len(generated_questions) if isinstance(generated_questions, list) else 0,
                     "questions": generated_questions
                 }, status=status.HTTP_200_OK)
 

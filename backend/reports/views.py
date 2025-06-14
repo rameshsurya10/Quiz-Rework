@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count, Avg, Q
-from quizzes.models import Quiz, QuizAttempt, Question, QuestionAttempt
+from quiz.models import Quiz, QuizAttempt, Question, QuestionAttempt
 from users.models import User
 import json
 

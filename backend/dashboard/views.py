@@ -45,7 +45,7 @@ def dashboard_data(request):
 
         # Get quiz statistics
         try:
-            from quizzes.models import Quiz, QuizAttempt
+            from quiz.models import Quiz, QuizAttempt
             total_quizzes = Quiz.objects.count()
             total_attempts = QuizAttempt.objects.count()
             logger.info(f"Quiz stats - Quizzes: {total_quizzes}, Attempts: {total_attempts}")

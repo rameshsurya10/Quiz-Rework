@@ -129,7 +129,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         department = self.get_object()
         
         # Get quiz stats
-        from quizzes.models import Quiz, QuizAttempt
+        from quiz.models import Quiz, QuizAttempt
         quizzes = Quiz.objects.filter(departments=department).count()
         attempts = QuizAttempt.objects.filter(
             quiz__departments=department

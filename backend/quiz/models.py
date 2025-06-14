@@ -22,15 +22,21 @@ class Quiz(models.Model):
         db_column='department_id'
     )
     quiz_date = models.DateTimeField(default=timezone.now)
+    is_published = models.BooleanField(default=False)
+    published_at = models.DateTimeField(null=True, blank=True)
+    is_deleted = models.BooleanField(default=False)
+    creator = models.CharField(max_length=255, null=True, blank=True, help_text="Name of the user who created the quiz")
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who created the quiz")
     last_modified_at = models.DateTimeField(auto_now=True)
     last_modified_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who last modified the quiz")
-    is_deleted = models.BooleanField(default=False)
+    # is_deleted is already defined above
+    time_limit_minutes = models.IntegerField(null=True, blank=True)
+    passing_score = models.IntegerField(null=True, blank=True)
     
     class Meta:
         db_table = 'quizzes'  
-        ordering = ['-quiz_date']
+        ordering = ['quiz_date']
         verbose_name_plural = 'Quizzes'
     
     def __str__(self):
