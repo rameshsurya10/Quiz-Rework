@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import Quiz
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from datetime import datetime
+from datetime import datetime, date
 
 User = get_user_model()
 
@@ -18,6 +18,22 @@ class FileUploadSerializer(serializers.Serializer):
     file_name = serializers.CharField()
     file_type = serializers.CharField(required=False)
     file_size = serializers.IntegerField(required=False)
+
+class CustomDateField(serializers.DateField):
+    def to_internal_value(self, data):
+        try:
+            # Parse the date string
+            parsed_date = datetime.strptime(data, '%Y-%m-%d').date()
+            return parsed_date
+        except (ValueError, TypeError):
+            raise serializers.ValidationError(
+                'Invalid date format. Please use YYYY-MM-DD format (e.g., 2025-07-12)'
+            )
+
+    def to_representation(self, value):
+        if isinstance(value, datetime):
+            return value.date()
+        return value
 
 class QuizSerializer(serializers.ModelSerializer):
     department_id = serializers.PrimaryKeyRelatedField(
@@ -36,6 +52,10 @@ class QuizSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
+    quiz_date = serializers.DateTimeField()
+    created_at = serializers.DateTimeField(read_only=True)
+    last_modified_at = serializers.DateTimeField(read_only=True)
+    published_at = serializers.DateTimeField(required=False)
     
     class Meta:
         model = Quiz
@@ -89,20 +109,6 @@ class QuizSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError("Page numbers must be integers")
         return value
 
-class CustomDateField(serializers.DateField):
-    def to_internal_value(self, data):
-        try:
-            # Parse the date string
-            parsed_date = datetime.strptime(data, '%Y-%m-%d').date()
-            return parsed_date
-        except (ValueError, TypeError):
-            raise serializers.ValidationError('Date must be in YYYY-MM-DD format')
-
-    def to_representation(self, value):
-        if isinstance(value, datetime):
-            return value.date()
-        return value
-
 class QuizCreateSerializer(serializers.Serializer):
     """Serializer for quiz creation, handling specific payload keys."""
     quiz_id = serializers.IntegerField(read_only=True)
@@ -145,11 +151,11 @@ class QuizCreateSerializer(serializers.Serializer):
         
         # Handle quiz_date - convert date to datetime with timezone
         quiz_date = validated_data.get('quiz_date')
-        if quiz_date:
-            # Convert date to datetime at midnight
-            quiz_datetime = datetime.combine(quiz_date, datetime.min.time())
-            # Make it timezone aware
-            quiz_data['quiz_date'] = timezone.make_aware(quiz_datetime)
+        # if quiz_date:
+        #     # Create a naive datetime at midnight
+        #     naive_datetime = date.combine(quiz_date, time.min)
+        #     # Make it timezone aware
+        #     quiz_data['quiz_date'] = date.make_aware(naive_datetime, timezone=timezone.get_current_timezone())
 
         # Get the request user
         request = self.context.get('request')
