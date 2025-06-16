@@ -31,7 +31,6 @@ class Quiz(models.Model):
     created_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who created the quiz")
     last_modified_at = models.DateTimeField(auto_now=True)
     last_modified_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who last modified the quiz")
-    # is_deleted is already defined above
     time_limit_minutes = models.IntegerField(null=True, blank=True)
     passing_score = models.IntegerField(null=True, blank=True)
     
@@ -44,7 +43,45 @@ class Quiz(models.Model):
         return self.title or f"Quiz {self.quiz_id}"
     
     def save(self, *args, **kwargs):
+        # Ensure quiz_date is timezone-aware
+        if self.quiz_date and timezone.is_naive(self.quiz_date):
+            self.quiz_date = timezone.make_aware(self.quiz_date)
+            
         # Set published_at when quiz is published
         if self.is_published and not self.published_at:
             self.published_at = timezone.now()
+        super().save(*args, **kwargs)
+
+class Question(models.Model):
+    """Model representing a quiz question"""
+    question_id = models.AutoField(primary_key=True)
+    quiz = models.ForeignKey(
+        Quiz,
+        on_delete=models.CASCADE,
+        related_name='quiz_questions',
+        db_column='quiz_id'
+    )
+    question = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.CharField(max_length=255, null=True, blank=True)
+    last_modified_at = models.DateTimeField(auto_now=True)
+    last_modified_by = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        db_table = 'questions'
+        ordering = ['question_id']
+        verbose_name_plural = 'Questions'
+
+    def __str__(self):
+        return f"Question {self.question_id} for Quiz {self.quiz.quiz_id}"
+        
+    def save(self, *args, **kwargs):
+        # Ensure created_at is timezone-aware
+        if self.created_at and timezone.is_naive(self.created_at):
+            self.created_at = timezone.make_aware(self.created_at)
+            
+        # Ensure last_modified_at is timezone-aware
+        if self.last_modified_at and timezone.is_naive(self.last_modified_at):
+            self.last_modified_at = timezone.make_aware(self.last_modified_at)
+            
         super().save(*args, **kwargs)
