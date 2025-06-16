@@ -12,6 +12,7 @@ class Quiz(models.Model):
     description = models.TextField(blank=True, null=True)
     no_of_questions = models.IntegerField(default=10)
     quiz_type = models.CharField(max_length=50, default='easy')
+    question_type = models.CharField(max_length=50, default='multiple_choice', help_text="Type of questions in the quiz (e.g., multiple_choice, fill_in_blank)")
     uploadedfiles = models.JSONField(help_text="List of uploaded files with their metadata", null=True, blank=True, default=list)
     pages = models.JSONField(help_text="List of page ranges to generate questions from", null=True, blank=True, default=list)
     department = models.ForeignKey(

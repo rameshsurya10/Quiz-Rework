@@ -20,7 +20,8 @@ urlpatterns = [
     path('<int:quiz_id>/files/', views.QuizFileUploadView.as_view(), name='quiz-files-list'),
     path('<int:quiz_id>/files/upload/', views.QuizFileUploadView.as_view(), name='quiz-file-upload'),
     path('<int:quiz_id>/files/<str:file_id>/', views.QuizFileUploadView.as_view(), name='quiz-file-detail'),
-    # Quiz question generation endpoint
+    # Quiz question generation endpoints
     path('<int:quiz_id>/generate_question/', views.QuizQuestionGenerateFromExistingFileView.as_view(), name='quiz-generate-from-existing-file'),
+    path('<int:quiz_id>/generate_by_type/', views.QuizQuestionGenerateByTypeView.as_view(), name='quiz-generate-by-type'),
     path('', include(router.urls)),
 ]

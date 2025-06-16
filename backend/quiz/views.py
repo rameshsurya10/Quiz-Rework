@@ -182,14 +182,11 @@ class QuizListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         """Return quizzes created by the user or all quizzes for admins"""
-        # This line ensures only non-deleted quizzes are fetched
-        queryset = Quiz.objects.filter(is_deleted=False) 
+        queryset = Quiz.objects.filter(is_deleted=False)
+        if not self.request.user.is_admin:
+            queryset = queryset.filter(creator=self.request.user)
         
-        # If the user is authenticated and is not a staff/superuser (admin),
-        # filter quizzes to show only those they created (matched by email).
-        if self.request.user and self.request.user.is_authenticated and not self.request.user.is_staff and not self.request.user.is_superuser:
-            queryset = queryset.filter(created_by=self.request.user.email)
-        
+        # Add department filter if provided
         department_id = self.request.query_params.get('department_id')
         if department_id:
             queryset = queryset.filter(department_id=department_id)
@@ -252,14 +249,8 @@ class QuizListCreateView(generics.ListCreateAPIView):
             )
 
     def perform_create(self, serializer):
-        """Set the creator and created_by fields using the authenticated user's details."""
-        user = self.request.user
-        # Use get_full_name() for the creator's name and email for created_by
-        creator_name = user.get_full_name() if hasattr(user, 'get_full_name') else str(user) 
-        created_by_email = user.email
-        
-        # Pass these directly to save, they will be included in the instance creation.
-        serializer.save(creator=creator_name, created_by=created_by_email)
+        """Set the creator and created_by fields"""
+        serializer.save()
 
 
 class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
@@ -332,6 +323,88 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         instance.is_deleted = True
         instance.last_modified_by = self.request.user
         instance.save()
+
+
+class QuizQuestionGenerateView(APIView):
+    """
+    API endpoint to generate questions for a quiz using OpenAI and LangGraph
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, quiz_id):
+        import openai
+        import os
+        try:
+            from langgraph.graph import Graph
+        except ImportError:
+            return Response({"error": "LangGraph not installed."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Set OpenAI API key (for openai>=1.0.0, pass to client)
+        api_key = os.environ.get('OPENAI_API_KEY')
+        print("API Key: ", api_key)
+        if not api_key:
+            return Response({"error": "OpenAI API key not set in environment."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        client = openai.OpenAI(api_key=api_key)
+        print("Client: ", client)
+
+        quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
+        if not quiz.uploadedfiles or len(quiz.uploadedfiles) == 0:
+            return Response({"error": "No uploaded files found for this quiz."}, status=status.HTTP_404_NOT_FOUND)
+
+        # For simplicity, use the first uploaded file
+        file_info = quiz.uploadedfiles[0]
+        print("File Info: ", file_info)
+        file_path = file_info.get('path')
+        print("File Path: ", file_path)
+        if not file_path:
+            return Response({"error": "File path not found in uploaded file info."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Try to read the file content (always look in backend/upload/)
+        abs_file_path = os.path.join(settings.BASE_DIR, 'backend', file_path)
+        print("Absolute File Path: ", abs_file_path)
+        if not os.path.exists(abs_file_path):
+            return Response({"error": f"File does not exist on server: {abs_file_path}"}, status=status.HTTP_404_NOT_FOUND)
+        import os
+        file_ext = os.path.splitext(abs_file_path)[1].lower()
+        print("File Extension: ", file_ext)
+        try:
+            if file_ext == '.pdf':
+                from PyPDF2 import PdfReader
+                pdf = PdfReader(abs_file_path)
+                print("PDF: ", pdf)
+                file_content = "\n".join(page.extract_text() or '' for page in pdf.pages)
+                print("if File Content: ", file_content)
+            elif file_ext == '.txt':
+                with open(abs_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                print("else File Content: ", file_content)
+            else:
+                return Response({"error": f"Unsupported file type: {file_ext}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": f"Could not read file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Use OpenAI to generate questions
+        try:
+            prompt = f"Generate 5 quiz questions based on the following content:\n{file_content}"
+            print("Prompt: ", prompt)
+            client = openai.OpenAI()
+            print("Client: ", client)
+            print("success")
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "system", "content": "You are a quiz generator."},
+                          {"role": "user", "content": prompt}]
+            )
+            print("Response: ", response)
+            questions = response.choices[0].message.content
+            print("Questions: ", questions)
+        except Exception as e:
+            return Response({"error": f"OpenAI API error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            "quiz_id": quiz.quiz_id,
+            "questions": questions
+        })
 
 
 class QuizPublishView(APIView):
@@ -476,13 +549,7 @@ class QuizQuestionGenerateFromPromptView(APIView):
                 temperature=0.7,
                 max_tokens=2000
             )
-            print("Response: ", response)
-            print("Response Choices: ", response.choices)
-            print("Response Choices[0]: ", response.choices[0])
-            print("Response Choices[0].message: ", response.choices[0].message)
-            print("Response Choices[0].message.content: ", response.choices[0].message.content)
-
-
+            
             # Parse the generated questions
             generated_questions = json.loads(response.choices[0].message.content)
             print("Generated Questions: ", generated_questions)
@@ -497,51 +564,137 @@ class QuizQuestionGenerateFromPromptView(APIView):
         except Exception as e:
             return Response(
                 {"error": f"Error generating questions: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
 class QuizQuestionGenerateFromExistingFileView(APIView):
     """
-    API endpoint to generate questions for a quiz using an existing file.
-    GET: Generates questions based on quiz_type and no_of_questions.
+    API endpoint to generate questions from code test files
     """
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
     parser_classes = (JSONParser,)
 
-    DEFAULT_PROMPTS = {
-        'easy': """
-            Generate {num_questions} easy multiple choice questions that:
-            - Focus on basic comprehension and recall
-            - Use straightforward language
-            - Test fundamental concepts
-            - Make options clearly distinct
-            - Include simple explanations
-        """,
-        'medium': """
-            Generate {num_questions} medium difficulty multiple choice questions that:
-            - Test understanding and application
-            - Include some analytical thinking
-            - Use moderate technical language
-            - Require connecting multiple concepts
-            - Provide detailed explanations
-        """,
-        'hard': """
-            Generate {num_questions} challenging multiple choice questions that:
-            - Focus on advanced analysis and synthesis
-            - Use complex scenarios and edge cases
-            - Include technical terminology
-            - Require deep understanding
-            - Test problem-solving abilities
-            - Provide comprehensive explanations
-        """,
-        'mixed': """
-            Generate {num_questions} multiple choice questions with a mix of difficulties (easy, medium, hard) that:
-            - Cover a range of cognitive skills from recall to analysis
-            - Vary in complexity and language
-            - Test both fundamental and advanced concepts
-            - Provide appropriate explanations for each question based on its difficulty
-        """
+    # Question type specific prompts with difficulty levels
+    QUESTION_TYPE_PROMPTS = {
+        'multiple_choice': {
+            'easy': """
+                Generate easy multiple choice questions about code that:
+                1. Test basic understanding of concepts
+                2. Have clear and unambiguous answers
+                3. Include one correct answer and three plausible distractors
+                4. Are suitable for beginners
+                """,
+            'medium': """
+                Generate medium difficulty multiple choice questions about code that:
+                1. Test intermediate understanding of concepts
+                2. May include some complex scenarios
+                3. Have one correct answer and three plausible distractors
+                4. Require some analytical thinking
+                """,
+            'hard': """
+                Generate hard multiple choice questions about code that:
+                1. Test advanced understanding of concepts
+                2. Include complex scenarios and edge cases
+                3. Have one correct answer and three plausible distractors
+                4. Require deep analytical thinking
+                """
+        },
+        'fill_in_blank': {
+            'easy': """
+                Generate easy fill-in-the-blank questions about code that:
+                1. Test basic syntax and common patterns
+                2. Have clear and unambiguous answers
+                3. Include [BLANK] in appropriate places
+                4. Are suitable for beginners
+                """,
+            'medium': """
+                Generate medium difficulty fill-in-the-blank questions about code that:
+                1. Test intermediate syntax and patterns
+                2. May include some complex scenarios
+                3. Have clear answers with some flexibility
+                4. Require some analytical thinking
+                """,
+            'hard': """
+                Generate hard fill-in-the-blank questions about code that:
+                1. Test advanced syntax and patterns
+                2. Include complex scenarios and edge cases
+                3. May have multiple valid answers
+                4. Require deep analytical thinking
+                """
+        },
+        'true_false': {
+            'easy': """
+                Generate easy true/false questions about code that:
+                1. Test basic understanding of concepts
+                2. Have clear and unambiguous answers
+                3. Are suitable for beginners
+                4. Focus on fundamental concepts
+                """,
+            'medium': """
+                Generate medium difficulty true/false questions about code that:
+                1. Test intermediate understanding of concepts
+                2. May include some complex scenarios
+                3. Require some analytical thinking
+                4. Focus on practical applications
+                """,
+            'hard': """
+                Generate hard true/false questions about code that:
+                1. Test advanced understanding of concepts
+                2. Include complex scenarios and edge cases
+                3. Require deep analytical thinking
+                4. Focus on nuanced technical details
+                """
+        },
+        'one_line': {
+            'easy': """
+                Generate easy one-line answer questions about code that:
+                1. Test basic understanding of concepts
+                2. Have clear and concise answers
+                3. Are suitable for beginners
+                4. Focus on fundamental concepts
+                """,
+            'medium': """
+                Generate medium difficulty one-line answer questions about code that:
+                1. Test intermediate understanding of concepts
+                2. May include some complex scenarios
+                3. Require some analytical thinking
+                4. Focus on practical applications
+                """,
+            'hard': """
+                Generate hard one-line answer questions about code that:
+                1. Test advanced understanding of concepts
+                2. Include complex scenarios and edge cases
+                3. Require deep analytical thinking
+                4. Focus on nuanced technical details
+                """
+        },
+        'mixed': {
+            'easy': """
+                Generate a mix of easy questions about code that:
+                1. Include multiple choice, fill-in-the-blank, true/false, one-line, and multiple-answer questions
+                2. Test basic understanding of concepts
+                3. Have clear and unambiguous answers
+                4. Are suitable for beginners
+                5. Distribute questions evenly among different types
+                """,
+            'medium': """
+                Generate a mix of medium difficulty questions about code that:
+                1. Include multiple choice, fill-in-the-blank, true/false, one-line, and multiple-answer questions
+                2. Test intermediate understanding of concepts
+                3. May include some complex scenarios
+                4. Require some analytical thinking
+                5. Distribute questions evenly among different types
+                """,
+            'hard': """
+                Generate a mix of hard questions about code that:
+                1. Include multiple choice, fill-in-the-blank, true/false, one-line, and multiple-answer questions
+                2. Test advanced understanding of concepts
+                3. Include complex scenarios and edge cases
+                4. Require deep analytical thinking
+                5. Distribute questions evenly among different types
+                """
+        }
     }
 
     def get_quiz(self, quiz_id):
@@ -551,197 +704,368 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
         return quiz
 
     def extract_text_from_pdf(self, file_path):
-        """Helper method to extract text from a PDF file."""
+        """Extract text from PDF file"""
         try:
             with open(file_path, 'rb') as file:
                 pdf_reader = PyPDF2.PdfReader(file)
                 text = ""
                 for page in pdf_reader.pages:
-                    extracted_page_text = page.extract_text()
-                    if extracted_page_text:
-                        text += extracted_page_text + "\n"
+                    text += page.extract_text() + "\n"
                 return text
         except Exception as e:
-            # Log the exception for debugging
-            print(f"Error reading PDF file {file_path}: {str(e)}")
-            # It's often better to return None or empty string and handle it in the calling function
-            # rather than raising a generic Exception that might be caught unintentionally.
-            # For now, let's keep the raise to see if it's handled, but this could be refined.
-            raise Exception(f"Error reading PDF file. Please ensure it's a valid PDF.")
+            raise Exception(f"Error reading PDF file: {str(e)}")
 
-    def get(self, request, quiz_id, format=None):
-        """
-        Generate questions based on quiz_type and no_of_questions using the stored file.
-        """
-        quiz = self.get_quiz(quiz_id)
+    def get_file_content(self, file_info):
+        """Get content from file based on file type"""
+        file_path = os.path.join(settings.BASE_DIR, 'backend', file_info['path'])
         
-        quiz_type = quiz.quiz_type.lower() if quiz.quiz_type else 'easy'
-        num_questions = quiz.no_of_questions if quiz.no_of_questions and quiz.no_of_questions > 0 else 5 # Default to 5 questions
+        if not os.path.exists(file_path):
+            raise Exception("File not found on server")
 
-        prompt_template = self.DEFAULT_PROMPTS.get(quiz_type, self.DEFAULT_PROMPTS['easy'])
-        prompt = prompt_template.format(num_questions=num_questions)
-        
-        if not quiz.uploadedfiles:
-            return Response(
-                {"error": "No files found for this quiz. Please upload a file first."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        # Use the first file in the uploadedfiles list (consider enhancing for multiple files)
-        file_info = quiz.uploadedfiles[0]
-        if not file_info or 'path' not in file_info:
-            return Response(
-                {"error": "Invalid file information associated with the quiz."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        file_extension = os.path.splitext(file_path)[1].lower()
+        if file_extension == '.pdf':
+            return self.extract_text_from_pdf(file_path)
+        else:
+            # For text files
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.read()
 
+    def generate_questions_from_content(self, content, question_type, quiz_type, num_questions):
+        """Generate questions based on code content"""
         try:
-            # Construct the full absolute file path
-            # Assuming file_info['path'] is relative like 'upload/filename.pdf'
-            abs_file_path = os.path.join(settings.BASE_DIR, 'backend', file_info['path'])
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            prompt = self.QUESTION_TYPE_PROMPTS[question_type][quiz_type]
             
-            if not os.path.exists(abs_file_path):
-                return Response(
-                    {"error": f"File not found on server at path: {abs_file_path}"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
+            # Define format based on question type
+            format_examples = {
+                'multiple_choice': {
+                    "question_id": 1,
+                    "question": "What is the purpose of the CustomPagination class?",
+                    "A": "To define the structure of API responses",
+                    "B": "To customize the pagination behavior for quizzes",
+                    "C": "To handle user authentication in API requests",
+                    "D": "To validate input data for quiz creation",
+                    "answer": "B",
+                    "explanation": "The CustomPagination class is created to customize the pagination behavior specifically for quizzes, setting the page size and other parameters for paginated responses."
+                },
+                'fill_in_blank': {
+                    "question_id": 1,
+                    "question": "In Django REST Framework, to serialize multiple objects you use: serializer = QuizSerializer([BLANK])",
+                    "correct_answer": "page, many=True",
+                    "explanation": "The correct answer is 'page, many=True' because when serializing multiple objects in DRF, we need to specify 'many=True' to indicate we're serializing a collection of objects."
+                },
+                'true_false': {
+                    "question_id": 1,
+                    "question": "The CustomPagination class is used to handle user authentication in Django REST Framework.",
+                    "answer": "False",
+                    "explanation": "False. The CustomPagination class is used to customize how quiz results are paginated, not for authentication. It controls the number of items per page and maximum page size."
+                },
+                'one_line': {
+                    "question_id": 1,
+                    "question": "What is the main purpose of Django REST Framework's serializers?",
+                    "correct_answer": "To convert complex data types to Python data types that can be easily rendered into JSON",
+                    "explanation": "Serializers in DRF are used to convert complex data types (like Django models) into Python data types that can be easily converted to JSON, and vice versa."
+                },
+                'mu_answer': {
+                    "question_id": 1,
+                    "question": "Which of the following are valid HTTP methods in REST?",
+                    "correct_answers": ["GET", "POST", "PUT", "DELETE"],
+                    "explanation": "These are the standard HTTP methods used in RESTful APIs. GET for retrieving data, POST for creating, PUT for updating, and DELETE for removing data."
+                }
+            }
 
-            file_extension = os.path.splitext(abs_file_path)[1].lower()
-            file_content = ""
-            if file_extension == '.pdf':
-                file_content = self.extract_text_from_pdf(abs_file_path)
-            elif file_extension in ['.txt', '.md']:
-                with open(abs_file_path, 'r', encoding='utf-8') as file:
-                    file_content = file.read()
+            # If question type is mixed, distribute questions among different types
+            if question_type == 'mixed':
+                question_types = ['multiple_choice', 'fill_in_blank', 'true_false', 'one_line', 'mu_answer']
+                questions_per_type = num_questions // len(question_types)
+                remaining_questions = num_questions % len(question_types)
+                
+                all_questions = []
+                for q_type in question_types:
+                    # Add one extra question to some types if there are remaining questions
+                    current_num = questions_per_type + (1 if remaining_questions > 0 else 0)
+                    remaining_questions -= 1
+                    
+                    if current_num > 0:
+                        type_prompt = f"""Generate {current_num} {q_type} questions based on the following code content.
+                        
+                        Code Content:
+                        {content[:2000]}
+                        
+                        Question Type: {q_type}
+                        Number of Questions: {current_num}
+                        Quiz Difficulty: {quiz_type}
+                        
+                        Guidelines:
+                        {self.QUESTION_TYPE_PROMPTS[q_type][quiz_type]}
+                        
+                        Use this format:
+                        {json.dumps(format_examples[q_type], indent=2)}
+                        """
+                        
+                        type_response = client.chat.completions.create(
+                            model="gpt-3.5-turbo",
+                            messages=[
+                                {"role": "system", "content": f"You are a programming quiz generator. Generate exactly {current_num} {q_type} questions at {quiz_type} difficulty level."},
+                                {"role": "user", "content": type_prompt}
+                            ],
+                            temperature=0.7,
+                            max_tokens=2000,
+                            response_format={ "type": "json_object" }
+                        )
+                        
+                        try:
+                            type_data = json.loads(type_response.choices[0].message.content.strip())
+                            type_questions = type_data.get('questions', []) if isinstance(type_data, dict) else type_data
+                            if isinstance(type_questions, list):
+                                all_questions.extend(type_questions)
+                        except:
+                            continue
+                
+                questions = all_questions
             else:
-                return Response(
-                    {"error": f"Unsupported file type: {file_extension}. Please use PDF, TXT, or MD."}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            if not file_content.strip():
-                 return Response(
-                    {"error": "Could not extract text from the file or the file is empty."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                system_prompt = f"""You are a programming quiz generator. Create EXACTLY {num_questions} {question_type} questions based on the following code content.
+                
+                Code Content:
+                {content[:2000]}
+                
+                Question Type: {question_type}
+                Number of Questions: {num_questions}
+                Quiz Difficulty: {quiz_type}
+                
+                Guidelines:
+                {prompt}
+                
+                IMPORTANT: You MUST generate EXACTLY {num_questions} questions. No more, no less.
+                
+                Use this format:
+                {json.dumps(format_examples[question_type], indent=2)}
+                
+                Requirements:
+                1. Generate EXACTLY {num_questions} questions
+                2. Each question must be {quiz_type} difficulty
+                3. Questions must be based on the provided code content
+                4. Follow the exact format shown above
+                5. Include detailed explanations
+                
+                Your response must be a valid JSON object with a 'questions' array containing exactly {num_questions} questions.
+                """
 
-            # The 'prompt' variable already contains the difficulty-specific guidelines and num_questions.
-            # The system_prompt_for_api will be the main instruction to OpenAI.
-            system_prompt_for_api = f"""
-            You are a helpful AI assistant that generates quiz questions.
-            Your task is to generate multiple-choice questions based *only* on the provided text content, adhering to the user's guidelines for difficulty, number of questions, and format.
-            
-            Guidelines for question generation (from user):
-            {prompt}
-            
-            Text content to use for generating questions:
-            ---BEGIN TEXT CONTENT---
-            {file_content}
-            ---END TEXT CONTENT---
-            
-            You MUST output a single JSON object. This JSON object must have a key named "questions", and its value must be an array of question objects.
-            Each question object in the "questions" array must have the following structure:
-            - "question_type": "multiple_choice" (string)
-            - "question_text": "The question itself, derived from the text content." (string)
-            - "options": An array of 4 strings representing the choices. (array of strings)
-            - "correct_answer": The exact string of the correct option. (string)
-            - "explanation": "A brief explanation of why the answer is correct, based on the text content." (string)
-            
-            Example of the expected JSON object output:
-            {{ 
-              "questions": [
-                {{ 
-                  "question_type": "multiple_choice",
-                  "question_text": "What is the capital of France?",
-                  "options": ["Berlin", "Madrid", "Paris", "Rome"],
-                  "correct_answer": "Paris",
-                  "explanation": "Paris is the capital and most populous city of France."
-                }},
-                {{ 
-                  "question_type": "multiple_choice",
-                  "question_text": "Another question?",
-                  "options": ["Opt1", "Opt2", "Opt3", "Opt4"],
-                  "correct_answer": "Opt2",
-                  "explanation": "Explanation here."
-                }}
-              ]
-            }}
-            Generate the questions now based on the provided text content and guidelines, ensuring your entire response is this single JSON object.
-            """
-            
-            client = OpenAI(api_key=settings.OPENAI_API_KEY) # Initialize OpenAI client
-            print("System Prompt Sent to OpenAI: ", system_prompt_for_api) # For debugging
-
-            try:
-                # Test API key with a simple request first (optional, can be removed for production)
-                # test_response = client.chat.completions.create(
-                #     model="gpt-3.5-turbo",
-                #     messages=[{"role": "user", "content": "Say hello"}],
-                #     max_tokens=5
-                # )
-                # print("Test API call successful")
-
-                # Generate questions using OpenAI
                 response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[
-                        {"role": "system", "content": system_prompt_for_api}
-                        # No user message needed if system prompt is comprehensive
+                        {"role": "system", "content": f"You are a programming quiz generator. You MUST generate exactly {num_questions} {question_type} questions at {quiz_type} difficulty level. Your response must be a JSON object with a 'questions' array."},
+                        {"role": "user", "content": system_prompt}
                     ],
-                    temperature=0.5,
-                    max_tokens=1500, # Increased max_tokens slightly
-                    response_format={"type": "json_object"}
+                    temperature=0.7,
+                    max_tokens=3000,
+                    response_format={ "type": "json_object" }
                 )
-                print("Response: ", response)
-                print("Response Choices: ", response.choices)
-                print("Response Choices[0]: ", response.choices[0])
-                print("Response Choices[0].message: ", response.choices[0].message)
-                print("Response Choices[0].message.content: ", response.choices[0].message.content)
 
-                # Parse the generated questions
-                response_content = response.choices[0].message.content
-                print("Raw Response Content: ", response_content)
-                
-                # Try to parse the JSON response
                 try:
-                    generated_questions = json.loads(response_content)
-                    if isinstance(generated_questions, dict) and 'questions' in generated_questions:
-                        generated_questions = generated_questions['questions']
+                    response_data = json.loads(response.choices[0].message.content.strip())
+                    questions = response_data.get('questions', []) if isinstance(response_data, dict) else response_data
                 except json.JSONDecodeError:
-                    # If direct parsing fails, try to extract JSON from the response
                     import re
-                    json_match = re.search(r'\[.*\]', response_content)
+                    json_match = re.search(r'\[.*\]', response.choices[0].message.content.strip(), re.DOTALL)
                     if json_match:
-                        generated_questions = json.loads(json_match.group())
+                        try:
+                            questions = json.loads(json_match.group())
+                        except json.JSONDecodeError:
+                            cleaned_text = re.sub(r'[\n\r\t]', '', json_match.group())
+                            questions = json.loads(cleaned_text)
                     else:
-                        raise Exception("Could not parse questions from response")
+                        raise ValueError("Could not find valid JSON array in response")
 
-                print("Generated Questions: ", generated_questions)
+            # Ensure we have a list of questions
+            if not isinstance(questions, list):
+                if isinstance(questions, dict):
+                    questions = [questions]
+                else:
+                    raise ValueError("Response is not a list of questions")
 
-                return Response({
-                    "message": "Questions generated successfully",
-                    "file": file_info,
-                    "quiz_id": quiz.quiz_id,
-                    "quiz_type": quiz_type, # Use quiz_type which is defined
-                    "num_questions_generated": len(generated_questions) if isinstance(generated_questions, list) else 0,
-                    "questions": generated_questions
-                }, status=status.HTTP_200_OK)
+            # Validate each question based on type
+            validated_questions = []
+            for question in questions:
+                if not question or not isinstance(question, dict):
+                    continue
 
-            except Exception as openai_error:
-                print(f"OpenAI API Error: {str(openai_error)}")
-                print(f"Error type: {type(openai_error)}")
-                print(f"Error details: {openai_error.__dict__}")
-                return Response(
-                    {"error": f"Error with OpenAI API: {str(openai_error)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+                # Common fields for all types
+                if 'question_id' not in question or 'question' not in question:
+                    continue
+
+                # Type-specific validation
+                if question_type == 'multiple_choice':
+                    required_fields = ['A', 'B', 'C', 'D', 'answer']
+                    if not all(field in question for field in required_fields):
+                        continue
+                    if question['answer'] not in ['A', 'B', 'C', 'D']:
+                        continue
+
+                elif question_type == 'fill_in_blank':
+                    if '[BLANK]' not in question['question']:
+                        continue
+                    if 'correct_answer' not in question:
+                        continue
+
+                elif question_type == 'true_false':
+                    if 'answer' not in question:
+                        continue
+                    answer = str(question['answer']).strip().capitalize()
+                    if answer not in ['True', 'False']:
+                        continue
+                    question['answer'] = answer
+
+                elif question_type == 'one_line':
+                    if 'correct_answer' not in question:
+                        continue
+
+                elif question_type == 'mu_answer':
+                    if 'correct_answers' not in question or not isinstance(question['correct_answers'], list):
+                        continue
+
+                # All types need explanation
+                if 'explanation' not in question:
+                    continue
+
+                # Validate question_id is numeric
+                if not isinstance(question['question_id'], int):
+                    question['question_id'] = len(validated_questions) + 1
+
+                validated_questions.append(question)
+
+            if not validated_questions:
+                raise ValueError("No valid questions found in response")
+
+            # Check if we have the correct number of questions
+            if len(validated_questions) < num_questions:
+                raise ValueError(f"Could only generate {len(validated_questions)} questions out of {num_questions} requested")
+
+            # Ensure question IDs are sequential
+            for i, question in enumerate(validated_questions, 1):
+                question['question_id'] = i
+
+            return validated_questions
 
         except Exception as e:
-            print(f"General Error: {str(e)}")
-            print(f"Error type: {type(e)}")
-            print(f"Error details: {e.__dict__}")
+            raise Exception(f"Error generating questions: {str(e)}")
+
+    def get(self, request, quiz_id, format=None):
+        """
+        Generate questions from the most recently uploaded file using quiz settings
+        """
+        quiz = self.get_quiz(quiz_id)
+        
+        # Get settings from quiz object
+        question_type = quiz.question_type.lower() if quiz.question_type else 'multiple_choice'
+        num_questions = quiz.no_of_questions if quiz.no_of_questions else 5
+        quiz_type = quiz.quiz_type.lower() if quiz.quiz_type else 'medium'
+        
+        # Validate question type
+        if question_type not in self.QUESTION_TYPE_PROMPTS:
             return Response(
-                {"error": f"Error generating questions: {str(e)}"},
+                {"error": f"Invalid question type in quiz settings. Must be one of: {', '.join(self.QUESTION_TYPE_PROMPTS.keys())}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Validate quiz type
+        if quiz_type not in ['easy', 'medium', 'hard']:
+            return Response(
+                {"error": "Invalid quiz type in quiz settings. Must be one of: easy, medium, hard"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get file content
+        if not quiz.uploadedfiles:
+            return Response(
+                {"error": "No files found for this quiz. Please upload a file first."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Get the most recently uploaded file
+            file_info = quiz.uploadedfiles[-1]  # Get the last uploaded file
+
+            # Get file content
+            content = self.get_file_content(file_info)
+            
+            # Generate questions using quiz settings
+            questions = self.generate_questions_from_content(content, question_type, quiz_type, num_questions)
+            
+            return Response({
+                "quiz_id": quiz.quiz_id,
+                "quiz_type": quiz_type,
+                "question_type": question_type,
+                "num_questions": num_questions,
+                "questions": questions,
+                "quiz_title": quiz.title,
+                "quiz_description": quiz.description
+            })
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def post(self, request, quiz_id, format=None):
+        """
+        Generate questions from code test file
+        """
+        quiz = self.get_quiz(quiz_id)
+        
+        # Get parameters from request
+        question_type = request.data.get('question_type', 'fill_in_blank').lower()
+        num_questions = request.data.get('num_questions', 5)
+        quiz_type = request.data.get('quiz_type', 'hard').lower()
+        
+        # Validate question type
+        if question_type not in self.QUESTION_TYPE_PROMPTS:
+            return Response(
+                {"error": f"Invalid question type. Must be one of: {', '.join(self.QUESTION_TYPE_PROMPTS.keys())}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Validate quiz type
+        if quiz_type not in ['easy', 'medium', 'hard']:
+            return Response(
+                {"error": "Invalid quiz type. Must be one of: easy, medium, hard"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get file content
+        if not quiz.uploadedfiles:
+            return Response(
+                {"error": "No code test file found for this quiz"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Get the code test file
+            file_info = next((f for f in quiz.uploadedfiles if f['name'] == 'code.pdf'), None)
+            if not file_info:
+                return Response(
+                    {"error": "Code test file not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Get file content
+            content = self.get_file_content(file_info)
+            
+            # Generate questions
+            questions = self.generate_questions_from_content(content, question_type, quiz_type, num_questions)
+            
+            return Response({
+                "quiz_id": quiz.quiz_id,
+                "quiz_type": quiz_type,
+                "question_type": question_type,
+                "num_questions": num_questions,
+                "questions": questions
+            })
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -767,3 +1091,83 @@ class QuizViewSet(viewsets.ModelViewSet):
             last_modified_by=serializer.validated_data.get('created_by'),
             is_active=True
         )
+
+
+class QuizQuestionGenerateByTypeView(APIView):
+    """
+    API endpoint to generate questions based on quiz type and question type
+    """
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+    parser_classes = (JSONParser,)
+
+    # Question type specific prompts
+    QUESTION_TYPE_PROMPTS = {
+        'multiple_choice': "Generate a multiple choice question with 4 options and one correct answer.",
+        'true_false': "Generate a true/false question with a clear correct answer.",
+        'fill_in_blank': "Generate a fill in the blank question with the correct answer.",
+        'short_answer': "Generate a short answer question with a detailed answer.",
+        'essay': "Generate an essay question that requires detailed explanation."
+    }
+
+    def get_quiz(self, quiz_id):
+        """Helper method to get quiz and check permissions"""
+        quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
+        self.check_object_permissions(self.request, quiz)
+        return quiz
+
+    def post(self, request, quiz_id, format=None):
+        """
+        Generate questions based on quiz type and question type
+        """
+        quiz = self.get_quiz(quiz_id)
+        
+        # Get the number of questions to generate (default to quiz's no_of_questions)
+        num_questions = request.data.get('num_questions', quiz.no_of_questions)
+        
+        # Get the question type (default to quiz's question_type)
+        question_type = request.data.get('question_type', quiz.question_type)
+        
+        if question_type not in self.QUESTION_TYPE_PROMPTS:
+            return Response(
+                {"error": f"Invalid question type. Must be one of: {', '.join(self.QUESTION_TYPE_PROMPTS.keys())}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Initialize OpenAI client
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            
+            # Prepare the prompt based on quiz type and question type
+            base_prompt = f"Generate {num_questions} {question_type} questions for a {quiz.quiz_type} level quiz. "
+            base_prompt += self.QUESTION_TYPE_PROMPTS[question_type]
+            
+            if quiz.description:
+                base_prompt += f" Topic: {quiz.description}"
+            
+            # Generate questions using OpenAI
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional quiz question generator."},
+                    {"role": "user", "content": base_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            # Process the generated questions
+            generated_questions = response.choices[0].message.content
+            
+            return Response({
+                "quiz_id": quiz.quiz_id,
+                "quiz_type": quiz.quiz_type,
+                "question_type": question_type,
+                "num_questions": num_questions,
+                "generated_questions": generated_questions
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"error": f"Error generating questions: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

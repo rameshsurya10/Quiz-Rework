@@ -41,17 +41,17 @@ class QuizSerializer(serializers.ModelSerializer):
         model = Quiz
         fields = [
             'quiz_id', 'title', 'description', 'no_of_questions',
-            'quiz_type', 'pages',
-            'department_id',  # write_only=True, source='department'
-            'department_name', # read_only=True, source='department.name'
+            'quiz_type', 'question_type', 'pages',
+            'department_id',
+            'department_name',
             'quiz_date',
             'is_published', 'published_at', 'is_deleted',
             'creator',
             'created_at', 'created_by',
             'last_modified_at', 'last_modified_by',
-            'creator_name', # read_only=True, source='creator'
-            'uploaded_files', # Serializer field (ListField, write_only) for file uploads
-            'uploadedfiles',  # Model field (JSONField) for storing file metadata
+            'creator_name',
+            'uploaded_files',
+            'uploadedfiles',
             'time_limit_minutes', 'passing_score'
         ]
         read_only_fields = ['quiz_id', 'created_at', 'last_modified_at']
@@ -110,6 +110,7 @@ class QuizCreateSerializer(serializers.Serializer):
     description = serializers.CharField(allow_blank=True, required=False)
     no_of_questions = serializers.IntegerField(required=False)
     quiz_type = serializers.CharField(max_length=50, required=False)
+    question_type = serializers.CharField(max_length=50, required=False, default='multiple_choice')
     pages = serializers.JSONField(required=False, default=list)
     department_id = serializers.IntegerField(required=False, allow_null=True)
     quiz_date = CustomDateField(required=True)
@@ -129,6 +130,9 @@ class QuizCreateSerializer(serializers.Serializer):
         
         if 'quiz_type' in validated_data:
             quiz_data['quiz_type'] = validated_data['quiz_type']
+
+        if 'question_type' in validated_data:
+            quiz_data['question_type'] = validated_data['question_type']
 
         # Handle department_id
         department_id_payload = validated_data.get('department_id')
