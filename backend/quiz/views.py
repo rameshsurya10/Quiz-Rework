@@ -768,86 +768,18 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 }
             }
             
-            # If both quiz type and question type are mixed
-            if quiz_type == 'mixed' and question_type == 'mixed':
-                question_types = ['multiple_choice', 'fill_in_blank', 'true_false', 'one_line']
-                difficulty_levels = ['easy', 'medium', 'hard']
-                
-                # For small number of questions, prioritize type distribution over difficulty
-                if num_questions <= len(question_types):
-                    # Ensure at least one of each type
-                    all_questions = []
-                    for q_type in question_types:
-                        if len(all_questions) < num_questions:
-                            # Generate one question of each type with random difficulty
-                            difficulty = random.choice(difficulty_levels)
-                            prompt = f"""Generate 1 {q_type} question based on the following code content.
-                            
-                            Code Content:
-                            {content[:2000]}
-                            
-                            Question Type: {q_type}
-                            Number of Questions: 1
-                            Quiz Difficulty: {difficulty}
-                            
-                            Guidelines:
-                            {self.QUESTION_TYPE_PROMPTS[q_type][difficulty]}
-                            
-                            Use this format:
-                            {json.dumps(format_examples[q_type], indent=2)}
-                            
-                            Your response must be a valid JSON object with a 'questions' array containing exactly 1 question.
-                            The question should be at {difficulty} difficulty level.
-                            """
-                            
-                            response = client.chat.completions.create(
-                                model="gpt-3.5-turbo",
-                                messages=[
-                                    {"role": "system", "content": f"You are a professional quiz question generator. Generate exactly 1 {q_type} question at {difficulty} difficulty level."},
-                                    {"role": "user", "content": prompt}
-                                ],
-                                temperature=0.7,
-                                max_tokens=2000
-                            )
-                            
-                            try:
-                                response_data = json.loads(response.choices[0].message.content.strip())
-                                questions = response_data.get('questions', []) if isinstance(response_data, dict) else response_data
-                                
-                                # Add difficulty level and question type to each question
-                                for question in questions:
-                                    question['difficulty'] = difficulty
-                                    question['question_type'] = q_type
-                                
-                                all_questions.extend(questions)
-                            except json.JSONDecodeError:
-                                import re
-                                json_match = re.search(r'\[.*\]', response.choices[0].message.content.strip(), re.DOTALL)
-                                if json_match:
-                                    try:
-                                        questions = json.loads(json_match.group())
-                                        # Add difficulty level and question type to each question
-                                        for question in questions:
-                                            question['difficulty'] = difficulty
-                                            question['question_type'] = q_type
-                                        all_questions.extend(questions)
-                                    except json.JSONDecodeError:
-                                        cleaned_text = re.sub(r'[\n\r\t]', '', json_match.group())
-                                        questions = json.loads(cleaned_text)
-                                        # Add difficulty level and question type to each question
-                                        for question in questions:
-                                            question['difficulty'] = difficulty
-                                            question['question_type'] = q_type
-                                        all_questions.extend(questions)
-                                else:
-                                    raise ValueError("Could not find valid JSON array in response")
-                else:
-                    # For larger numbers, use the existing distribution logic
-                    # First, ensure at least one question of each type
-                    all_questions = []
-                    for q_type in question_types:
-                        # Generate one question of each type with random difficulty
-                        difficulty = random.choice(difficulty_levels)
+            # Define all possible question types and difficulties
+            all_question_types = ['multiple_choice', 'fill_in_blank', 'true_false', 'one_line']
+            all_difficulties = ['easy', 'medium', 'hard']
+            
+            # Initialize list to store all questions
+            all_questions = []
+            max_retries = 3  # Maximum number of retries for generating questions
+            
+            def generate_single_question(q_type, difficulty):
+                """Helper function to generate a single question with retries"""
+                for attempt in range(max_retries):
+                    try:
                         prompt = f"""Generate 1 {q_type} question based on the following code content.
                         
                         Code Content:
@@ -881,167 +813,92 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                             response_data = json.loads(response.choices[0].message.content.strip())
                             questions = response_data.get('questions', []) if isinstance(response_data, dict) else response_data
                             
+                            if not questions:
+                                continue
+                                
                             # Add difficulty level and question type to each question
                             for question in questions:
                                 question['difficulty'] = difficulty
                                 question['question_type'] = q_type
                             
-                            all_questions.extend(questions)
+                            return questions
                         except json.JSONDecodeError:
                             import re
                             json_match = re.search(r'\[.*\]', response.choices[0].message.content.strip(), re.DOTALL)
                             if json_match:
                                 try:
                                     questions = json.loads(json_match.group())
+                                    if not questions:
+                                        continue
                                     # Add difficulty level and question type to each question
                                     for question in questions:
                                         question['difficulty'] = difficulty
                                         question['question_type'] = q_type
-                                    all_questions.extend(questions)
+                                    return questions
                                 except json.JSONDecodeError:
                                     cleaned_text = re.sub(r'[\n\r\t]', '', json_match.group())
                                     questions = json.loads(cleaned_text)
+                                    if not questions:
+                                        continue
                                     # Add difficulty level and question type to each question
                                     for question in questions:
                                         question['difficulty'] = difficulty
                                         question['question_type'] = q_type
-                                    all_questions.extend(questions)
-                            else:
-                                raise ValueError("Could not find valid JSON array in response")
-                    
-                    # Generate remaining questions
-                    remaining_questions = num_questions - len(all_questions)
-                    if remaining_questions > 0:
-                        # Generate remaining questions with random types and difficulties
-                        for _ in range(remaining_questions):
-                            q_type = random.choice(question_types)
-                            difficulty = random.choice(difficulty_levels)
-                            
-                            prompt = f"""Generate 1 {q_type} question based on the following code content.
-                            
-                            Code Content:
-                            {content[:2000]}
-                            
-                            Question Type: {q_type}
-                            Number of Questions: 1
-                            Quiz Difficulty: {difficulty}
-                            
-                            Guidelines:
-                            {self.QUESTION_TYPE_PROMPTS[q_type][difficulty]}
-                            
-                            Use this format:
-                            {json.dumps(format_examples[q_type], indent=2)}
-                            
-                            Your response must be a valid JSON object with a 'questions' array containing exactly 1 question.
-                            The question should be at {difficulty} difficulty level.
-                            """
-                            
-                            response = client.chat.completions.create(
-                                model="gpt-3.5-turbo",
-                                messages=[
-                                    {"role": "system", "content": f"You are a professional quiz question generator. Generate exactly 1 {q_type} question at {difficulty} difficulty level."},
-                                    {"role": "user", "content": prompt}
-                                ],
-                                temperature=0.7,
-                                max_tokens=2000
-                            )
-                            
-                            try:
-                                response_data = json.loads(response.choices[0].message.content.strip())
-                                questions = response_data.get('questions', []) if isinstance(response_data, dict) else response_data
-                                
-                                # Add difficulty level and question type to each question
-                                for question in questions:
-                                    question['difficulty'] = difficulty
-                                    question['question_type'] = q_type
-                                
-                                all_questions.extend(questions)
-                            except json.JSONDecodeError:
-                                import re
-                                json_match = re.search(r'\[.*\]', response.choices[0].message.content.strip(), re.DOTALL)
-                                if json_match:
-                                    try:
-                                        questions = json.loads(json_match.group())
-                                        # Add difficulty level and question type to each question
-                                        for question in questions:
-                                            question['difficulty'] = difficulty
-                                            question['question_type'] = q_type
-                                        all_questions.extend(questions)
-                                    except json.JSONDecodeError:
-                                        cleaned_text = re.sub(r'[\n\r\t]', '', json_match.group())
-                                        questions = json.loads(cleaned_text)
-                                        # Add difficulty level and question type to each question
-                                        for question in questions:
-                                            question['difficulty'] = difficulty
-                                            question['question_type'] = q_type
-                                        all_questions.extend(questions)
-                                else:
-                                    raise ValueError("Could not find valid JSON array in response")
+                                    return questions
+                    except Exception as e:
+                        if attempt == max_retries - 1:
+                            raise e
+                        continue
+                return None
+            
+            # If quiz type is mixed, we need to distribute questions across difficulties
+            if quiz_type == 'mixed':
+                # Calculate base number of questions per difficulty
+                base_questions = num_questions // 3
+                remaining = num_questions % 3
                 
-                # Shuffle the questions to mix both types and difficulty levels
-                random.shuffle(all_questions)
+                # Create a list of difficulties with their target counts
+                difficulty_counts = {
+                    'easy': base_questions,
+                    'medium': base_questions,
+                    'hard': base_questions
+                }
                 
-                # Ensure we have exactly the requested number of questions
-                if len(all_questions) > num_questions:
-                    all_questions = all_questions[:num_questions]
+                # Distribute remaining questions
+                for i in range(remaining):
+                    difficulty = all_difficulties[i]
+                    difficulty_counts[difficulty] += 1
                 
-                questions = all_questions
+                # Generate questions for each difficulty level
+                for difficulty, count in difficulty_counts.items():
+                    questions_generated = 0
+                    while questions_generated < count:
+                        # If question_type is specified, use that type for all questions
+                        q_type = question_type if question_type != 'mixed' else random.choice(all_question_types)
+                        questions = generate_single_question(q_type, difficulty)
+                        if questions:
+                            all_questions.extend(questions)
+                            questions_generated += len(questions)
             else:
-                # Original logic for single difficulty level or question type
-                prompt = f"""Generate {num_questions} {question_type} questions based on the following code content.
-                
-                Code Content:
-                {content[:2000]}
-                
-                Question Type: {question_type}
-                Number of Questions: {num_questions}
-                Quiz Difficulty: {quiz_type}
-                
-                Guidelines:
-                {self.QUESTION_TYPE_PROMPTS[question_type][quiz_type]}
-                
-                Use this format:
-                {json.dumps(format_examples[question_type], indent=2)}
-                
-                Your response must be a valid JSON object with a 'questions' array containing exactly {num_questions} questions.
-                """
-
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "You are a professional quiz question generator."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.7,
-                    max_tokens=3000,
-                    response_format={ "type": "json_object" }
-                )
-
-                try:
-                    response_data = json.loads(response.choices[0].message.content.strip())
-                    questions = response_data.get('questions', []) if isinstance(response_data, dict) else response_data
-                except json.JSONDecodeError:
-                    import re
-                    json_match = re.search(r'\[.*\]', response.choices[0].message.content.strip(), re.DOTALL)
-                    if json_match:
-                        try:
-                            questions = json.loads(json_match.group())
-                        except json.JSONDecodeError:
-                            cleaned_text = re.sub(r'[\n\r\t]', '', json_match.group())
-                            questions = json.loads(cleaned_text)
-                    else:
-                        raise ValueError("Could not find valid JSON array in response")
-
-            # Ensure we have a list of questions
-            if not isinstance(questions, list):
-                if isinstance(questions, dict):
-                    questions = [questions]
-                else:
-                    raise ValueError("Response is not a list of questions")
-
-            # Validate each question based on type
+                # If quiz type is not mixed, generate all questions at the specified difficulty
+                while len(all_questions) < num_questions:
+                    # If question_type is specified, use that type for all questions
+                    q_type = question_type if question_type != 'mixed' else random.choice(all_question_types)
+                    questions = generate_single_question(q_type, quiz_type)
+                    if questions:
+                        all_questions.extend(questions)
+            
+            # Shuffle the questions to mix difficulty levels
+            random.shuffle(all_questions)
+            
+            # Ensure we have exactly the requested number of questions
+            if len(all_questions) > num_questions:
+                all_questions = all_questions[:num_questions]
+            
+            # Validate questions
             validated_questions = []
-            for question in questions:
+            
+            for question in all_questions:
                 if not question or not isinstance(question, dict):
                     continue
 
@@ -1049,21 +906,24 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 if 'question_id' not in question or 'question' not in question:
                     continue
 
+                # Get the actual question type for this question
+                actual_question_type = question.get('question_type', question_type)
+
                 # Type-specific validation
-                if question_type == 'multiple_choice':
+                if actual_question_type == 'multiple_choice':
                     required_fields = ['A', 'B', 'C', 'D', 'answer']
                     if not all(field in question for field in required_fields):
                         continue
                     if question['answer'] not in ['A', 'B', 'C', 'D']:
                         continue
 
-                elif question_type == 'fill_in_blank':
+                elif actual_question_type == 'fill_in_blank':
                     if '[BLANK]' not in question['question']:
                         continue
                     if 'correct_answer' not in question:
                         continue
 
-                elif question_type == 'true_false':
+                elif actual_question_type == 'true_false':
                     if 'answer' not in question:
                         continue
                     answer = str(question['answer']).strip().capitalize()
@@ -1071,7 +931,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                         continue
                     question['answer'] = answer
 
-                elif question_type == 'one_line':
+                elif actual_question_type == 'one_line':
                     if 'correct_answer' not in question:
                         continue
 
@@ -1088,9 +948,66 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
             if not validated_questions:
                 raise ValueError("No valid questions found in response")
 
-            # Check if we have the correct number of questions
-            if len(validated_questions) < num_questions:
-                raise ValueError(f"Could only generate {len(validated_questions)} questions out of {num_questions} requested")
+            # If we don't have enough validated questions, try generating more
+            while len(validated_questions) < num_questions:
+                # Try generating one more question
+                if quiz_type == 'mixed':
+                    # Count current questions by difficulty
+                    difficulty_counts = {'easy': 0, 'medium': 0, 'hard': 0}
+                    for q in validated_questions:
+                        difficulty_counts[q['difficulty']] += 1
+                    
+                    # Find the difficulty with the least questions
+                    min_difficulty = min(difficulty_counts.items(), key=lambda x: x[1])[0]
+                    difficulty = min_difficulty
+                else:
+                    difficulty = quiz_type
+                
+                # If question_type is specified, use that type for all questions
+                q_type = question_type if question_type != 'mixed' else random.choice(all_question_types)
+                questions = generate_single_question(q_type, difficulty)
+                
+                if questions:
+                    for question in questions:
+                        # Validate the new question
+                        if not question or not isinstance(question, dict):
+                            continue
+                        if 'question_id' not in question or 'question' not in question:
+                            continue
+                        
+                        actual_question_type = question.get('question_type', question_type)
+                        
+                        # Type-specific validation
+                        if actual_question_type == 'multiple_choice':
+                            required_fields = ['A', 'B', 'C', 'D', 'answer']
+                            if not all(field in question for field in required_fields):
+                                continue
+                            if question['answer'] not in ['A', 'B', 'C', 'D']:
+                                continue
+                        elif actual_question_type == 'fill_in_blank':
+                            if '[BLANK]' not in question['question']:
+                                continue
+                            if 'correct_answer' not in question:
+                                continue
+                        elif actual_question_type == 'true_false':
+                            if 'answer' not in question:
+                                continue
+                            answer = str(question['answer']).strip().capitalize()
+                            if answer not in ['True', 'False']:
+                                continue
+                            question['answer'] = answer
+                        elif actual_question_type == 'one_line':
+                            if 'correct_answer' not in question:
+                                continue
+                        
+                        if 'explanation' not in question:
+                            continue
+                        
+                        question['question_id'] = len(validated_questions) + 1
+                        validated_questions.append(question)
+                        
+                        if len(validated_questions) >= num_questions:
+                            break
 
             # Ensure question IDs are sequential
             for i, question in enumerate(validated_questions, 1):

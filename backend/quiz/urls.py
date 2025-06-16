@@ -17,7 +17,6 @@ urlpatterns = [
     # path('<int:quiz_id>/generate-from-prompt/', views.QuizQuestionGenerateFromPromptView.as_view(), name='quiz-generate-from-prompt'),
     
     # File management endpoints
-    path('<int:quiz_id>/files/', views.QuizFileUploadView.as_view(), name='quiz-files-list'),
     path('<int:quiz_id>/files/upload/', views.QuizFileUploadView.as_view(), name='quiz-file-upload'),
     path('<int:quiz_id>/files/<str:file_id>/', views.QuizFileUploadView.as_view(), name='quiz-file-detail'),
     # Quiz question generation endpoints

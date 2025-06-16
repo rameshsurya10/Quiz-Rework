@@ -24,7 +24,10 @@ class CustomDateField(serializers.DateField):
         try:
             # Parse the date string
             parsed_date = datetime.strptime(data, '%Y-%m-%d').date()
-            return parsed_date
+            # Create a naive datetime at midnight
+            naive_datetime = datetime.combine(parsed_date, datetime.min.time())
+            # Make it timezone aware
+            return timezone.make_aware(naive_datetime, timezone=timezone.get_current_timezone())
         except (ValueError, TypeError):
             raise serializers.ValidationError(
                 'Invalid date format. Please use YYYY-MM-DD format (e.g., 2025-07-12)'
