@@ -3,6 +3,7 @@ from .models import Quiz
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from datetime import datetime, date
+from .models import Question
 
 User = get_user_model()
 
@@ -38,6 +39,12 @@ class CustomDateField(serializers.DateField):
             return value.date()
         return value
 
+class QuestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Question
+        fields = ['question_id', 'question', 'question_type', 'options', 'correct_answer', 'explanation']
+
+
 class QuizSerializer(serializers.ModelSerializer):
     department_id = serializers.PrimaryKeyRelatedField(
         queryset=Quiz.department.field.related_model.objects.all(),
@@ -59,6 +66,7 @@ class QuizSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True)
     last_modified_at = serializers.DateTimeField(read_only=True)
     published_at = serializers.DateTimeField(required=False)
+    questions = QuestionSerializer(many=True, read_only=True)
     
     class Meta:
         model = Quiz
@@ -75,7 +83,8 @@ class QuizSerializer(serializers.ModelSerializer):
             'creator_name',
             'uploaded_files',
             'uploadedfiles',
-            'time_limit_minutes', 'passing_score'
+            'time_limit_minutes', 'passing_score',
+            'questions'
         ]
         read_only_fields = ['quiz_id', 'created_at', 'last_modified_at']
         extra_kwargs = {

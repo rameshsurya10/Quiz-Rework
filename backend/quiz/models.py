@@ -54,14 +54,34 @@ class Quiz(models.Model):
 
 class Question(models.Model):
     """Model representing a quiz question"""
+    QUESTION_TYPES = (
+        ('multiple_choice', 'Multiple Choice'),
+        ('one_line', 'One Line'),
+        ('fill_in_blank', 'Fill in the Blank'),
+        ('true_false', 'True/False'),
+        ('mixed', 'Mixed'),
+    )
+    
+    DIFFICULTY_LEVELS = (
+        ('easy', 'Easy'),
+        ('medium', 'Medium'),
+        ('hard', 'Hard'),
+    )
+
     question_id = models.AutoField(primary_key=True)
+    # quiz = models.ForeignKey(Quiz, related_name='questions', on_delete=models.CASCADE)
     quiz = models.ForeignKey(
         Quiz,
         on_delete=models.CASCADE,
-        related_name='quiz_questions',
+        related_name='questions',
         db_column='quiz_id'
     )
     question = models.TextField()
+    question_type = models.CharField(max_length=20, choices=QUESTION_TYPES, default='multiple_choice')
+    correct_answer = models.TextField(help_text="The correct answer for this question")
+    options = models.JSONField(null=True, blank=True, help_text="List of options for multiple choice questions")
+    difficulty = models.CharField(max_length=10, choices=DIFFICULTY_LEVELS, default='easy')
+    explanation = models.TextField(null=True, blank=True, help_text="Explanation for the question")
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.CharField(max_length=255, null=True, blank=True)
     last_modified_at = models.DateTimeField(auto_now=True)

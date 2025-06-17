@@ -32,8 +32,9 @@ class QuizFileUploadView(APIView):
     def get_quiz(self, quiz_id):
         """Helper method to get quiz and check permissions"""
         quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
+        questions = Question.objects.filter(quiz_id=quiz.quiz_id)
         self.check_object_permissions(self.request, quiz)
-        return quiz
+        return quiz, questions
 
     def post(self, request, quiz_id, format=None):
         """
@@ -231,9 +232,162 @@ class QuizListCreateView(generics.ListCreateAPIView):
             # Get the created quiz with all fields
             quiz = Quiz.objects.get(pk=serializer.data['quiz_id'])
             
-            # Prepare the response data with the quiz details and success message
-            response_data = serializer.data
-            response_data['message'] = 'Quiz created successfully'
+            # Generate questions for the quiz
+            try:
+                # Get settings from quiz object
+                question_type = quiz.question_type.lower() if quiz.question_type else 'multiple_choice'
+                num_questions = quiz.no_of_questions if quiz.no_of_questions else 5
+                quiz_type = quiz.quiz_type.lower() if quiz.quiz_type else 'medium'
+                
+                # Initialize OpenAI client
+                client = OpenAI(api_key=settings.OPENAI_API_KEY)
+                
+                # Prepare the prompt based on quiz type and question type
+                if question_type == 'mixed':
+                    base_prompt = f"""Generate {num_questions} questions for a {quiz_type} level quiz.
+                    Include a mix of multiple choice, one-line, and fill-in-the-blank questions.
+                    Each question should be in one of these formats:
+                    
+                    For multiple choice:
+                    Question: [Your question here]
+                    A: [Option A]
+                    B: [Option B]
+                    C: [Option C]
+                    D: [Option D]
+                    Answer: [Correct option letter]
+                    Explanation: [Brief explanation of the answer]
+                    
+                    For one-line:
+                    Question: [Your question here]
+                    Answer: [Correct answer]
+                    Explanation: [Brief explanation of the answer]
+                    
+                    For fill-in-the-blank:
+                    Question: [Your question with [BLANK] where the answer should go]
+                    Answer: [Correct answer]
+                    Explanation: [Brief explanation of the answer]
+                    
+                    """
+                else:
+                    base_prompt = f"""Generate {num_questions} {question_type} questions for a {quiz_type} level quiz.
+                    Each question should be in the following format:
+                    
+                    Question: [Your question here]
+                    A: [Option A]
+                    B: [Option B]
+                    C: [Option C]
+                    D: [Option D]
+                    Answer: [Correct option letter]
+                    Explanation: [Brief explanation of the answer]
+                    
+                    """
+                
+                if quiz.description:
+                    base_prompt += f"Topic: {quiz.description}\n"
+                
+                # Generate questions using OpenAI
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a professional quiz question generator. Generate clear, well-structured questions with appropriate options and explanations."},
+                        {"role": "user", "content": base_prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+                
+                # Process the generated questions
+                generated_text = response.choices[0].message.content
+                
+                # Parse questions
+                questions = []
+                current_question = {}
+                
+                for line in generated_text.split('\n'):
+                    line = line.strip()
+                    if not line:
+                        if current_question and 'text' in current_question:
+                            questions.append(current_question)
+                            current_question = {}
+                        continue
+                    
+                    if line.startswith('Question:'):
+                        if current_question and 'text' in current_question:
+                            questions.append(current_question)
+                        current_question = {
+                            'text': line.replace('Question:', '').strip(),
+                            'options': {},
+                            'type': 'multiple_choice'  # Default type
+                        }
+                    elif line.startswith(('A:', 'B:', 'C:', 'D:')):
+                        option = line[0]
+                        current_question['options'][option] = line[2:].strip()
+                        current_question['type'] = 'multiple_choice'
+                    elif line.startswith('Answer:'):
+                        current_question['correct_answer'] = line.replace('Answer:', '').strip()
+                    elif line.startswith('Explanation:'):
+                        current_question['explanation'] = line.replace('Explanation:', '').strip()
+                
+                if current_question and 'text' in current_question:
+                    questions.append(current_question)
+                
+                # Validate questions
+                valid_questions = []
+                for question in questions:
+                    if all(key in question for key in ['text', 'correct_answer', 'explanation']):
+                        # Determine question type if not specified
+                        if 'type' not in question:
+                            if '[BLANK]' in question['text']:
+                                question['type'] = 'fill_in_blank'
+                            elif len(question.get('options', {})) == 4:
+                                question['type'] = 'multiple_choice'
+                            else:
+                                question['type'] = 'one_line'
+                        valid_questions.append(question)
+                
+                if not valid_questions:
+                    raise Exception("No valid questions were generated")
+                
+                # Store questions in the Question model
+                stored_questions = []
+                for question_data in valid_questions:
+                    # Create the question text with all details
+                    question_text = f"Question: {question_data['text']}\n"
+                    if question_data['type'] == 'multiple_choice':
+                        question_text += f"Options:\n"
+                        for option, text in question_data['options'].items():
+                            question_text += f"{option}: {text}\n"
+                    question_text += f"Correct Answer: {question_data['correct_answer']}\n"
+                    question_text += f"Explanation: {question_data['explanation']}"
+                    
+                    # Create and save the question
+                    question = Question.objects.create(
+                        quiz=quiz,
+                        question=question_text,
+                        question_type=question_data['type'],
+                        difficulty=quiz_type,
+                        correct_answer=question_data['correct_answer'],
+                        explanation=question_data['explanation'],
+                        options=json.dumps(question_data.get('options', {})) if question_data['type'] == 'multiple_choice' else None,
+                        created_by=request.user.email,
+                        last_modified_by=request.user.email
+                    )
+                    stored_questions.append({
+                        'question_id': question.question_id,
+                        'question': question.question,
+                        'question_type': question.question_type
+                    })
+                
+                # Add questions to response
+                response_data = serializer.data
+                response_data['message'] = 'Quiz created successfully'
+                # response_data['questions'] = stored_questions
+                
+            except Exception as e:
+                # If question generation fails, still return the created quiz
+                response_data = serializer.data
+                response_data['message'] = 'Quiz created successfully but question generation failed'
+                response_data['error'] = str(e)
             
             # Add user references directly to the response
             response_data['creator'] = str(quiz.creator) if quiz.creator else None
@@ -246,7 +400,7 @@ class QuizListCreateView(generics.ListCreateAPIView):
         except Exception as e:
             return Response(
                 {"error": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     def perform_create(self, serializer):
