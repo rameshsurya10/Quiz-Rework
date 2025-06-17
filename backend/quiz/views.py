@@ -434,50 +434,50 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         data = request.data.copy()
-        
+
         # Parse date strings to datetime objects if they exist
-        date_fields = ['start_date', 'end_date']
+        date_fields = ['quiz_date']
         for field in date_fields:
             if field in data and data[field]:
                 try:
                     data[field] = timezone.datetime.strptime(data[field], '%Y-%m-%dT%H:%M')
                 except (ValueError, TypeError):
                     return Response(
-                        {"error": f"Invalid date format for {field}. Use YYYY-MM-DDTHH:MM format."},
+                        {"error": f"Invalid date format for {field}. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM."},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-        
+
         # Handle is_published and published_at
-        if 'is_published' in data and data['is_published'] and not instance.published_at:
+        if data.get('is_published') and not instance.published_at:
             data['published_at'] = timezone.now()
-        
+
         # Set last_modified_by to current user
         data['last_modified_by'] = request.user.id
-        
+
         # Get serializer with context
         serializer = self.get_serializer(instance, data=data, partial=kwargs.get('partial', False))
         serializer.is_valid(raise_exception=True)
-        
+
         try:
             self.perform_update(serializer)
-            # Get the updated instance with all fields
             updated_instance = self.get_queryset().get(pk=instance.pk)
             return Response(QuizSerializer(updated_instance).data)
         except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     def perform_update(self, serializer):
         """Update the quiz instance"""
         serializer.save()
     
-    def perform_destroy(self, instance):
-        """Soft delete the quiz"""
+    def destroy(self, request, *args, **kwargs):
+        """
+        Soft delete: set is_deleted=True for the quiz instead of deleting from DB.
+        Return a success message in the response.
+        """
+        instance = self.get_object()
         instance.is_deleted = True
-        instance.last_modified_by = self.request.user
         instance.save()
+        return Response({'message': 'Quiz deleted successfully'}, status=status.HTTP_200_OK)
 
 
 class QuizQuestionGenerateView(APIView):

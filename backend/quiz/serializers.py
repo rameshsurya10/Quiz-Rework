@@ -36,8 +36,9 @@ class CustomDateField(serializers.DateField):
 
     def to_representation(self, value):
         if isinstance(value, datetime):
-            return value.date()
-        return value
+            return value.isoformat()
+        return super().to_representation(value)
+
 
 class QuestionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -91,11 +92,20 @@ class QuizSerializer(serializers.ModelSerializer):
             'pages': {'required': False, 'default': []}
         }
 
+    # def validate_quiz_date(self, value):
+    #     """Validate that quiz_date is not in the past"""
+    #     if value < timezone.now():
+    #         raise serializers.ValidationError("Quiz date cannot be in the past")
+    #     return value
+
     def validate_quiz_date(self, value):
-        """Validate that quiz_date is not in the past"""
+        if timezone.is_naive(value):
+            value = timezone.make_aware(value, timezone.get_current_timezone())
+
         if value < timezone.now():
             raise serializers.ValidationError("Quiz date cannot be in the past")
         return value
+
 
     def validate_pages(self, value):
         """Validate the pages format"""
