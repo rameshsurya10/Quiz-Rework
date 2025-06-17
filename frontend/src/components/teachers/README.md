@@ -6,7 +6,7 @@ This module provides a comprehensive interface for managing teachers in the Quiz
 
 - View list of teachers with details (name, email, department, etc.)
 - Add new teachers with validation
-- View teacher statistics (quizzes created, published, etc.)
+- View teacher statistics (quiz created, published, etc.)
 - Responsive design that works on all screen sizes
 - Smooth animations and transitions
 - Integration with backend API

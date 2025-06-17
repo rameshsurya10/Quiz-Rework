@@ -14,20 +14,20 @@ import quizService from '../../services/quizService';
 const QuizListView = () => {
   const navigate = useNavigate();
   const toast = useToast();
-  const [quizzes, setQuizzes] = useState([]);
+  const [quiz, setquiz] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   
   useEffect(() => {
-    const fetchQuizzes = async () => {
+    const fetchquiz = async () => {
       try {
         setLoading(true);
-        const data = await quizService.getUserQuizzes();
-        setQuizzes(data || []);
+        const data = await quizService.getUserquiz();
+        setquiz(data || []);
       } catch (error) {
         toast({
-          title: 'Error fetching quizzes',
+          title: 'Error fetching quiz',
           description: error.message,
           status: 'error',
           duration: 5000,
@@ -38,7 +38,7 @@ const QuizListView = () => {
       }
     };
 
-    fetchQuizzes();
+    fetchquiz();
   }, [toast]);
 
   // Handle publishing a quiz
@@ -48,8 +48,8 @@ const QuizListView = () => {
       await quizService.publishQuiz(quizId);
       
       // Update the quiz status in the list
-      setQuizzes(prevQuizzes => 
-        prevQuizzes.map(quiz => 
+      setquiz(prevquiz => 
+        prevquiz.map(quiz => 
           quiz.id === quizId 
             ? { ...quiz, is_published: true, status: 'published' } 
             : quiz
@@ -76,8 +76,8 @@ const QuizListView = () => {
     }
   };
 
-  // Filter quizzes based on search term and status
-  const filteredQuizzes = quizzes.filter(quiz => {
+  // Filter quiz based on search term and status
+  const filteredquiz = quiz.filter(quiz => {
     const matchesSearch = !searchTerm || 
       quiz.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (quiz.description && quiz.description.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -98,11 +98,11 @@ const QuizListView = () => {
         flexDir={{ base: 'column', md: 'row' }}
         gap={4}
       >
-        <Heading size="lg">My Quizzes</Heading>
+        <Heading size="lg">My quiz</Heading>
         <Button
           leftIcon={<AddIcon />}
           colorScheme="blue"
-          onClick={() => navigate('/quizzes/create')}
+          onClick={() => navigate('/quiz/create')}
         >
           Create New Quiz
         </Button>
@@ -120,7 +120,7 @@ const QuizListView = () => {
             <SearchIcon color="gray.300" />
           </InputLeftElement>
           <Input
-            placeholder="Search quizzes..."
+            placeholder="Search quiz..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -141,19 +141,19 @@ const QuizListView = () => {
       {loading ? (
         <Box textAlign="center" py={10}>
           <Spinner size="xl" />
-          <Text mt={4}>Loading quizzes...</Text>
+          <Text mt={4}>Loading quiz...</Text>
         </Box>
-      ) : filteredQuizzes.length === 0 ? (
+      ) : filteredquiz.length === 0 ? (
         <Alert status="info" borderRadius="md">
           <AlertIcon />
-          {quizzes.length === 0 
-            ? "You haven't created any quizzes yet. Click 'Create New Quiz' to get started."
-            : "No quizzes match your search criteria."
+          {quiz.length === 0 
+            ? "You haven't created any quiz yet. Click 'Create New Quiz' to get started."
+            : "No quiz match your search criteria."
           }
         </Alert>
       ) : (
         <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-          {filteredQuizzes.map(quiz => (
+          {filteredquiz.map(quiz => (
             <Card key={quiz.id} variant="outline" boxShadow="sm" height="100%">
               <CardHeader bg={quiz.is_published ? 'blue.50' : 'gray.50'} pb={3}>
                 <Flex justifyContent="space-between" alignItems="center">
@@ -204,7 +204,7 @@ const QuizListView = () => {
                     variant="outline"
                     size="sm"
                     flex="1"
-                    onClick={() => navigate(`/quizzes/${quiz.id}`)}
+                    onClick={() => navigate(`/quiz/${quiz.id}`)}
                   >
                     View
                   </Button>
@@ -219,7 +219,7 @@ const QuizListView = () => {
                     <MenuList>
                       <MenuItem 
                         icon={<EditIcon />}
-                        onClick={() => navigate(`/quizzes/${quiz.id}/edit`)}
+                        onClick={() => navigate(`/quiz/${quiz.id}/edit`)}
                       >
                         Edit Quiz
                       </MenuItem>
@@ -235,7 +235,7 @@ const QuizListView = () => {
                       
                       <MenuItem 
                         icon={<RepeatIcon />}
-                        onClick={() => navigate(`/quizzes/${quiz.id}?tab=regenerate`)}
+                        onClick={() => navigate(`/quiz/${quiz.id}?tab=regenerate`)}
                       >
                         Regenerate Questions
                       </MenuItem>

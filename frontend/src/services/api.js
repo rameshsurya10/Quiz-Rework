@@ -117,7 +117,7 @@ api.interceptors.response.use(
 export const studentApi = {
   getAll: (params) => api.get('/api/students/', { params }),
   getById: (id) => api.get(`/api/students/${id}/`),
-  create: (data) => api.post('/api/students/', data),
+  create: (data) => api.post('/api/students/create_student/', data),
   update: (id, data) => api.put(`/api/students/${id}/`, data),
   delete: (id) => api.delete(`/api/students/${id}/`),
   bulkCreate: (data) => api.post('/api/students/create_student/', data),
@@ -144,11 +144,11 @@ export const departmentApi = {
 };
 
 export const quizApi = {
-  getAll: (params) => api.get('/api/quizzes/', { params }),
-  getById: (id) => api.get(`/api/quizzes/${id}/`),
-  create: (data) => api.post('/api/quizzes/', data),
-  update: (id, data) => api.put(`/api/quizzes/${id}/`, data),
-  delete: (id) => api.delete(`/api/quizzes/${id}/`),
+  getAll: (params) => api.get('/api/quiz/', { params }),
+  getById: (id) => api.get(`/api/quiz/${id}/`),
+  create: (data) => api.post('/api/quiz/', data),
+  update: (id, data) => api.put(`/api/quiz/${id}/`, data),
+  delete: (id) => api.delete(`/api/quiz/${id}/`),
 };
 
 export const userApi = {
@@ -205,7 +205,7 @@ export const dashboardApi = {
 
 export const reportApi = {
   // Assumes an endpoint like /api/reports/student/{studentId}/
-  // This endpoint should return data like: { studentName, quizzesTaken, averageScore, recentActivity, etc. }
+  // This endpoint should return data like: { studentName, quizTaken, averageScore, recentActivity, etc. }
   getStudentReport: (studentId) => api.get(`/api/reports/student/${studentId}/`),
   // You might also want an endpoint to get all reports or reports with filters
   // getAllReports: (params) => api.get('/api/reports/', { params }),

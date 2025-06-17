@@ -224,10 +224,10 @@ const FullLayout = ({ children, hideToolbar = false }) => {
           activePaths: ['/dashboard']
         },
         { 
-          name: 'Manage Quizzes', 
+          name: 'Manage quiz', 
           icon: <QuizIcon />, 
-          path: '/quizzes',
-          activePaths: ['/quizzes', '/quizzes/*']
+          path: '/quiz',
+          activePaths: ['/quiz', '/quiz/*']
         },
       ]
     },

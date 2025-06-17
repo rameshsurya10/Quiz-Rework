@@ -11,7 +11,7 @@ import { PageHeader, InfoCard, EmptyState } from '../common'; // Assuming common
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // Average Score
 import RateReviewIcon from '@mui/icons-material/RateReview'; // Completion Rate
 import PeopleIcon from '@mui/icons-material/People'; // Total Participants
-import QuizIcon from '@mui/icons-material/Quiz'; // Quizzes Completed
+import QuizIcon from '@mui/icons-material/Quiz'; // quiz Completed
 import AssessmentIcon from '@mui/icons-material/Assessment'; // For table empty state
 import VisibilityIcon from '@mui/icons-material/Visibility'; // View details icon
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'; // Report icon
@@ -67,7 +67,7 @@ const ResultsSection = () => {
           trendValue: '0',
         },
         {
-          title: 'Quizzes Taken',
+          title: 'quiz Taken',
           value: '320',
           icon: <QuizIcon sx={{ fontSize: '2rem' }} />,
           color: theme.palette.warning.main,
@@ -159,7 +159,7 @@ const ResultsSection = () => {
       <Container maxWidth={false} sx={{ mt: 4, mb: 4 }}>
         <PageHeader
           title="Quiz Results & Analytics"
-          subtitle="Review performance metrics and detailed results for all quizzes."
+          subtitle="Review performance metrics and detailed results for all quiz."
           // Actions like filter buttons can be added here later
           // actions={[
           //   <Button key="filter-results" variant="outlined" startIcon={<FilterListIcon />}>
@@ -204,7 +204,7 @@ const ResultsSection = () => {
           <EmptyState
             icon={<AssessmentIcon sx={{ fontSize: 60 }} />}
             title="No quiz results yet"
-            message="Start creating and assigning quizzes to see results here."
+            message="Start creating and assigning quiz to see results here."
             action={
               <Button variant="contained" color="primary">
                 Create a Quiz

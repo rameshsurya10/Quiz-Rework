@@ -132,7 +132,7 @@ const Dashboard = () => {
             csvRows.push(["Summary Statistics"]);
             csvRows.push(["Total Teachers", data.total_teachers || "0"]);
             csvRows.push(["Total Students", data.total_students || "0"]);
-            csvRows.push(["Total Quizzes", data.total_quizes || "0"]);
+            csvRows.push(["Total quiz", data.total_quizes || "0"]);
             csvRows.push(["Active Participants", data.total_participants || "0"]);
             csvRows.push([""]);
             
@@ -948,7 +948,7 @@ const Dashboard = () => {
                         </Grid>
                         <Grid item xs={12} sm={6} md={3}>
                             {renderTrendCard(
-                                'Total Quizzes', 
+                                'Total quiz', 
                                 <QuizIcon color="success" />, 
                                 data.total_quizes || '0',
                                 '5.7',
