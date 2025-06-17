@@ -131,13 +131,13 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
         variant="outlined"
       />
       <FormControl fullWidth margin="normal" variant="outlined" error={!!errors.teachers}>
-        <InputLabel id="hod-select-label">Head of Department (Optional)</InputLabel>
+        <InputLabel id="hod-select-label">Teacher (Optional)</InputLabel>
         <Select
           labelId="hod-select-label"
           id="hod-select"
           value={selectedTeacherId}
           onChange={handleTeacherSelectChange}
-          label="Head of Department (Optional)"
+          label="Teacher (Optional)"
         >
           <MenuItem value="">
             <em>None</em>

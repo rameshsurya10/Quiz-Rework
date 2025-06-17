@@ -1,11 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Container, Box, Typography, Button, Paper, Chip, useTheme,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TablePagination, TableSortLabel, IconButton, TextField, InputAdornment,
-  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Divider, Tooltip, Avatar,
-  CircularProgress, MenuItem, Select, FormControl, InputLabel,
-  Grid, List, ListItem, ListItemAvatar, ListItemText
+  Container, Grid, Paper, Typography, Button, Box, Avatar,
+  Pagination, TextField, InputAdornment, Dialog, DialogTitle,
+  DialogContent, DialogActions, ListItemAvatar, ListItemText, IconButton,
+  Divider, Tooltip,
+  useTheme,
+  CircularProgress,
+  TablePagination,
+  DialogContentText,
+  List,
+  ListItem,
+  Chip,
+  TableContainer,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody
 } from '@mui/material';
 import { 
   Add as AddIcon, 
@@ -17,73 +28,63 @@ import {
   School as SchoolIcon,
   Visibility as VisibilityIcon,
   Close as CloseIcon,
-  Class as ClassIcon
+  Class as ClassIcon,
+  BookmarkBorder as BookmarkBorderIcon,
+  Tag as TagIcon
 } from '@mui/icons-material';
 import { PageHeader, EmptyState } from '../common';
+import SummaryCard from '../common/SummaryCard';
 import { departmentApi, userApi, teacherApi } from '../../services/api';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { motion } from 'framer-motion';
 import DepartmentForm from './DepartmentForm';
+import StudentForm from '../students/StudentForm';
+import { studentApi } from '../../services/api';
 
 const DepartmentSection = () => {
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
-  
+
   const [departments, setDepartments] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(9);
   const [searchTerm, setSearchTerm] = useState('');
-  const [order, setOrder] = useState('asc');
-  const [orderBy, setOrderBy] = useState('name');
-  
+
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [selectedDept, setSelectedDept] = useState(null);
   const [openFormDialog, setOpenFormDialog] = useState(false);
-  const [openDetailsDialog, setOpenDetailsDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchDepartments = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await departmentApi.getAll();
-      // The API returns the array directly, not in a data property
-      setDepartments(Array.isArray(response?.data) ? response.data : []);
+      const [deptRes, teacherRes, studentRes] = await Promise.all([
+        departmentApi.getAll(),
+        teacherApi.getAll(),
+        studentApi.getAll(),
+      ]);
+
+      const depts = deptRes?.data?.results || deptRes?.data || [];
+      const teachs = teacherRes?.data || [];
+      const studs = studentRes?.data?.results || studentRes?.data || [];
+
+      setDepartments(Array.isArray(depts) ? depts : []);
+      setTeachers(Array.isArray(teachs) ? teachs : []);
+      setStudents(Array.isArray(studs) ? studs : []);
     } catch (error) {
-      console.error('Failed to fetch departments:', error);
-      showSnackbar('Failed to load departments', 'error');
-      setDepartments([]); // Ensure departments is always an array
+      console.error('Failed to fetch data:', error);
+      showSnackbar('Failed to load data. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
   }, [showSnackbar]);
 
-  const fetchTeachers = useCallback(async () => {
-    try {
-      // Fetch teachers using the dedicated API service
-      const response = await teacherApi.getAll();
-      // The API returns the array directly, not in a data property
-      setTeachers(Array.isArray(response?.data) ? response.data : []);
-      console.log('Successfully fetched teachers:', response?.data?.length || 0);
-    } catch (error) {
-      console.error('Failed to fetch teachers:', error);
-      setTeachers([]); // Ensure teachers is always an array
-      // Optionally show a warning if needed
-      // showSnackbar('Failed to load teachers list', 'warning');
-    }
-  }, [showSnackbar]);
-
   useEffect(() => {
-    fetchDepartments();
-    fetchTeachers();
-  }, [fetchDepartments, fetchTeachers]);
-
-  const handleRequestSort = (property) => {
-    const isAsc = orderBy === property && order === 'asc';
-    setOrder(isAsc ? 'desc' : 'asc');
-    setOrderBy(property);
-  };
+    fetchData();
+  }, [fetchData]);
 
   const handleSaveDepartment = async (formData) => {
     setIsSubmitting(true);
@@ -110,7 +111,6 @@ const DepartmentSection = () => {
 
   const handleDelete = async () => {
     if (!selectedDept) return;
-    
     try {
       await departmentApi.delete(selectedDept.department_id);
       showSnackbar('Department deleted successfully!', 'success');
@@ -123,28 +123,10 @@ const DepartmentSection = () => {
     }
   };
 
-  const filteredDepartments = departments.filter(dept => 
+  const filteredDepartments = departments.filter(dept =>
     dept.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    dept.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    dept.head_teacher?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+    dept.code?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const sortedDepartments = [...filteredDepartments].sort((a, b) => {
-    let aVal = a[orderBy];
-    let bVal = b[orderBy];
-
-    if (orderBy === 'head_teacher') {
-      aVal = a.head_teacher?.name || '';
-      bVal = b.head_teacher?.name || '';
-    }
-
-    if (typeof aVal === 'number' && typeof bVal === 'number') {
-      return order === 'asc' ? aVal - bVal : bVal - aVal;
-    }
-    return order === 'asc' 
-      ? String(aVal).localeCompare(String(bVal))
-      : String(bVal).localeCompare(String(aVal));
-  });
 
   const handleChangePage = (event, newPage) => setPage(newPage);
   const handleChangeRowsPerPage = (event) => {
@@ -152,515 +134,171 @@ const DepartmentSection = () => {
     setPage(0);
   };
 
-  const paginatedDepartments = sortedDepartments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const paginatedDepartments = filteredDepartments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1, transition: { duration: 0.5 } },
+  };
+
+
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <PageHeader 
-        title="Departments" 
-        subtitle="Manage academic departments and their details"
-        actions={[
-          <Button 
-            key="add-department"
-            variant="contained" 
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={() => {
-              setSelectedDept(null);
-              setOpenFormDialog(true);
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+        <PageHeader
+          title="Departments"
+          subtitle="Manage academic departments and their details"
+          actions={[
+            <Button
+              key="add-department"
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => {
+                setSelectedDept(null);
+                setOpenFormDialog(true);
+              }}
+            >
+              Add Department
+            </Button>
+          ]}
+        />
+      </motion.div>
+
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12} sm={4}><SummaryCard icon={<ClassIcon />} title="Total Departments" value={departments.length} color={theme.palette.primary.main} index={0} /></Grid>
+          <Grid item xs={12} sm={4}><SummaryCard icon={<PeopleIcon />} title="Total Teachers" value={teachers.length} color={theme.palette.secondary.main} index={1} /></Grid>
+          <Grid item xs={12} sm={4}><SummaryCard icon={<SchoolIcon />} title="Total Students" value={students.length} color={theme.palette.success.main} index={2} /></Grid>
+        </Grid>
+
+      <Paper sx={{ p: 3, borderRadius: 2 }} elevation={2}>
+        <Box sx={{ mb: 2 }}>
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="Search by name or code..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
             }}
-          >
-            Add Department
-          </Button>
-        ]}
-      />
-
-      <Box component={Paper} sx={{ p: 2, mb: 3 }}>
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="Search by name, code, or HOD..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
-          }}
-        />
-      </Box>
-
-      {/* Form Dialog for Add/Edit Department */}
-      <Dialog 
-        open={openFormDialog} 
-        onClose={() => { if (!isSubmitting) { setOpenFormDialog(false); setSelectedDept(null); } }} 
-        maxWidth="md" 
-        fullWidth
-      >
-        <DialogTitle>{selectedDept?.department_id ? 'Edit Department' : 'Add New Department'}</DialogTitle>
-        <DialogContent>
-          {/* Render DepartmentForm only when the dialog is open to ensure fresh state/fetch for teachers */}
-          {openFormDialog && (
-            <DepartmentForm 
-              onSubmit={handleSaveDepartment} 
-              onCancel={() => { setOpenFormDialog(false); setSelectedDept(null); }}
-              initialData={selectedDept}
-              isSubmitting={isSubmitting}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>
-      ) : departments.length === 0 ? (
-        <EmptyState title="No Departments Yet" message="Get started by adding a new department." />
-      ) : (
-        <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-          <TableContainer>
-            <Table stickyHeader>
-              <TableHead>
-                <TableRow>
-                  {['name', 'code', 'head_teacher', 'teacher_count', 'student_count'].map(headCell => (
-                    <TableCell key={headCell} sortDirection={orderBy === headCell ? order : false}>
-                      <TableSortLabel
-                        active={orderBy === headCell}
-                        direction={orderBy === headCell ? order : 'asc'}
-                        onClick={() => handleRequestSort(headCell)}
-                      >
-                        {headCell.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </TableSortLabel>
-                    </TableCell>
-                  ))}
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedDepartments.map((dept) => (
-                  <TableRow hover key={dept.department_id}>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Avatar sx={{ bgcolor: theme.palette.primary.light, mr: 1.5 }}>
-                          <SchoolIcon fontSize="small" />
-                        </Avatar>
-                        {dept.name}
-                      </Box>
-                    </TableCell>
-                    <TableCell><Chip label={dept.code} size="small" /></TableCell>
-                    <TableCell>{dept.head_teacher?.name || 'N/A'}</TableCell>
-                    <TableCell align="center">{dept.teacher_count || 0}</TableCell>
-                    <TableCell align="center">{dept.student_count || 0}</TableCell>
-                    <TableCell align="right">
-                      <Tooltip title="View Details">
-                        <IconButton size="small" onClick={() => { setSelectedDept(dept); setOpenDetailsDialog(true); }}>
-                          <VisibilityIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Edit">
-                        <IconButton size="small" onClick={() => { setSelectedDept(dept); setOpenFormDialog(true); }}>
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete">
-                        <IconButton size="small" color="error" onClick={() => { setSelectedDept(dept); setOpenDeleteDialog(true); }}>
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          <TablePagination
-            rowsPerPageOptions={[5, 10, 25]}
-            component="div"
-            count={sortedDepartments.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
           />
-        </Paper>
-      )}
+        </Box>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={openDeleteDialog}
-        onClose={() => setOpenDeleteDialog(false)}
-      >
-        <DialogTitle>Delete Department</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete department: {selectedDept?.name}? This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
-          <Button onClick={handleDelete} color="error" variant="contained">
-            Delete
-          </Button>
-        </DialogActions>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+        ) : (
+          <motion.div variants={containerVariants} initial="hidden" animate="visible">
+            {paginatedDepartments.length === 0 ? (
+              <EmptyState
+                title="No Departments Found"
+                message="Create a new department to get started."
+                action={() => setOpenFormDialog(true)}
+                actionLabel="Add Department"
+              />
+            ) : (
+              <>
+                <Grid container spacing={3}>
+                  {paginatedDepartments.map((dept, index) => {
+                    const studentCount = students.filter(s => s.department_id === dept.id).length;
+                    const headTeacher = teachers.find(t => t.id === dept.head_teacher);
+                    
+                    return (
+                      <Grid item key={dept.id} xs={12} sm={6} md={4}>
+                        <motion.div
+                          variants={itemVariants}
+                          style={{ height: '100%' }}
+                        >
+                          <Paper 
+                            sx={{ 
+                              borderRadius: 3, 
+                              height: '100%', 
+                              display: 'flex', 
+                              flexDirection: 'column',
+                              overflow: 'hidden',
+                              transition: 'all 0.2s ease-in-out',
+                              '&:hover': {
+                                boxShadow: theme.shadows[8],
+                                transform: 'translateY(-4px)'
+                              }
+                            }} 
+                            variant="outlined"
+                          >
+                            <Box sx={{ p: 3, textAlign: 'center', flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <Avatar sx={{ width: 72, height: 72, m: 'auto', mb: 2, bgcolor: 'primary.light', fontSize: '2.5rem', color: 'primary.contrastText' }}>
+                                  {dept.name ? dept.name.charAt(0).toUpperCase() : ''}
+                                </Avatar>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>{dept.name || 'Unnamed Department'}</Typography>
+                                <Typography variant="body2" color="text.secondary">{dept.code}</Typography>
+                            </Box>
+                            
+                            <Divider />
+
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, backgroundColor: 'action.hover' }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-around', flexGrow: 1 }}>
+                                <Box textAlign="center">
+                                  <Typography variant="caption" color="text.secondary">Head of Dept.</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 'medium', textTransform: 'capitalize' }}>{headTeacher ? headTeacher.name : 'N/A'}</Typography>
+                                </Box>
+                                <Box textAlign="center">
+                                  <Typography variant="caption" color="text.secondary">Students</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 'medium' }}>{studentCount}</Typography>
+                                </Box>
+                              </Box>
+                              <Box>
+                                <Tooltip title="Edit">
+                                  <IconButton size="small" onClick={() => { setSelectedDept(dept); setOpenFormDialog(true); }}>
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Delete">
+                                  <IconButton size="small" onClick={() => { setSelectedDept(dept); setOpenDeleteDialog(true); }}>
+                                    <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
+                            </Box>
+                          </Paper>
+                        </motion.div>
+                      </Grid>
+                    )
+                  })}
+                </Grid>
+                <TablePagination
+                  rowsPerPageOptions={[9, 18, 27]}
+                  component="div"
+                  count={filteredDepartments.length}
+                  rowsPerPage={rowsPerPage}
+                  page={page}
+                  onPageChange={handleChangePage}
+                  onRowsPerPageChange={handleChangeRowsPerPage}
+                  sx={{ mt: 3 }}
+                />
+              </>
+            )}
+          </motion.div>
+        )}
+      </Paper>
+
+      {/* Dialogs remain here */}
+      <Dialog open={openFormDialog} onClose={() => { if (!isSubmitting) { setOpenFormDialog(false); setSelectedDept(null); } }} maxWidth="md" fullWidth>
+        <DialogTitle>{selectedDept ? 'Edit Department' : 'Add New Department'}</DialogTitle>
+        <DialogContent><DepartmentForm onSubmit={handleSaveDepartment} initialData={selectedDept} isSubmitting={isSubmitting} teachers={teachers} /></DialogContent>
       </Dialog>
 
-      {openDetailsDialog && selectedDept && (
-        <DepartmentDetailsDialog
-          open={openDetailsDialog}
-          onClose={() => setOpenDetailsDialog(false)}
-          department={selectedDept}
-        />
-      )}
+      <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent><DialogContentText>Are you sure you want to delete the department "{selectedDept?.name}" (ID: {selectedDept?.id})? This action cannot be undone.</DialogContentText></DialogContent>
+        <DialogActions><Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button><Button onClick={handleDelete} color="error">Delete</Button></DialogActions>
+      </Dialog>
     </Container>
   );
 };
-
-
-const DepartmentDetailsDialog = ({ open, onClose, department }) => {
-  const theme = useTheme();
-  const [loading, setLoading] = useState(false);
-  const [details, setDetails] = useState(null);
-  const [teachers, setTeachers] = useState([]);
-  const [students, setStudents] = useState([]);
-
-  useEffect(() => {
-    if (open && department?.id) {
-      fetchDepartmentDetails();
-    }
-  }, [open, department]);
-
-  const fetchDepartmentDetails = async () => {
-    try {
-      setLoading(true);
-      // Fetch detailed department info
-      const deptResponse = await departmentApi.getById(department.id);
-      setDetails(deptResponse.data);
-      
-      // Fetch teachers in this department
-      const teachersResponse = await teacherApi.filter({ department_id: department.id });
-      setTeachers(teachersResponse.data || []);
-      
-      // Fetch students in this department
-      const studentsResponse = await departmentApi.getStudents(department.id);
-      setStudents(studentsResponse.data || []);
-    } catch (error) {
-      console.error('Error fetching department details:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!department) return null;
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  const renderDetailItem = (label, value) => (
-    <Box sx={{ mb: 2 }}>
-      <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-        {label}
-      </Typography>
-      <Typography variant="body1" gutterBottom>
-        {value || 'N/A'}
-      </Typography>
-    </Box>
-  );
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        borderBottom: `1px solid ${theme.palette.divider}`,
-        py: 2
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <SchoolIcon color="primary" />
-          <Typography variant="h6" component="div">
-            {department.name} Department
-          </Typography>
-        </Box>
-        <IconButton onClick={onClose} size="small">
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-      
-      <DialogContent dividers sx={{ py: 3 }}>
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <Grid container spacing={4}>
-            {/* Basic Info Column */}
-            <Grid item xs={12} md={6}>
-              <Typography variant="h6" gutterBottom sx={{ 
-                color: 'primary.main',
-                pb: 1,
-                borderBottom: `2px solid ${theme.palette.primary.light}`,
-                mb: 2
-              }}>
-                Department Information
-              </Typography>
-
-              <Box sx={{ mb: 3 }}>
-                <Box sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  mb: 2,
-                  p: 2,
-                  bgcolor: 'action.hover',
-                  borderRadius: 1
-                }}>
-                  <Avatar sx={{ 
-                    bgcolor: 'primary.main', 
-                    color: 'white',
-                    width: 60, 
-                    height: 60,
-                    mr: 2
-                  }}>
-                    {department.name?.charAt(0)}
-                  </Avatar>
-                  <Box>
-                    <Typography variant="h6">{department.name}</Typography>
-                    <Chip 
-                      label={`Code: ${department.code || 'N/A'}`} 
-                      size="small" 
-                      color="primary"
-                      variant="outlined"
-                      sx={{ mt: 0.5 }}
-                    />
-                  </Box>
-                </Box>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    {renderDetailItem('Head of Department', department.head_teacher?.name || 'Not Assigned')}
-                  </Grid>
-                  <Grid item xs={6}>
-                    {renderDetailItem('Contact Email', department.contact_email || 'N/A')}
-                  </Grid>
-                  <Grid item xs={6}>
-                    {renderDetailItem('Contact Phone', department.contact_phone || 'N/A')}
-                  </Grid>
-                  <Grid item xs={6}>
-                    {renderDetailItem('Established Date', formatDate(department.established_date))}
-                  </Grid>
-                </Grid>
-              </Box>
-
-              <Typography variant="h6" gutterBottom sx={{ 
-                color: 'primary.main',
-                pb: 1,
-                borderBottom: `2px solid ${theme.palette.primary.light}`,
-                mb: 2
-              }}>
-                Statistics
-              </Typography>
-
-              <Box sx={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
-                gap: 2,
-                mb: 3
-              }}>
-                <StatCard 
-                  icon={<PeopleIcon color="primary" />} 
-                  label="Teachers" 
-                  value={details?.teacher_count || 0} 
-                />
-                <StatCard 
-                  icon={<SchoolIcon color="secondary" />} 
-                  label="Students" 
-                  value={details?.student_count || 0} 
-                />
-                <StatCard 
-                  icon={<ClassIcon color="action" />} 
-                  label="Courses" 
-                  value={details?.course_count || 0} 
-                />
-              </Box>
-            </Grid>
-
-            {/* Teachers & Students Column */}
-            <Grid item xs={12} md={6}>
-              <Box sx={{ mb: 4 }}>
-                <Typography variant="h6" gutterBottom sx={{ 
-                  color: 'primary.main',
-                  pb: 1,
-                  borderBottom: `2px solid ${theme.palette.primary.light}`,
-                  mb: 2
-                }}>
-                  Teachers
-                </Typography>
-                
-                {teachers.length > 0 ? (
-                  <List dense>
-                    {teachers.slice(0, 5).map(teacher => (
-                      <ListItem key={teacher.id} sx={{ px: 0 }}>
-                        <ListItemAvatar>
-                          <Avatar src={teacher.avatar} alt={teacher.name}>
-                            <PersonIcon />
-                          </Avatar>
-                        </ListItemAvatar>
-                        <ListItemText 
-                          primary={teacher.name} 
-                          secondary={teacher.email || 'No email provided'}
-                        />
-                      </ListItem>
-                    ))}
-                    {teachers.length > 5 && (
-                      <Typography variant="body2" color="textSecondary" sx={{ mt: 1, textAlign: 'center' }}>
-                        +{teachers.length - 5} more teachers
-                      </Typography>
-                    )}
-                  </List>
-                ) : (
-                  <Typography variant="body2" color="textSecondary">
-                    No teachers assigned to this department.
-                  </Typography>
-                )}
-              </Box>
-
-              <Box>
-                <Typography variant="h6" gutterBottom sx={{ 
-                  color: 'primary.main',
-                  pb: 1,
-                  borderBottom: `2px solid ${theme.palette.primary.light}`,
-                  mb: 2
-                }}>
-                  Recent Students
-                </Typography>
-                
-                {students.length > 0 ? (
-                  <List dense>
-                    {students.slice(0, 5).map(student => (
-                      <ListItem key={student.id} sx={{ px: 0 }}>
-                        <ListItemAvatar>
-                          <Avatar src={student.avatar} alt={student.name}>
-                            <PersonIcon />
-                          </Avatar>
-                        </ListItemAvatar>
-                        <ListItemText 
-                          primary={student.name} 
-                          secondary={`ID: ${student.student_id || 'N/A'}`}
-                        />
-                      </ListItem>
-                    ))}
-                    {students.length > 5 && (
-                      <Typography variant="body2" color="textSecondary" sx={{ mt: 1, textAlign: 'center' }}>
-                        +{students.length - 5} more students
-                      </Typography>
-                    )}
-                  </List>
-                ) : (
-                  <Typography variant="body2" color="textSecondary">
-                    No students in this department.
-                  </Typography>
-                )}
-              </Box>
-            </Grid>
-
-            {/* Description Section */}
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom sx={{ 
-                color: 'primary.main',
-                pb: 1,
-                borderBottom: `2px solid ${theme.palette.primary.light}`,
-                mb: 2
-              }}>
-                About
-              </Typography>
-              <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.paper' }}>
-                <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
-                  {department.description || 'No description available for this department.'}
-                </Typography>
-              </Paper>
-            </Grid>
-          </Grid>
-        )}
-      </DialogContent>
-      
-      <DialogActions sx={{ 
-        justifyContent: 'space-between',
-        px: 3,
-        py: 2,
-        borderTop: `1px solid ${theme.palette.divider}`
-      }}>
-        <Box>
-          <Typography variant="caption" color="textSecondary">
-            Last updated: {formatDate(department.updated_at) || 'N/A'}
-          </Typography>
-        </Box>
-        <Box>
-          <Button 
-            onClick={onClose} 
-            color="primary"
-            variant="outlined"
-            sx={{ mr: 1 }}
-          >
-            Close
-          </Button>
-          <Button 
-            variant="contained" 
-            color="primary"
-            startIcon={<EditIcon />}
-            onClick={() => {
-              // Handle edit action
-            }}
-          >
-            Edit Department
-          </Button>
-        </Box>
-      </DialogActions>
-    </Dialog>
-  );
-};
-
-// Helper component for statistics cards
-const StatCard = ({ icon, label, value }) => (
-  <Paper 
-    elevation={0} 
-    sx={{ 
-      p: 2, 
-      textAlign: 'center',
-      border: '1px solid',
-      borderColor: 'divider',
-      borderRadius: 2,
-      '&:hover': {
-        boxShadow: 2,
-        transform: 'translateY(-2px)',
-        transition: 'all 0.2s ease-in-out'
-      }
-    }}
-  >
-    <Box sx={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      alignItems: 'center',
-      gap: 1
-    }}>
-      <Box sx={{ 
-        width: 48, 
-        height: 48, 
-        borderRadius: '50%', 
-        bgcolor: 'primary.light', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        color: 'primary.contrastText',
-        mb: 1
-      }}>
-        {icon}
-      </Box>
-      <Typography variant="h5" component="div" fontWeight="bold">
-        {value}
-      </Typography>
-      <Typography variant="body2" color="textSecondary">
-        {label}
-      </Typography>
-    </Box>
-  </Paper>
-);
 
 export default DepartmentSection;
