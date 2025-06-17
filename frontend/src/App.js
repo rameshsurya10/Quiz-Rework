@@ -6,7 +6,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import TeacherSection from './components/teachers/TeacherSection';
 import StudentSection from './components/students/StudentSection';
-import QuizSection from './components/quizzes/QuizSection';
+import QuizSection from './components/quiz/QuizSection';
 import ResultsSection from './components/results/ResultsSection';
 import ProfilePage from './components/profile/ProfilePage';
 import SettingsPage from './components/settings/SettingsPage';
@@ -116,7 +116,7 @@ function App() {
           } />
 
           {/* Quiz Management Route */}
-          <Route path="/quizzes" element={
+          <Route path="/quiz" element={
             <ProtectedRoute>
               <QuizSection />
             </ProtectedRoute>

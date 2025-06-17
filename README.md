@@ -1,6 +1,6 @@
 # AI-Powered Quiz Generator
 
-A modern web application that generates quizzes from PDF documents using AI.
+A modern web application that generates quiz from PDF documents using AI.
 
 ## Core Features
 
@@ -38,7 +38,7 @@ quiz-app/
 │   ├── accounts/          # User authentication & profiles
 │   ├── departments/       # Department & bulk student management
 │   ├── documents/         # PDF document handling
-│   ├── quizzes/           # Quiz management
+│   ├── quiz/           # Quiz management
 │   ├── ai_processing/     # AI question generation
 │   ├── notifications/     # Email & SMS notifications
 │   ├── migrations/        # Consolidated migrations
