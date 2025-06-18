@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from datetime import datetime, date
 from .models import Question
+import json
 
 User = get_user_model()
 
@@ -20,24 +21,64 @@ class FileUploadSerializer(serializers.Serializer):
     file_type = serializers.CharField(required=False)
     file_size = serializers.IntegerField(required=False)
 
-class CustomDateField(serializers.DateField):
+class CustomDateTimeField(serializers.DateTimeField):
     def to_internal_value(self, data):
+        # Simple approach - try a few common formats
+        formats = [
+            '%Y-%m-%dT%H:%M',       # 2025-07-01T10:30
+            '%Y-%m-%d %H:%M',       # 2025-07-01 10:30
+            '%Y-%m-%d',             # 2025-07-01
+        ]
+        
+        # Try standard formats first
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(data, fmt)
+                return timezone.make_aware(dt, timezone=timezone.get_current_timezone())
+            except (ValueError, TypeError):
+                pass
+        
+        # Special handling for AM/PM formats
         try:
-            # Parse the date string
-            parsed_date = datetime.strptime(data, '%Y-%m-%d').date()
-            # Create a naive datetime at midnight
-            naive_datetime = datetime.combine(parsed_date, datetime.min.time())
-            # Make it timezone aware
-            return timezone.make_aware(naive_datetime, timezone=timezone.get_current_timezone())
-        except (ValueError, TypeError):
-            raise serializers.ValidationError(
-                'Invalid date format. Please use YYYY-MM-DD format (e.g., 2025-07-12)'
-            )
-
-    def to_representation(self, value):
-        if isinstance(value, datetime):
-            return value.isoformat()
-        return super().to_representation(value)
+            # Handle formats like "2025-07-01T10:30AM" or "2025-07-01T10:30PM"
+            if 'T' in data:
+                date_part, time_part = data.split('T', 1)
+                
+                # Check for AM/PM indicators
+                time_only = time_part
+                am_pm = None
+                
+                if 'AM' in time_part:
+                    time_only = time_part.replace('AM', '')
+                    am_pm = 'AM'
+                elif 'PM' in time_part:
+                    time_only = time_part.replace('PM', '')
+                    am_pm = 'PM'
+                elif 'am' in time_part.lower():
+                    time_only = time_part.lower().replace('am', '')
+                    am_pm = 'AM'
+                elif 'pm' in time_part.lower():
+                    time_only = time_part.lower().replace('pm', '')
+                    am_pm = 'PM'
+                
+                if am_pm:
+                    # Make sure time_only is properly formatted (e.g., "10:30")
+                    if ':' not in time_only:
+                        # Handle case where time might be "1030" without a colon
+                        if len(time_only.strip()) == 4:
+                            time_only = f"{time_only[:2]}:{time_only[2:]}"
+                        else:
+                            raise ValueError("Invalid time format")
+                    
+                    # Format the datetime string
+                    formatted_data = f"{date_part} {time_only.strip()} {am_pm}"
+                    dt = datetime.strptime(formatted_data, '%Y-%m-%d %I:%M %p')
+                    return timezone.make_aware(dt, timezone=timezone.get_current_timezone())
+        except Exception as e:
+            print(f"Error parsing date: {str(e)}")
+        
+        # If all parsing attempts fail, raise an error
+        raise serializers.ValidationError("Invalid date format. Please use YYYY-MM-DDTHH:MM or YYYY-MM-DDTHH:MMAM/PM format.")
 
 
 class QuestionSerializer(serializers.ModelSerializer):
@@ -63,11 +104,11 @@ class QuizSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
-    quiz_date = serializers.DateTimeField()
+    quiz_date = CustomDateTimeField()
     created_at = serializers.DateTimeField(read_only=True)
     last_modified_at = serializers.DateTimeField(read_only=True)
     published_at = serializers.DateTimeField(required=False)
-    questions = QuestionSerializer(many=True, read_only=True)
+    questions = QuestionSerializer(many=True, read_only=True, source='quiz_questions')
     
     class Meta:
         model = Quiz
@@ -92,20 +133,26 @@ class QuizSerializer(serializers.ModelSerializer):
             'pages': {'required': False, 'default': []}
         }
 
-    # def validate_quiz_date(self, value):
-    #     """Validate that quiz_date is not in the past"""
-    #     if value < timezone.now():
-    #         raise serializers.ValidationError("Quiz date cannot be in the past")
-    #     return value
+    def to_representation(self, instance):
+        """Override to_representation to parse JSON in question field"""
+        data = super().to_representation(instance)
+        
+        # Process questions if they exist
+        if 'questions' in data and data['questions']:
+            for question in data['questions']:
+                # Parse JSON for mixed question types
+                if question.get('question_type') == 'mixed':
+                    try:
+                        question['parsed_json'] = json.loads(question['question'])
+                    except (json.JSONDecodeError, TypeError):
+                        question['parsed_json'] = None
+        
+        return data
 
     def validate_quiz_date(self, value):
         if timezone.is_naive(value):
             value = timezone.make_aware(value, timezone.get_current_timezone())
-
-        if value < timezone.now():
-            raise serializers.ValidationError("Quiz date cannot be in the past")
         return value
-
 
     def validate_pages(self, value):
         """Validate the pages format"""
@@ -141,7 +188,7 @@ class QuizCreateSerializer(serializers.Serializer):
     question_type = serializers.CharField(max_length=50, required=False, default='multiple_choice')
     pages = serializers.JSONField(required=False, default=list)
     department_id = serializers.IntegerField(required=False, allow_null=True)
-    quiz_date = CustomDateField(required=True)
+    quiz_date = CustomDateTimeField(required=True)
     uploadedfiles = serializers.JSONField(required=False, default=list)
 
     def create(self, validated_data):
@@ -171,14 +218,10 @@ class QuizCreateSerializer(serializers.Serializer):
             except Quiz.department.field.related_model.DoesNotExist:
                 raise serializers.ValidationError({'department_id': f"Department with id {department_id_payload} not found."})
         
-        # Handle quiz_date - convert date to datetime with timezone
-        quiz_date = validated_data.get('quiz_date')
-        # if quiz_date:
-        #     # Create a naive datetime at midnight
-        #     naive_datetime = date.combine(quiz_date, time.min)
-        #     # Make it timezone aware
-        #     quiz_data['quiz_date'] = date.make_aware(naive_datetime, timezone=timezone.get_current_timezone())
-
+        # Handle quiz_date - set it directly from validated_data
+        if 'quiz_date' in validated_data:
+            quiz_data['quiz_date'] = validated_data['quiz_date']
+        
         # Get the request user
         request = self.context.get('request')
         user = request.user if request and hasattr(request, 'user') else None
