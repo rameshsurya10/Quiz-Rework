@@ -1,6 +1,35 @@
 from rest_framework import serializers
 from .models import Department
+from students.models import Student
 # from accounts.models import Teacher, Student
+
+class StudentInDepartmentSerializer(serializers.ModelSerializer):
+    """A simple serializer for listing students within a department."""
+    class Meta:
+        model = Student
+        fields = ['student_id', 'name']
+
+class DepartmentWithStudentsSerializer(serializers.ModelSerializer):
+    """
+    A department serializer that includes a list of its students
+    and a count of them.
+    """
+    students = serializers.SerializerMethodField()
+    student_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Department
+        fields = [
+            'department_id', 'name', 'code', 'description', 
+            'student_count', 'students'
+        ]
+
+    def get_student_count(self, obj):
+        return Student.objects.filter(department_id=obj.department_id, is_deleted=False).count()
+
+    def get_students(self, obj):
+        students = Student.objects.filter(department_id=obj.department_id, is_deleted=False)
+        return StudentInDepartmentSerializer(students, many=True).data
 
 class DepartmentSerializer(serializers.ModelSerializer):
     """Basic Department serializer matching the model fields"""

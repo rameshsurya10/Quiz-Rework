@@ -7,6 +7,7 @@ app_name = 'teacher'
 # Create a router and register our viewsets
 router = DefaultRouter()
 router.register(r'teachers', TeacherViewSet, basename='teacher')
+# router.register(r'', TeacherViewSet, basename='teacher')
 
 urlpatterns = [
     # Include the router URLs
