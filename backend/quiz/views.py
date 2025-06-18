@@ -511,13 +511,25 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         processed_questions = []
         
         for question in questions:
-            if question.question_type == 'mixed':
+            if question.question_type == 'mixed' or question.question_type == 'true_false' or question.question_type == 'mcq':
                 try:
                     # Try to parse the JSON for mixed question types
                     parsed_json = json.loads(question.question)
-                    # Add the parsed questions directly to the response
-                    data['questions'] = parsed_json
-                    return Response(data)
+                    
+                    # Check if the parsed result is a list or a single object
+                    if isinstance(parsed_json, list):
+                        # For API endpoint /api/quiz/<id>/, return just the parsed questions array
+                        if request.path.endswith(f'/{instance.quiz_id}/'):
+                            return Response(parsed_json)
+                        # Otherwise include it in the full response
+                        data['questions'] = parsed_json
+                        return Response(data)
+                    else:
+                        # If it's a single object, wrap it in a list
+                        if request.path.endswith(f'/{instance.quiz_id}/'):
+                            return Response([parsed_json])
+                        data['questions'] = [parsed_json]
+                        return Response(data)
                 except (json.JSONDecodeError, TypeError):
                     # If parsing fails, add the raw question
                     question_data = {
