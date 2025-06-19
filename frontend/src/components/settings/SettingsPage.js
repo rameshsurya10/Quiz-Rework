@@ -1,179 +1,270 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import FullLayout from '../FullLayout';
 import {
-  Container, Box, Typography, Paper, Grid, Switch, FormControlLabel, FormGroup, Button, Divider, useTheme, Alert
+  Container, Box, Typography, Paper, Grid, Switch, FormControlLabel, FormGroup, Button, Divider, useTheme, Tabs, Tab, TextField, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Select, MenuItem, InputLabel, FormControl, RadioGroup, Radio, Card, CardContent, CardActions, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Link
 } from '@mui/material';
 import { PageHeader } from '../common';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import PaletteIcon from '@mui/icons-material/Palette';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import SaveIcon from '@mui/icons-material/Save';
-import { motion } from 'framer-motion';
-import { settingsApi } from '../../services/api';
+import SecurityIcon from '@mui/icons-material/Security';
+import LanguageIcon from '@mui/icons-material/Language';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import DownloadIcon from '@mui/icons-material/Download';
 import { useSnackbar } from '../../contexts/SnackbarContext';
+import { ThemeContext } from '../../contexts/ThemeContext';
+import { getTimezoneOptions } from '../../utils/localeUtils';
+
+const TabPanel = (props) => {
+  const { children, value, index, ...other } = props;
+  return (
+    <div role="tabpanel" hidden={value !== index} id={`settings-tabpanel-${index}`} aria-labelledby={`settings-tab-${index}`} {...other}>
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    </div>
+  );
+};
+
+// Mock Data for Billing
+const billingHistory = [
+  { date: '2024-07-01', details: 'Professional Plan - Monthly', amount: '$48.00', id: 'inv-001' },
+  { date: '2024-06-01', details: 'Professional Plan - Monthly', amount: '$48.00', id: 'inv-002' },
+  { date: '2024-05-01', details: 'Beginner Plan - Monthly', amount: '$10.00', id: 'inv-003' },
+];
+
+const defaultSettings = {
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  landingPage: '/dashboard',
+  emailNotifications: true, pushNotifications: false, quizReminders: true, gradeNotifications: true, notificationFrequency: 'instant',
+  highContrastMode: false, autoRenew: true,
+};
 
 const SettingsPage = () => {
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
-  const [settings, setSettings] = useState({
-    emailNotifications: true,
-    pushNotifications: false,
-    darkMode: false,
-  });
+  const { mode, toggleTheme, highContrastMode, toggleHighContrast, fontSize, changeFontSize } = useContext(ThemeContext);
+  const [tabValue, setTabValue] = useState(0);
+  const [isConfirmOpen, setConfirmOpen] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState('professional');
+
+  // Options lists generated once
+  const timezoneOptions = React.useMemo(getTimezoneOptions, []);
+
+  const [settings, setSettings] = useState(defaultSettings);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      setIsLoading(true);
-      try {
-        const response = await settingsApi.getSettings();
-        if (response.data) {
-          // Map backend snake_case to frontend camelCase
-          setSettings({
-            emailNotifications: response.data.email_notifications,
-            pushNotifications: response.data.push_notifications,
-            darkMode: response.data.dark_mode
-          });
-          console.log('Settings loaded successfully');
-        } else {
-          // Use defaults if no data
-          setSettings({ emailNotifications: true, pushNotifications: false, darkMode: false });
-        }
-      } catch (error) {
-        console.error('Failed to fetch settings:', error);
-        showSnackbar('Failed to load settings. Please try again or save new settings.', 'error');
-        // Keep default settings or previously loaded ones if error on subsequent fetch
-      } finally {
-        setIsLoading(false);
+    try {
+      const savedSettings = localStorage.getItem('appSettings');
+      if (savedSettings) {
+        setSettings(JSON.parse(savedSettings));
       }
-    };
-    fetchSettings();
-  }, [showSnackbar]);
+    } catch (error) {
+      console.error('Failed to load settings from localStorage', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Update real-time clock each second in selected timezone
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, [settings.timezone]);
+
+  const handleTabChange = (event, newValue) => setTabValue(newValue);
 
   const handleChange = (event) => {
-    setSettings({
-      ...settings,
-      [event.target.name]: event.target.checked,
-    });
+    const { name, value, type, checked } = event.target;
+    setSettings(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
-  const handleSaveSettings = async () => {
+  const handleSaveSettings = () => {
     setIsSaving(true);
     try {
-      // Map frontend camelCase to backend snake_case
-      const backendSettings = {
-        email_notifications: settings.emailNotifications,
-        push_notifications: settings.pushNotifications,
-        dark_mode: settings.darkMode
-      };
-      
-      await settingsApi.updateSettings(backendSettings);
-      console.log('Settings saved successfully:', settings);
+      localStorage.setItem('appSettings', JSON.stringify(settings));
       showSnackbar('Settings saved successfully!', 'success');
     } catch (error) {
-      console.error('Failed to save settings:', error);
-      showSnackbar(`Failed to save settings: ${error.response?.data?.detail || error.message || 'Please try again.'}`, 'error');
+      showSnackbar(`Failed to save settings: ${error.message}`, 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const sectionPaperStyles = {
-    p: { xs: 2, md: 3 },
-    mb: 3,
-    borderRadius: '12px',
-    boxShadow: theme.shadows[2],
+  const handleDeleteAccount = () => {
+    setConfirmOpen(false);
+    showSnackbar('Account deletion initiated.', 'warning');
   };
 
   return (
     <FullLayout>
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <PageHeader
-          title="Application Settings"
-          subtitle="Manage your notification preferences, appearance, and account settings."
-        />
+        <PageHeader title="Settings" subtitle="Customize your application experience."/>
+        <Paper sx={{ borderRadius: '12px', boxShadow: theme.shadows[3] }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs value={tabValue} onChange={handleTabChange} aria-label="settings tabs" variant="scrollable" scrollButtons="auto">
+              <Tab icon={<CreditCardIcon />} iconPosition="start" label="Subscription & Billing" />
+              <Tab icon={<LanguageIcon />} iconPosition="start" label="General" />
+              <Tab icon={<NotificationsIcon />} iconPosition="start" label="Notifications" />
+              <Tab icon={<PaletteIcon />} iconPosition="start" label="Appearance" />
+              <Tab icon={<SecurityIcon />} iconPosition="start" label="Security" />
+            </Tabs>
+          </Box>
 
-        {isLoading && (
-           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
-            <Typography>Loading settings...</Typography>
-           </Box>
-        )} 
+          {/* Subscription & Billing Tab */}
+          <TabPanel value={tabValue} index={0}>
+            <Typography variant="h6" gutterBottom>Plan</Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ borderColor: currentPlan === 'beginner' ? 'primary.main' : 'grey.300', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h5">Beginner</Typography>
+                    <Typography variant="h4" color="primary">$10/month</Typography>
+                    <Typography variant="body2" color="text.secondary">30 days remaining</Typography>
+                  </CardContent>
+                  <CardActions>
+                    {currentPlan === 'beginner' ? <Chip label="Current Plan" color="success" /> : <Button onClick={() => setCurrentPlan('beginner')}>Downgrade</Button>}
+                  </CardActions>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ borderColor: currentPlan === 'professional' ? 'primary.main' : 'grey.300', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h5">Professional</Typography>
+                    <Typography variant="h4" color="primary">$48/month</Typography>
+                    <Typography variant="body2" color="text.secondary">365 days</Typography>
+                  </CardContent>
+                  <CardActions>
+                    {currentPlan === 'professional' ? <Chip label="Current Plan" color="success" /> : <Button onClick={() => setCurrentPlan('professional')}>Upgrade</Button>}
+                  </CardActions>
+                </Card>
+              </Grid>
+            </Grid>
+            <Divider sx={{ my: 3 }} />
+            <FormControlLabel control={<Switch checked={settings.autoRenew} onChange={handleChange} name="autoRenew" />} label="Enable auto-renew" />
+            <Divider sx={{ my: 3 }} />
+            <Typography variant="h6" gutterBottom>Payment Method</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6} md={4}>
+                <Card variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <CreditCardIcon color="primary"/>
+                  <Box> <Typography variant="body1">Credit Card</Typography> <Typography variant="body2">**** **** **** 3542</Typography> </Box>
+                </Card>
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <Button variant="outlined" startIcon={<AddCircleOutlineIcon />} sx={{ height: '100%', width: '100%' }}>Add New Card</Button>
+              </Grid>
+            </Grid>
+            <Divider sx={{ my: 3 }} />
+            <Typography variant="h6" gutterBottom>Billing History</Typography>
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead> <TableRow> <TableCell>Date</TableCell> <TableCell>Details</TableCell> <TableCell align="right">Amount</TableCell> <TableCell align="right">Download</TableCell> </TableRow> </TableHead>
+                <TableBody>
+                  {billingHistory.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>{row.date}</TableCell>
+                      <TableCell>{row.details}</TableCell>
+                      <TableCell align="right">{row.amount}</TableCell>
+                      <TableCell align="right">
+                        <Link href="#" underline="always"><DownloadIcon fontSize="small"/> Invoice</Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </TabPanel>
 
-        {!isLoading && (
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          {/* Notification Settings */}
-          <Paper sx={sectionPaperStyles}>
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', fontWeight: 'medium' }}>
-              <NotificationsIcon sx={{ mr: 1, color: theme.palette.primary.main }} /> Notification Preferences
+          {/* General Tab */}
+          <TabPanel value={tabValue} index={1}>
+            <Typography variant="h6" gutterBottom>
+              General Settings
             </Typography>
-            <Divider sx={{ my: 2 }} />
+            
+            <Grid container spacing={3}>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth margin="normal">
+                  <InputLabel>Timezone</InputLabel>
+                  <Select
+                    name="timezone"
+                    value={settings.timezone}
+                    onChange={handleChange}
+                    label="Timezone"
+                  >
+                    {timezoneOptions.map(option => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {settings.timezone && (
+                  <Typography variant="caption" sx={{ mt: 1, ml: 1, color: 'text.secondary', display: 'block' }}>
+                    Current local time: {currentTime.toLocaleTimeString(navigator.language, { timeZone: settings.timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </Typography>
+                )}
+              </Grid>
+              <Grid item xs={12} md={6}><FormControl fullWidth margin="normal"><InputLabel>Default Landing Page</InputLabel><Select name="landingPage" value={settings.landingPage} label="Default Landing Page" onChange={handleChange}><MenuItem value="/dashboard">Dashboard</MenuItem><MenuItem value="/quizzes">My Quizzes</MenuItem><MenuItem value="/reports">Reports</MenuItem></Select></FormControl></Grid>
+            </Grid>
+          </TabPanel>
+
+          {/* Notifications Tab */}
+          <TabPanel value={tabValue} index={2}>
+            <Typography variant="h6" gutterBottom>Notification Preferences</Typography>
             <FormGroup>
-              <FormControlLabel
-                control={<Switch checked={settings.emailNotifications} onChange={handleChange} name="emailNotifications" disabled={isSaving || isLoading} />}
-                label="Email Notifications"
-                sx={{ mb: 1 }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ pl: 4, mb:1 }}>
-                Receive important updates and summaries via email.
-              </Typography>
-              <FormControlLabel
-                control={<Switch checked={settings.pushNotifications} onChange={handleChange} name="pushNotifications" disabled={isSaving || isLoading} />}
-                label="Push Notifications"
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ pl: 4 }}>
-                Get real-time alerts directly on your device (if supported).
-              </Typography>
+              <FormControlLabel control={<Switch checked={settings.emailNotifications} onChange={handleChange} name="emailNotifications" />} label="Email Notifications" />
+              <FormControlLabel control={<Switch checked={settings.pushNotifications} onChange={handleChange} name="pushNotifications" />} label="Push Notifications" />
+              <Divider sx={{ my: 2 }} /><Typography variant="subtitle1" gutterBottom>Quiz Alerts</Typography>
+              <FormControlLabel control={<Switch checked={settings.quizReminders} onChange={handleChange} name="quizReminders" />} label="Upcoming Quiz Reminders" />
+              <FormControlLabel control={<Switch checked={settings.gradeNotifications} onChange={handleChange} name="gradeNotifications" />} label="Grade Release Notifications" />
+              <Divider sx={{ my: 2 }} /><FormControl component="fieldset"><Typography variant="subtitle1" gutterBottom>Notification Frequency</Typography><RadioGroup row name="notificationFrequency" value={settings.notificationFrequency} onChange={handleChange}><FormControlLabel value="instant" control={<Radio />} label="Instant" /><FormControlLabel value="daily" control={<Radio />} label="Daily Digest" /><FormControlLabel value="weekly" control={<Radio />} label="Weekly Summary" /></RadioGroup></FormControl>
             </FormGroup>
-          </Paper>
+          </TabPanel>
 
-          {/* Appearance Settings */}
-          <Paper sx={sectionPaperStyles}>
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', fontWeight: 'medium' }}>
-              <PaletteIcon sx={{ mr: 1, color: theme.palette.secondary.main }} /> Appearance
-            </Typography>
-            <Divider sx={{ my: 2 }} />
+          {/* Appearance Tab */}
+          <TabPanel value={tabValue} index={3}>
+            <Typography variant="h6" gutterBottom>Appearance</Typography>
             <FormGroup>
-              <FormControlLabel
-                control={<Switch checked={settings.darkMode} onChange={handleChange} name="darkMode" disabled={isSaving || isLoading} />}
-                label="Dark Mode"
-              />
-               <Typography variant="caption" color="text.secondary" sx={{ pl: 4 }}>
-                Toggle between light and dark themes for the application.
-              </Typography>
+              <FormControlLabel control={<Switch checked={mode === 'dark'} onChange={toggleTheme} />} label="Dark Mode" />
+              <FormControlLabel control={<Switch checked={highContrastMode} onChange={toggleHighContrast} />} label="High Contrast Mode" />
             </FormGroup>
-            {/* Add more appearance settings here if needed, e.g., theme color picker */}
-          </Paper>
+            <FormControl fullWidth margin="normal" sx={{ mt: 2 }}><InputLabel>Font Size</InputLabel><Select value={fontSize} label="Font Size" onChange={changeFontSize}><MenuItem value="small">Small</MenuItem><MenuItem value="medium">Medium</MenuItem><MenuItem value="large">Large</MenuItem></Select></FormControl>
+          </TabPanel>
 
-          {/* Account Settings */}
-          <Paper sx={sectionPaperStyles}>
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', fontWeight: 'medium' }}>
-              <AccountCircleIcon sx={{ mr: 1, color: theme.palette.error.main }} /> Account Management
-            </Typography>
-            <Divider sx={{ my: 2 }} />
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
-              <Button variant="outlined" color="info" onClick={() => console.log('Export Data clicked')} disabled={isSaving || isLoading}>
-                Export My Data
-              </Button>
-              <Button variant="outlined" color="error" onClick={() => console.log('Delete Account clicked')} disabled={isSaving || isLoading}>
-                Delete My Account
-              </Button>
+          {/* Security Tab */}
+          <TabPanel value={tabValue} index={4}>
+            <Typography variant="h6" gutterBottom>Security Settings</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Button variant="outlined">Change Password</Button>
+              <Button variant="outlined">Setup Two-Factor Authentication</Button>
+              <Divider sx={{ my: 1 }} />
+              <Button variant="outlined" color="info">Export My Data</Button>
+              <Button variant="outlined" color="error" onClick={() => setConfirmOpen(true)}>Delete My Account</Button>
             </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-              Be careful with these actions. Deleting your account is irreversible.
-            </Typography>
-          </Paper>
+          </TabPanel>
 
-          <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
+          <Divider />
+          <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end' }}>
             <Button variant="contained" color="primary" startIcon={<SaveIcon />} onClick={handleSaveSettings} disabled={isSaving || isLoading}>
-              {isSaving ? 'Saving...' : 'Save All Settings'}
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </Box>
-        </motion.div>
-        )}
-
+        </Paper>
       </Container>
+
+      <Dialog open={isConfirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Confirm Account Deletion</DialogTitle>
+        <DialogContent><DialogContentText>Are you sure you want to delete your account? This action is permanent and cannot be undone.</DialogContentText></DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)} color="primary">Cancel</Button>
+          <Button onClick={handleDeleteAccount} color="error" autoFocus>Confirm Deletion</Button>
+        </DialogActions>
+      </Dialog>
     </FullLayout>
   );
 };

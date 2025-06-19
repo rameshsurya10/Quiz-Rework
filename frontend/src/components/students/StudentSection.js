@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Grid, Typography, Card, CardContent, Box,
   Button, TextField, Dialog, DialogActions,
-  DialogContent, DialogTitle, IconButton,
+  DialogContent, DialogContentText, DialogTitle, IconButton,
   FormControl, InputLabel, MenuItem, Select,
   Snackbar, Alert, useTheme, useMediaQuery, Container,
   CircularProgress, Table, TableBody, TableCell, TableContainer,
@@ -28,6 +28,7 @@ import { studentApi, departmentApi, teacherApi } from '../../services/api';
 import { format, parseISO } from 'date-fns';
 import StudentForm from './StudentForm';
 import SummaryCard from '../common/SummaryCard';
+import StudentDetailsDashboard from './StudentDetailsDashboard';
 
 // Styled Components
 const DashboardStyledCard = styled(Card)(({ theme }) => ({
@@ -73,6 +74,10 @@ const StudentSection = ({ initialOpenDialog = false }) => {
   const [selectedDept, setSelectedDept] = useState('all');
   
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+  const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const showMessage = (message, severity = 'success') => {
     setSnackbar({ open: true, message, severity });
@@ -156,15 +161,29 @@ const StudentSection = ({ initialOpenDialog = false }) => {
     setViewingStudent(null);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this student?')) {
-      try {
-        await studentApi.delete(id);
-        showMessage('Student deleted successfully.');
-        fetchData();
-      } catch (error) {
-        showMessage('Failed to delete student.', 'error');
-      }
+  const handleDeleteClick = (student) => {
+    setStudentToDelete(student);
+    setOpenDeleteConfirm(true);
+  };
+
+  const handleCloseDeleteConfirm = () => {
+    setOpenDeleteConfirm(false);
+    setStudentToDelete(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!studentToDelete) return;
+    setIsDeleting(true);
+    try {
+      await studentApi.delete(studentToDelete.id);
+      showMessage('Student deleted successfully.');
+      fetchData(); // Refetch data to update the list
+    } catch (error) {
+      console.error('Failed to delete student:', error);
+      showMessage(error.response?.data?.message || 'Failed to delete student.', 'error');
+    } finally {
+      setIsDeleting(false);
+      handleCloseDeleteConfirm();
     }
   };
 
@@ -185,11 +204,11 @@ const StudentSection = ({ initialOpenDialog = false }) => {
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Typography variant="h4" gutterBottom>Student Management</Typography>
 
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      {/* <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={4}><SummaryCard icon={<SchoolIcon />} title="Total Students" value={students.length} color={theme.palette.primary.main} index={0} /></Grid>
         <Grid item xs={12} sm={4}><SummaryCard icon={<PeopleIcon />} title="Total Teachers" value={teachers.length} color={theme.palette.secondary.main} index={1} /></Grid>
         <Grid item xs={12} sm={4}><SummaryCard icon={<ClassIcon />} title="Total Departments" value={departments.length} color={theme.palette.success.main} index={2} /></Grid>
-      </Grid>
+      </Grid> */}
       
       <Card sx={{ mb: 2 }}>
         <CardContent>
@@ -267,7 +286,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
                       <IconButton onClick={() => handleDialogOpen(student)}><EditIcon /></IconButton>
                     </Tooltip>
                     <Tooltip title="Delete">
-                      <IconButton onClick={() => handleDelete(student.id)}><DeleteIcon /></IconButton>
+                      <IconButton onClick={() => handleDeleteClick(student)} disabled={isDeleting}><DeleteIcon /></IconButton>
                     </Tooltip>
                   </TableCell>
                 </TableRow>
@@ -306,8 +325,34 @@ const StudentSection = ({ initialOpenDialog = false }) => {
         </DialogContent>
       </Dialog>
 
-      {/* View Dialog */}
-      {viewingStudent && (
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={openDeleteConfirm}
+        onClose={handleCloseDeleteConfirm}
+      >
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete student "{studentToDelete?.name}"? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteConfirm}>Cancel</Button>
+          <Button onClick={handleConfirmDelete} color="error" disabled={isDeleting}>
+            {isDeleting ? <CircularProgress size={24} /> : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* View Dialog - New Dashboard */}
+      <Dialog open={openViewDialog} onClose={handleCloseViewDialog} maxWidth="lg" fullWidth>
+        {viewingStudent && 
+          <StudentDetailsDashboard student={viewingStudent} onClose={handleCloseViewDialog} />
+        }
+      </Dialog>
+
+      {/* Old View Dialog - Commented out */}
+      {/* {viewingStudent && (
         <Dialog open={openViewDialog} onClose={handleCloseViewDialog} maxWidth="sm" fullWidth>
           <DialogTitle>Student Details</DialogTitle>
           <DialogContent>
@@ -323,7 +368,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
             <Button onClick={handleCloseViewDialog}>Close</Button>
           </DialogActions>
         </Dialog>
-      )}
+      )} */}
 
       <Snackbar
         open={snackbar.open}

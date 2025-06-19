@@ -5,7 +5,7 @@ import TeacherForm from './TeacherForm';
 import { 
   Grid, Typography, Box, 
   Button, TextField, Dialog, DialogActions, 
-  DialogContent, DialogTitle, IconButton, 
+  DialogContent, DialogContentText, DialogTitle, IconButton, 
   FormControl, FormHelperText, InputLabel, MenuItem, Select,
   Snackbar, Alert, useTheme, useMediaQuery, Container,
   CircularProgress, InputAdornment, Avatar, Paper, Divider,
@@ -14,7 +14,8 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Tooltip
+  Tooltip,
+  Chip
 } from "@mui/material";
 import CloseIcon from '@mui/icons-material/Close';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -53,6 +54,11 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [departments, setDepartments] = useState([]);
   const [viewTeacher, setViewTeacher] = useState(null);
+  const [editingTeacher, setEditingTeacher] = useState(null);
+  const [isFetchingDetails, setIsFetchingDetails] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [teacherToDelete, setTeacherToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [stats, setStats] = useState({
     totalTeachers: 0,
     departments: 0,
@@ -71,15 +77,14 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
 
       const processedTeachers = teachersData.map(teacher => {
         const userData = teacher.user || teacher;
-        const department = teacher.department || (Array.isArray(teacher.departments) && teacher.departments[0]) || { id: null, name: 'Unassigned' };
-        
         return {
           id: teacher.id,
+          uuid: teacher.uuid,
+          teacher_id: teacher.teacher_id,
           name: teacher.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
           email: userData.email || '',
           phone: userData.phone || userData.phone_number || '',
-          department: typeof department === 'string' ? department : department.name,
-          departmentId: department.id,
+          departments: Array.isArray(teacher.departments) ? teacher.departments : [],
           created_at: teacher.created_at || userData.date_joined,
           avatar: userData.profile?.avatar,
           student_count: teacher.student_count || 0,
@@ -114,14 +119,16 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
     setSnackbar({ open: true, message, severity });
   };
 
-  const handleTeacherCreateSuccess = async () => {
-    showMessage('Teacher added successfully!');
+    const handleTeacherCreateSuccess = async () => {
+    showMessage(`Teacher ${editingTeacher ? 'updated' : 'added'} successfully!`, 'success');
     setOpenDialog(false);
+    setEditingTeacher(null);
     await fetchTeacherData();
   };
 
-  const handleTeacherCreateCancel = () => {
+    const handleTeacherCreateCancel = () => {
     setOpenDialog(false);
+    setEditingTeacher(null);
   };
 
   const handleOpenViewDialog = (teacher) => {
@@ -130,6 +137,59 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
 
   const handleCloseViewDialog = () => {
     setViewTeacher(null);
+  };
+
+  const handleOpenEditDialog = async (teacher) => {
+    if (!teacher || !teacher.teacher_id) {
+      showMessage('Cannot edit teacher: Invalid data provided.', 'error');
+      return;
+    }
+    setIsFetchingDetails(true);
+    try {
+      const response = await teacherApi.get(teacher.teacher_id);
+      setEditingTeacher(response.data); // The full teacher object
+      setOpenDialog(true);
+    } catch (error) {
+      console.error('Failed to fetch teacher details:', error);
+      showMessage('Failed to load teacher details for editing.', 'error');
+    } finally {
+      setIsFetchingDetails(false);
+    }
+  };
+
+  const handleOpenDeleteDialog = (teacher) => {
+    setTeacherToDelete(teacher);
+    setOpenDeleteDialog(true);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    setOpenDeleteDialog(false);
+    setTeacherToDelete(null);
+  };
+
+  const handleDeleteTeacher = async () => {
+    const teacherId = teacherToDelete?.teacher_id;
+
+    if (!teacherId) {
+      console.error('CRITICAL: Could not delete teacher. The `teacher_id` is missing from the teacher object:', teacherToDelete);
+      showMessage('Could not delete teacher: ID is missing.', 'error');
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await teacherApi.delete(teacherId);
+      showMessage('Teacher deleted successfully!', 'success');
+      handleCloseDeleteDialog();
+      handleCloseViewDialog(); // Also close the details view
+      await fetchTeacherData();
+    } catch (error) {
+      console.error(`Failed to delete teacher with teacher_id ${teacherId}:`, error);
+      const errorMessage = error.response?.data?.detail || 'Failed to delete teacher. Please try again.';
+      showMessage(errorMessage, 'error');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const filteredTeachers = [...teacherData]; // Keep the data structure but remove filtering
@@ -236,7 +296,7 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
             <Grid container spacing={3}>
               <AnimatePresence>
                 {filteredTeachers.map((teacher, index) => (
-                  <Grid item xs={12} sm={6} md={4} lg={3} key={teacher.id}>
+                  <Grid item xs={12} sm={6} md={4} lg={3} key={teacher.uuid || teacher.teacher_id}>
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -267,9 +327,17 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                           <Typography variant="h6" component="div" noWrap>
                             {teacher.name}
                           </Typography>
-                          <Typography variant="body2" color="text.secondary" gutterBottom>
-                            {departments.find(d => d.id === teacher.departmentId)?.name || teacher.department || 'No Department'}
-                          </Typography>
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 0.5, mt: 1, mb: 1, minHeight: '24px' }}>
+                            {teacher.departments && teacher.departments.length > 0 ? (
+                              teacher.departments.map(dept => (
+                                <Chip key={dept.department_id} label={dept.name} size="small" />
+                              ))
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">
+                                No Department Assigned
+                              </Typography>
+                            )}
+                          </Box>
                           <Box sx={{ display: { xs: 'none', sm: 'flex' }, justifyContent: 'center', gap: 1, mt: 1 }}>
                             <IconButton size="small" color="primary" component="a" href={`mailto:${teacher.email}`} disabled={!teacher.email} onClick={(e) => e.stopPropagation()}>
                               <EmailIcon fontSize="small" />
@@ -280,19 +348,34 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                           </Box>
                         </Box>
                         <Divider />
-                        <Box sx={{ display: 'flex', justifyContent: 'space-around', p: 2, backgroundColor: 'action.hover' }}>
-                          <Box textAlign="center">
-                            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>Created</Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                              {teacher.created_at ? new Date(teacher.created_at).toLocaleDateString('en-CA') : 'N/A'}
-                            </Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, backgroundColor: 'action.hover' }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-around', flexGrow: 1 }}>
+                            <Box textAlign="center">
+                              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>Created</Typography>
+                              <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                {teacher.created_at ? new Date(teacher.created_at).toLocaleDateString('en-CA') : 'N/A'}
+                              </Typography>
+                            </Box>
+                            <Box textAlign="center">
+                              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>Students</Typography>
+                              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+                                {teacher.student_count}
+                              </Typography>
+                            </Box>
                           </Box>
-                          <Box textAlign="center">
-                            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>Students</Typography>
-                            <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-                              {teacher.department_student_count || 0}
-                            </Typography>
+                          <Box>
+                            <Tooltip title="Edit">
+                              <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleOpenEditDialog(teacher); }} disabled={isFetchingDetails && editingTeacher?.teacher_id === teacher.teacher_id}>
+                                {isFetchingDetails && editingTeacher?.teacher_id === teacher.teacher_id ? <CircularProgress size={20} /> : <EditIcon fontSize="small" />}
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete">
+                              <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleOpenDeleteDialog(teacher); }}>
+                                <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
+                              </IconButton>
+                            </Tooltip>
                           </Box>
+
                         </Box>
                       </Paper>
                     </motion.div>
@@ -304,16 +387,16 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
         </Box>
 
         {/* Add Teacher Dialog */}
-        <Dialog 
+                <Dialog 
           open={openDialog} 
-          onClose={() => setOpenDialog(false)}
+          onClose={handleTeacherCreateCancel}
           fullWidth
           maxWidth="md"
           PaperProps={{ sx: { maxHeight: '90vh' } }}
         >
           <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            Add New Teacher
-            <IconButton onClick={() => setOpenDialog(false)}>
+            {editingTeacher ? 'Edit Teacher' : 'Add New Teacher'}
+            <IconButton onClick={handleTeacherCreateCancel}>
               <CloseIcon />
             </IconButton>
           </DialogTitle>
@@ -321,9 +404,25 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
             <TeacherForm 
               onSuccess={handleTeacherCreateSuccess}
               onCancel={handleTeacherCreateCancel}
-              departments={departments}
+              teacher={editingTeacher}
             />
           </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={openDeleteDialog} onClose={handleCloseDeleteDialog}>
+          <DialogTitle>Confirm Deletion</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Are you sure you want to delete the teacher "{teacherToDelete?.name}"? This action cannot be undone.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDeleteDialog} disabled={isDeleting}>Cancel</Button>
+            <Button onClick={handleDeleteTeacher} color="error" disabled={isDeleting}>
+              {isDeleting ? <CircularProgress color="inherit" size={24} /> : 'Delete'}
+            </Button>
+          </DialogActions>
         </Dialog>
 
         {/* View Teacher Dialog */}
@@ -341,7 +440,7 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Delete">
-                    <IconButton size="small" onClick={() => { /* TODO: Handle Delete */ }}>
+                    <IconButton size="small" onClick={() => handleOpenDeleteDialog(viewTeacher)} >
                       <DeleteIcon sx={{ color: 'error.main' }} />
                     </IconButton>
                   </Tooltip>

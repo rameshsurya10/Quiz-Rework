@@ -18,29 +18,31 @@ import {
 } from '@mui/material';
 import { departmentApi, teacherApi } from '../../services/api';
 
-const TeacherForm = ({ onSuccess, onCancel }) => {
+const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
+  const isEditMode = Boolean(teacher && teacher.teacher_id);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    department_ids: [], // Will store array of department names for the payload
+    department_ids: [], // Always use IDs in state
     join_date: '',
   });
-  const [departments, setDepartments] = useState([]);
+
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingDepartments, setIsFetchingDepartments] = useState(false);
+  const [allDepartments, setAllDepartments] = useState([]);
   const [departmentSelectOpen, setDepartmentSelectOpen] = useState(false);
 
+  // Effect to fetch all departments once on mount
   useEffect(() => {
     const fetchDepartments = async () => {
       setIsFetchingDepartments(true);
       try {
-        // Assuming departmentApi.getAll() or similar exists as per memory, or use direct path
-        // const response = await apiService.departmentApi.getAll(); 
         const response = await departmentApi.getAll();
         const fetchedDepartments = response.data?.results || response.data || [];
-        setDepartments(fetchedDepartments);
+        setAllDepartments(fetchedDepartments);
       } catch (error) {
         console.error('Error fetching departments:', error);
         setErrors(prev => ({ ...prev, form: 'Failed to load departments.' }));
@@ -50,12 +52,30 @@ const TeacherForm = ({ onSuccess, onCancel }) => {
     fetchDepartments();
   }, []);
 
-  const handleMultiSelectChange = (name) => (event) => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: event.target.value,
-    }));
-  };
+  // Effect to populate form when in edit mode or reset for create mode
+  useEffect(() => {
+    if (isEditMode && teacher) {
+      setFormData({
+        name: teacher.name || '',
+        email: teacher.email || '',
+        phone: teacher.phone || '',
+        // The teacher object from the list may not have a full 'departments' array.
+        // It might just have a `departmentId`. We need to handle this gracefully.
+        // The `teacher` object passed to the form should have the full departments array.
+        department_ids: teacher.departments?.map(dept => dept.department_id).filter(id => id != null) || [],
+        join_date: teacher.join_date || (teacher.created_at ? teacher.created_at.split('T')[0] : ''),
+      });
+    } else {
+      // Reset form for create mode
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        department_ids: [],
+        join_date: '',
+      });
+    }
+  }, [teacher, isEditMode]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -67,9 +87,8 @@ const TeacherForm = ({ onSuccess, onCancel }) => {
 
   const handleDepartmentChange = (event) => {
     const { target: { value } } = event;
-    // value is an array of selected department names
-    setFormData(prev => ({ 
-      ...prev, 
+    setFormData(prev => ({
+      ...prev,
       department_ids: typeof value === 'string' ? value.split(',') : value,
     }));
     if (errors.department_ids) {
@@ -104,35 +123,56 @@ const TeacherForm = ({ onSuccess, onCancel }) => {
     setIsLoading(true);
     setErrors(prev => { const newErrors = { ...prev }; delete newErrors.form; return newErrors; });
 
-    const payload = {
+    const basePayload = {
       name: formData.name,
       email: formData.email,
       phone: formData.phone,
-      department_names: formData.department_ids, // Send as department_names (array of names)
       join_date: formData.join_date,
     };
 
+    let finalPayload;
+
+    if (isEditMode) {
+      // For updates, the backend expects 'department_ids'
+      finalPayload = {
+        ...basePayload,
+        department_ids: formData.department_ids,
+      };
+    } else {
+      // For creates, the backend expects 'department_names'
+      finalPayload = {
+        ...basePayload,
+        department_names: formData.department_ids.map(id => {
+          const dept = allDepartments.find(d => d.id === id);
+          return dept ? dept.name : '';
+        }).filter(name => name && name.trim() !== ''),
+      };
+    }
+
     try {
-      // Using apiService.api.post as specific teacherApi might not be defined in api.js based on earlier views
-      await teacherApi.create(payload);
+      if (isEditMode) {
+        await teacherApi.update(teacher.teacher_id, finalPayload);
+      } else {
+        await teacherApi.create(finalPayload);
+      }
+
       if (onSuccess) onSuccess();
-      // Reset form
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        department_ids: [],
-        join_date: '',
-      });
     } catch (error) {
-      console.error('Error creating teacher:', error);
+      console.error(`Error ${isEditMode ? 'updating' : 'creating'} teacher:`, error);
       const errorData = error.response?.data;
-      let errorMessage = 'Failed to create teacher. Please try again.';
+      let errorMessage = `Failed to ${isEditMode ? 'update' : 'create'} teacher. Please try again.`;
       if (errorData) {
         const fieldErrors = [];
         for (const key in errorData) {
           if (Array.isArray(errorData[key])) {
             fieldErrors.push(`${key}: ${errorData[key].join(', ')}`);
+          } else if (typeof errorData[key] === 'object') {
+             // Handle nested object errors
+            for(const subKey in errorData[key]) {
+                if (Array.isArray(errorData[key][subKey])) {
+                    fieldErrors.push(`${subKey}: ${errorData[key][subKey].join(', ')}`);
+                }
+            }
           }
         }
         if (fieldErrors.length > 0) {
@@ -141,6 +181,8 @@ const TeacherForm = ({ onSuccess, onCancel }) => {
           errorMessage = errorData;
         } else if (errorData.detail) {
           errorMessage = errorData.detail;
+        } else {
+          errorMessage = JSON.stringify(errorData);
         }
       }
       setErrors(prev => ({ ...prev, form: errorMessage }));
@@ -150,63 +192,25 @@ const TeacherForm = ({ onSuccess, onCancel }) => {
   };
 
   return (
-    <Box component="form" onSubmit={handleSubmit} sx={{ p: 3, border: '1px solid #ccc', borderRadius: '8px' }}>
-      <Typography variant="h6" gutterBottom>Create New Teacher</Typography>
+    <Box component="form" onSubmit={handleSubmit} sx={{ p: 3 }}>
+      <Typography variant="h6" gutterBottom>{isEditMode ? 'Edit Teacher' : 'Create New Teacher'}</Typography>
       {errors.form && <Typography color="error" gutterBottom>{errors.form}</Typography>}
       <Grid container spacing={3}>
+        {/* Text Fields for teacher info */}
         <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Full Name"
-            name="name"
-            value={formData.name}
-            onChange={handleInputChange}
-            error={!!errors.name}
-            helperText={errors.name}
-            required
-          />
+          <TextField fullWidth label="Full Name" name="name" value={formData.name} onChange={handleInputChange} error={!!errors.name} helperText={errors.name} required />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Email Address"
-            name="email"
-            type="email"
-            value={formData.email}
-            onChange={handleInputChange}
-            error={!!errors.email}
-            helperText={errors.email}
-            required
-          />
+          <TextField fullWidth label="Email Address" name="email" type="email" value={formData.email} onChange={handleInputChange} error={!!errors.email} helperText={errors.email} required />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Phone Number"
-            name="phone"
-            value={formData.phone}
-            onChange={handleInputChange}
-            error={!!errors.phone}
-            helperText={errors.phone}
-            required
-          />
+          <TextField fullWidth label="Phone Number" name="phone" value={formData.phone} onChange={handleInputChange} error={!!errors.phone} helperText={errors.phone} required />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <TextField
-            fullWidth
-            label="Join Date"
-            name="join_date"
-            type="date"
-            value={formData.join_date}
-            onChange={handleInputChange}
-            error={!!errors.join_date}
-            helperText={errors.join_date}
-            InputLabelProps={{
-              shrink: true,
-            }}
-            required
-          />
+          <TextField fullWidth label="Join Date" name="join_date" type="date" value={formData.join_date} onChange={handleInputChange} error={!!errors.join_date} helperText={errors.join_date} InputLabelProps={{ shrink: true }} required />
         </Grid>
+
+        {/* Department Multi-Select */}
         <Grid item xs={12}>
           <FormControl fullWidth error={!!errors.department_ids} required>
             <InputLabel id="department-select-label">Departments *</InputLabel>
@@ -217,52 +221,71 @@ const TeacherForm = ({ onSuccess, onCancel }) => {
               open={departmentSelectOpen}
               onOpen={() => setDepartmentSelectOpen(true)}
               onClose={() => setDepartmentSelectOpen(false)}
-              value={formData.department_ids} // This will be an array of department names
-              onChange={handleMultiSelectChange('department_ids')}
+              value={formData.department_ids} // Use IDs for the value
+              onChange={handleDepartmentChange}
               input={<OutlinedInput label="Departments *" />}
-              renderValue={(selectedNames) => {
-                // Display selected names as Chips
-                return (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {selectedNames.map(name => <Chip key={name} label={name} />)}
-                  </Box>
-                );
-              }}
-              MenuProps={{
-                PaperProps: {
-                  style: {
-                    maxHeight: 300, // Increased height to accommodate button
-                    width: 250,
-                  },
-                },
-              }}
+              renderValue={(selectedIds) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {selectedIds.map((id) => {
+                    const department = allDepartments.find(d => d.department_id === id);
+                    return <Chip key={id} label={department ? department.name : `ID: ${id}`} />;
+                  })}
+                </Box>
+              )}
+              MenuProps={{ PaperProps: { style: { maxHeight: 300, width: 250 } } }}
             >
               {isFetchingDepartments ? (
                 <MenuItem disabled>Loading departments...</MenuItem>
-              ) : departments.length === 0 ? (
-                <MenuItem disabled>No departments available or failed to load.</MenuItem>
+              ) : allDepartments.length === 0 ? (
+                <MenuItem disabled>No departments available.</MenuItem>
               ) : (
-                departments.map((dept) => (
-                  <MenuItem key={dept.uuid} value={dept.name}> {/* Value is name */}
-                    <Checkbox checked={formData.department_ids.includes(dept.name)} /> {/* Check against name */}
-                    <ListItemText primary={dept.name} />
-                  </MenuItem>
-                ))
+                [
+                  ...allDepartments.map((dept) => (
+                    <MenuItem key={dept.department_id} value={dept.department_id}>
+                      <Checkbox checked={formData.department_ids.indexOf(dept.department_id) > -1} />
+                      <ListItemText primary={dept.name} />
+                    </MenuItem>
+                  )),
+                  <Box
+                    key="done-button-container"
+                    sx={{
+                      position: 'sticky',
+                      bottom: 0,
+                      p: 1,
+                      bgcolor: 'background.paper',
+                      borderTop: '1px solid',
+                      borderColor: 'divider',
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      zIndex: 1,
+                    }}
+                  >
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDepartmentSelectOpen(false);
+                      }}
+                    >
+                      Done
+                    </Button>
+                  </Box>
+                ]
               )}
-              <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                <Button size="small" onClick={() => setDepartmentSelectOpen(false)}>Done</Button>
-              </Box>
+
             </Select>
             {errors.department_ids && <FormHelperText>{errors.department_ids}</FormHelperText>}
           </FormControl>
         </Grid>
 
+        {/* Action Buttons */}
         <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 2 }}>
           <Button variant="outlined" onClick={onCancel} disabled={isLoading}>
             Cancel
           </Button>
           <Button type="submit" variant="contained" color="primary" disabled={isLoading || isFetchingDepartments}>
-            {isLoading ? <CircularProgress size={24} /> : 'Create Teacher'}
+            {isLoading ? <CircularProgress size={24} /> : isEditMode ? 'Update Teacher' : 'Create Teacher'}
           </Button>
         </Grid>
       </Grid>

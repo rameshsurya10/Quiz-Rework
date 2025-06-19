@@ -42,11 +42,11 @@ const initialFormState = {
   quiz_date: ''
 };
 
-const QuizFormModern = ({ onSave, onCancel }) => {
+const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) => {
   const [form, setForm] = useState(initialFormState);
   const [loading, setLoading] = useState(false);
-  const [departments, setDepartments] = useState([]);
-  const [deptLoading, setDeptLoading] = useState(true);
+  const [departments, setDepartments] = useState(initialDepartments || []);
+  const [deptLoading, setDeptLoading] = useState(!initialDepartments);
   const [errors, setErrors] = useState({});
 
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -58,11 +58,11 @@ const QuizFormModern = ({ onSave, onCancel }) => {
   const formData = form;
 
   useEffect(() => {
-    api.get('/api/departments/')
-      .then(({ data }) => setDepartments(data.results || data))
-      .catch(console.error)
-      .finally(() => setDeptLoading(false));
-  }, []);
+    setDepartments(initialDepartments || []);
+    if (initialDepartments) {
+      setDeptLoading(false);
+    }
+  }, [initialDepartments]);
 
   const handleField = useCallback((key, value) => {
     setForm(prev => ({
@@ -102,20 +102,24 @@ const QuizFormModern = ({ onSave, onCancel }) => {
     setUploadProgress(0);
     setIsFadingOut(false);
 
-    const formData = new FormData();
-    Object.entries(form).forEach(([k, v]) => {
-      if (k === 'files') {
-        v.forEach(file => formData.append('files', file));
-      } else if (Array.isArray(v)) {
-        v.forEach(x => formData.append(k, x));
-      } else {
-        formData.append(k, v);
-      }
-    });
+    const questionTypeMapping = {
+      'MCQ': 'multiple_choice',
+      'Fill ups': 'fill_in_blanks',
+      'True/False': 'true_false',
+      'One Line': 'one_line',
+      'Mixed': 'mixed'
+    };
+
+    const payload = {
+      ...form,
+      quiz_type: form.complexity,
+      question_type: questionTypeMapping[form.quiz_type] || form.quiz_type,
+    };
+    delete payload.complexity;
 
     try {
       // Use onUploadProgress to show real progress, capped at 95%
-      await onSave(formData, (event) => {
+      await onSave(payload, (event) => {
         if (event.lengthComputable) {
           const progress = Math.min(95, Math.round((100 * event.loaded) / event.total));
           setUploadProgress(progress);
@@ -129,8 +133,7 @@ const QuizFormModern = ({ onSave, onCancel }) => {
       setTimeout(() => {
         setIsFadingOut(true);
         setTimeout(() => {
-          setIsCreating(false);
-          navigate('/dashboard');
+          setLoading(false);
         }, 500); // Corresponds to fade-out animation duration
       }, 500); // 0.5s hold
 
@@ -141,8 +144,8 @@ const QuizFormModern = ({ onSave, onCancel }) => {
   };
 
   return (
-    <Paper sx={{ p: 4, maxWidth: 1200, mx: 'auto', position: 'relative' }}>
-      <form onSubmit={handleSubmit} noValidate style={{ position: 'relative' }}>
+    <Paper sx={{ p: 4, maxWidth: 1200, mx: 'auto' }} className="glass-effect">
+      <form onSubmit={handleSubmit} noValidate>
         <Grid container spacing={4}>
           {/* Left Column */}
           <Grid item xs={12} md={6}>
@@ -225,7 +228,7 @@ const QuizFormModern = ({ onSave, onCancel }) => {
                   value={form.quiz_type}
                   onChange={(e, v) => handleField('quiz_type', v)}
                   renderInput={params => (
-                    <TextField {...params} label="Quiz Type" error={!!errors.quiz_type} helperText={errors.quiz_type} />
+                    <TextField {...params} label="Question Type" error={!!errors.quiz_type} helperText={errors.quiz_type} />
                   )}
                 />
               </Grid>
@@ -242,59 +245,60 @@ const QuizFormModern = ({ onSave, onCancel }) => {
 
               {/* Department Multi-select */}
               <Grid item xs={12}>
-          <FormControl fullWidth error={!!errors.department_ids} required>
-            <InputLabel id="department-select-label">Departments *</InputLabel>
-            <Select
-              labelId="department-select-label"
-              id="department-select"
-              multiple
-              open={departmentSelectOpen}
-              onOpen={() => setDepartmentSelectOpen(true)}
-              onClose={() => setDepartmentSelectOpen(false)}
-              value={form.department || []}
-              onChange={(e) => {
-                setForm(prev => ({
-                  ...prev,
-                  department: e.target.value
-                }));
-              }}
-              input={<OutlinedInput label="Departments *" />}
-              renderValue={(selectedNames) => {
-                // Display selected names as Chips
-                return (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {selectedNames.map(name => <Chip key={name} label={name} />)}
-                  </Box>
-                );
-              }}
-              MenuProps={{
-                PaperProps: {
-                  style: {
-                    maxHeight: 300, // Increased height to accommodate button
-                    width: 250,
-                  },
-                },
-              }}
-            >
-              {deptLoading ? (
-                <MenuItem disabled>Loading departments...</MenuItem>
-              ) : departments.length === 0 ? (
-                <MenuItem disabled>No departments available or failed to load.</MenuItem>
-              ) : (
-                departments.map((dept) => (
-                  <MenuItem key={dept.uuid} value={dept.name}> {/* Value is name */}
-                    <Checkbox checked={(form.department || []).includes(dept.name)} />
-                    <ListItemText primary={dept.name} />
-                  </MenuItem>
-                ))
-              )}
-              <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                <Button size="small" onClick={() => setDepartmentSelectOpen(false)}>Done</Button>
-              </Box>
-            </Select>
-            {errors.department && <FormHelperText>{errors.department}</FormHelperText>}
-          </FormControl>
-        </Grid>
+                <FormControl fullWidth error={!!errors.department} required>
+                  <InputLabel id="department-select-label">Departments *</InputLabel>
+                  <Select
+                    labelId="department-select-label"
+                    id="department-select"
+                    multiple
+                    open={departmentSelectOpen}
+                    onOpen={() => setDepartmentSelectOpen(true)}
+                    onClose={() => setDepartmentSelectOpen(false)}
+                    value={form.department || []}
+                    onChange={(e) => {
+                      const { target: { value } } = e;
+                      handleField(
+                        'department',
+                        // On autofill we get a stringified value.
+                        typeof value === 'string' ? value.split(',') : value,
+                      );
+                    }}
+                    input={<OutlinedInput label="Departments *" />}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {(Array.isArray(selected) ? selected : []).map((name) => (
+                          <Chip key={name} label={name} />
+                        ))}
+                      </Box>
+                    )}
+                    MenuProps={{
+                      PaperProps: {
+                        style: {
+                          maxHeight: 300,
+                          width: 250,
+                        },
+                      },
+                    }}
+                  >
+                    {deptLoading ? (
+                      <MenuItem disabled>Loading departments...</MenuItem>
+                    ) : departments.length === 0 ? (
+                      <MenuItem disabled>No departments available or failed to load.</MenuItem>
+                    ) : (
+                      departments.map((dept) => (
+                        <MenuItem key={dept.uuid} value={dept.name}>
+                          <Checkbox checked={(form.department || []).includes(dept.name)} />
+                          <ListItemText primary={dept.name} />
+                        </MenuItem>
+                      ))
+                    )}
+                    <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button size="small" onClick={() => setDepartmentSelectOpen(false)}>Done</Button>
+                    </Box>
+                  </Select>
+                  {errors.department && <FormHelperText>{errors.department}</FormHelperText>}
+                </FormControl>
+              </Grid>
               {/* Passing Score */}
               <Grid item xs={12}>
                 <TextField

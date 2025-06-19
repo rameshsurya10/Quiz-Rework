@@ -118,12 +118,22 @@ const loginUser = async (credentials) => {
         localStorage.setItem('refreshToken', response.data.refresh);
       }
       
-      // Store user role from credentials
-      const userInfo = {
-        email: credentials.email,
-        role: credentials.role || ''
-      };
-      localStorage.setItem('user', JSON.stringify(userInfo));
+      // After setting token, fetch full user profile to store locally
+      try {
+        const profileResponse = await api.get('/api/accounts/profile/');
+        if (profileResponse.data) {
+          localStorage.setItem('user', JSON.stringify(profileResponse.data));
+        } else {
+          // Fallback to basic info if profile data is empty
+          const userInfo = { email: credentials.email, role: credentials.role || '' };
+          localStorage.setItem('user', JSON.stringify(userInfo));
+        }
+      } catch (profileError) {
+        console.error('Failed to fetch profile after login, using basic info:', profileError);
+        // Fallback to basic info if profile fetch fails
+        const userInfo = { email: credentials.email, role: credentials.role || '' };
+        localStorage.setItem('user', JSON.stringify(userInfo));
+      }
       
       return {
         success: true,
@@ -150,12 +160,22 @@ const loginUser = async (credentials) => {
           localStorage.setItem('refreshToken', fallbackResponse.data.refresh_token);
         }
         
-        // Store user info
-        const userInfo = {
-          email: credentials.email,
-          role: credentials.role || ''
-        };
-        localStorage.setItem('user', JSON.stringify(userInfo));
+        // After setting token, fetch full user profile to store locally
+        try {
+          const profileResponse = await api.get('/api/accounts/profile/');
+          if (profileResponse.data) {
+            localStorage.setItem('user', JSON.stringify(profileResponse.data));
+          } else {
+            // Fallback to basic info if profile data is empty
+            const userInfo = { email: credentials.email, role: credentials.role || '' };
+            localStorage.setItem('user', JSON.stringify(userInfo));
+          }
+        } catch (profileError) {
+          console.error('Failed to fetch profile after login, using basic info:', profileError);
+          // Fallback to basic info if profile fetch fails
+          const userInfo = { email: credentials.email, role: credentials.role || '' };
+          localStorage.setItem('user', JSON.stringify(userInfo));
+        }
         
         return {
           success: true,

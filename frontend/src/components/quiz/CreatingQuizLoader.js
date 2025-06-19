@@ -1,36 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import './CreatingQuizLoader.css';
 
-const CreatingQuizLoader = () => {
-  const [progress, setProgress] = useState(0);
+const CreatingQuizLoader = ({ progress, isFadingOut }) => {
+    const [displayProgress, setDisplayProgress] = useState(0);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setProgress(prevProgress => {
-        if (prevProgress >= 100) {
-          clearInterval(timer);
-          return 100;
-        }
-        return prevProgress + 1;
-      });
-    }, 40); // Control the speed of the counter
+    useEffect(() => {
+        let start = 0;
+        const end = progress;
+        if (start === end) return;
 
-    return () => {
-      clearInterval(timer);
-    };
-  }, []);
+        const duration = 1500; // ms
+        const incrementTime = (duration / end) / 2;
 
-  return (
-    <div className="loader-overlay">
-      <div className="loader-content">
-        <img src="/images/loading.png" alt="Loading..." className="loader-image" />
-        <p className="loader-text">Creating your quiz...</p>
-        <div className="progress-container">
-          <p className="progress-text">{progress}%</p>
+        const timer = setInterval(() => {
+            start += 1;
+            setDisplayProgress(start);
+            if (start === end) {
+                clearInterval(timer);
+                // Ensure the final progress value is displayed
+                setTimeout(() => setDisplayProgress(100), 200);
+            }
+        }, incrementTime);
+
+        return () => clearInterval(timer);
+    }, [progress]);
+
+    return (
+        <div className={`loader-overlay ${isFadingOut ? 'fade-out' : ''}`}>
+            <div className="loader-content">
+                <div className="loader-image-container">
+                    <img src={process.env.PUBLIC_URL + '/images/loading.png'} alt="Loading..." className="loader-image" />
+                    <span className="loader-percentage">{displayProgress}%</span>
+                </div>
+                <p className="loader-text">Creating your quiz...</p>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default CreatingQuizLoader;

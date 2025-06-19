@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, CssBaseline, CircularProgress, Box } from '@mui/material';
-import theme from './theme';
+import { CssBaseline, CircularProgress, Box } from '@mui/material';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import TeacherSection from './components/teachers/TeacherSection';
@@ -50,15 +50,14 @@ function App() {
   
   if (loading) {
     return (
-      <ThemeProvider theme={theme}>
+      <ThemeProvider>
         <CssBaseline />
         <Box sx={{ 
           display: 'flex', 
           flexDirection: 'column',
           justifyContent: 'center', 
           alignItems: 'center', 
-          height: '100vh',
-          background: theme.palette.background.default
+          height: '100vh'
         }}>
           <CircularProgress size={60} thickness={4} />
           <Box sx={{ mt: 2, color: 'text.secondary', fontWeight: 500 }}>
@@ -70,9 +69,9 @@ function App() {
   }
   
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ThemeProvider>
       <SnackbarProvider>
+        <CssBaseline />
         <BrowserRouter>
         <Routes>
           {/* Public routes */}
@@ -150,11 +149,11 @@ function App() {
           } />
 
           {/* Student Reports Route */}
-          <Route path="/student-reports" element={
+          {/* <Route path="/student-reports" element={
             <ProtectedRoute>
               <StudentReportSection />
             </ProtectedRoute>
-          } />
+          } /> */}
 
           {/* Department Management Route */}
           <Route path="/departments" element={

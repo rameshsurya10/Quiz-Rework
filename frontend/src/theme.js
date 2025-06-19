@@ -4,14 +4,14 @@ import { createTheme } from '@mui/material/styles';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#1976d2',
-      light: '#42a5f5',
-      dark: '#1565c0',
+      main: '#2e7d32', // Forest Green
+      light: '#5efc62',
+      dark: '#004f04',
     },
     secondary: {
-      main: '#f50057',
-      light: '#ff4081',
-      dark: '#c51162',
+      main: '#cddc39', // Lime Green
+      light: '#ffff6e',
+      dark: '#99aa00',
     },
     success: {
       main: '#4caf50',
@@ -34,8 +34,12 @@ const theme = createTheme({
       dark: '#0d47a1',
     },
     background: {
-      default: '#f5f7fa',
+      default: '#f5f5f5',
       paper: '#ffffff',
+    },
+    text: {
+      primary: '#212121', // Dark grey for primary text
+      secondary: '#616161', // Lighter grey for secondary text
     },
   },
   typography: {

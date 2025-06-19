@@ -76,6 +76,30 @@ const QuizListView = () => {
     }
   };
 
+  const handleDelete = async (quizId) => {
+    if (window.confirm('Are you sure you want to delete this quiz? This action cannot be undone.')) {
+      try {
+        await quizService.deleteQuiz(quizId);
+        setquiz(prevquiz => prevquiz.filter(q => q.id !== quizId));
+        toast({
+          title: 'Quiz Deleted',
+          description: 'The quiz has been successfully deleted.',
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+      } catch (error) {
+        toast({
+          title: 'Error Deleting Quiz',
+          description: error.message,
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
+    }
+  };
+
   // Filter quiz based on search term and status
   const filteredquiz = quiz.filter(quiz => {
     const matchesSearch = !searchTerm || 
@@ -154,7 +178,7 @@ const QuizListView = () => {
       ) : (
         <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
           {filteredquiz.map(quiz => (
-            <Card key={quiz.id} variant="outline" boxShadow="sm" height="100%">
+            <Card key={quiz.id} variant="outline" boxShadow="sm" height="100%" className="glass-effect">
               <CardHeader bg={quiz.is_published ? 'blue.50' : 'gray.50'} pb={3}>
                 <Flex justifyContent="space-between" alignItems="center">
                   <Heading size="md" noOfLines={1} title={quiz.title}>
@@ -243,6 +267,7 @@ const QuizListView = () => {
                       <MenuItem 
                         icon={<DeleteIcon />}
                         color="red.500"
+                        onClick={() => handleDelete(quiz.id)}
                       >
                         Delete Quiz
                       </MenuItem>
