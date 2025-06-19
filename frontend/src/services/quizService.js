@@ -161,6 +161,17 @@ export const quizService = {
   },
 
   // Publish a quiz (update status)
+  deleteQuiz: async (quizId) => {
+    try {
+      const response = await axios.delete(`${API_BASE_URL}/quiz/${quizId}/`, getAuthHeaders());
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting quiz:', error);
+      throw error;
+    }
+  },
+
+  // Publish a quiz (update status)
   publishQuiz: async (quizId) => {
     try {
       const response = await axios.patch(

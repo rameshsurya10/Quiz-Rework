@@ -92,7 +92,7 @@ const StudentForm = ({ student = null, departments = [], onSuccess, onError }) =
   };
 
   return (
-    <Box component="form" onSubmit={handleSubmit} noValidate>
+    <Box component="form" onSubmit={handleSubmit} noValidate className="glass-effect" sx={{ p: 3, borderRadius: '8px' }}>
       <TextField
         fullWidth
         label="Full Name"

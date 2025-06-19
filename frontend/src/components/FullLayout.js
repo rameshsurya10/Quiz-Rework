@@ -165,7 +165,9 @@ const FullLayout = ({ children, hideToolbar = false }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [open, setOpen] = useState(!isMobile);
-  const [anchorElUser, setAnchorElUser] = useState(null);
+    const [anchorElUser, setAnchorElUser] = useState(null);
+    const [userName, setUserName] = useState('Guest');
+  const [userRole, setUserRole] = useState('');
 
   // Handle drawer toggle for both mobile and desktop
   const handleDrawerToggle = () => {
@@ -191,13 +193,36 @@ const FullLayout = ({ children, hideToolbar = false }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, [isMobile]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (isMobile) {
       setOpen(false); // Keep sidebar closed by default on mobile
     } else {
       setOpen(true); // Keep sidebar open by default on desktop
     }
   }, [isMobile]);
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const profileResponse = await apiService.userApi.getProfile();
+        const userData = profileResponse.data || profileResponse;
+        
+        if (userData) {
+          setUserName(userData.full_name || userData.first_name || (userData.email ? userData.email.split('@')[0] : 'Guest'));
+          setUserRole(userData.role || '');
+        }
+      } catch (error) {
+        console.error('Failed to fetch user profile for layout:', error);
+        const localUser = apiService.getCurrentUser();
+        if (localUser) {
+          setUserName(localUser.full_name || localUser.first_name || (localUser.email ? localUser.email.split('@')[0] : 'Guest'));
+          setUserRole(localUser.role || '');
+        }
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   const handleProfileMenuOpen = (event) => {
     setAnchorElUser(event.currentTarget);
@@ -224,7 +249,7 @@ const FullLayout = ({ children, hideToolbar = false }) => {
           activePaths: ['/dashboard']
         },
         { 
-          name: 'Manage quiz', 
+          name: 'Manage Quiz', 
           icon: <QuizIcon />, 
           path: '/quiz',
           activePaths: ['/quiz', '/quiz/*']
@@ -246,6 +271,12 @@ const FullLayout = ({ children, hideToolbar = false }) => {
           path: '/teachers',
           activePaths: ['/teachers', '/teachers/*']
         },
+        // {
+        //   name: 'Student Reports',
+        //   icon: <AssessmentIcon />,
+        //   path: '/student-reports',
+        //   activePaths: ['/student-reports']
+        // },
         { 
           name: 'Students', 
           icon: <PeopleIcon />, 
@@ -258,12 +289,7 @@ const FullLayout = ({ children, hideToolbar = false }) => {
           path: '/results',
           activePaths: ['/results', '/results/*']
         },
-        {
-          name: 'Student Reports',
-          icon: <AssessmentIcon />, // Or a more specific icon if available
-          path: '/student-reports',
-          activePaths: ['/student-reports']
-        },
+
       ]
     },
     {
@@ -297,7 +323,9 @@ const FullLayout = ({ children, hideToolbar = false }) => {
       <DrawerHeader sx={{ px: open ? 2.5 : (collapsedDrawerWidth / 8 - 2.5), justifyContent: 'space-between', alignItems: 'center' }}>
         {open && (
           <Box component={Link} to="/dashboard" sx={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
-            <Avatar sx={{ bgcolor: theme.palette.primary.main, color: theme.palette.primary.contrastText, width: 32, height: 32, mr: 1.5, fontSize: '1rem' }}>Q</Avatar>
+            <Avatar sx={{ bgcolor: theme.palette.primary.main, color: theme.palette.primary.contrastText, width: 40, height: 40, mr: open ? 1.5 : 0 }}>
+              {userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+            </Avatar>
             <Typography variant="h6" noWrap sx={{ color: theme.palette.text.primary, fontWeight: 'bold' }}>
               QuizMaster
             </Typography>
@@ -416,12 +444,12 @@ const FullLayout = ({ children, hideToolbar = false }) => {
                     fontSize: open ? '1rem' : '0.85rem'
                 }}
             >
-                JD 
+                {userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
             </Avatar>
             {open && (
                 <Box sx={{ color: theme.palette.text.primary, textAlign: 'left', flexGrow: 1 }}>
-                    <Typography variant="subtitle2" sx={{lineHeight: 1.2, fontWeight: 500}}>John Doe</Typography>
-                    <Typography variant="caption" sx={{opacity: 0.8, color: theme.palette.text.secondary}}>Admin</Typography>
+                    <Typography variant="subtitle2" sx={{lineHeight: 1.2, fontWeight: 500}}>{userName}</Typography>
+                    <Typography variant="caption" sx={{opacity: 0.8, color: theme.palette.text.secondary}}>{userRole.charAt(0).toUpperCase() + userRole.slice(1)}</Typography>
                 </Box>
             )}
             {open && <ChevronRightIcon sx={{ color: theme.palette.text.secondary, opacity: 0.7 }} />}

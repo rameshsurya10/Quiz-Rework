@@ -34,7 +34,7 @@
 							}
 						},
 						"url": {
-							"raw": "http://127.0.0.1:8000/api/quizzes/create/",
+							"raw": "http://127.0.0.1:8000/api/quiz/create/",
 							"protocol": "http",
 							"host": [
 								"127",
@@ -45,7 +45,7 @@
 							"port": "8000",
 							"path": [
 								"api",
-								"quizzes",
+								"quiz",
 								"create",
 								""
 							]
@@ -69,7 +69,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://127.0.0.1:8000\\api\\quizzes\\",
+							"raw": "http://127.0.0.1:8000\\api\\quiz\\",
 							"protocol": "http",
 							"host": [
 								"127",
@@ -80,7 +80,7 @@
 							"port": "8000",
 							"path": [
 								"api",
-								"quizzes",
+								"quiz",
 								""
 							]
 						}
@@ -165,7 +165,7 @@
 							]
 						},
 						"url": {
-							"raw": "http://127.0.0.1:8000/api/quizzes/generate-from-file/",
+							"raw": "http://127.0.0.1:8000/api/quiz/generate-from-file/",
 							"protocol": "http",
 							"host": [
 								"127",
@@ -176,7 +176,7 @@
 							"port": "8000",
 							"path": [
 								"api",
-								"quizzes",
+								"quiz",
 								"generate-from-file",
 								""
 							]
@@ -892,7 +892,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://127.0.0.1:8000/api/quizzes/range/2/5/",
+					"raw": "http://127.0.0.1:8000/api/quiz/range/2/5/",
 					"protocol": "http",
 					"host": [
 						"127",
@@ -903,7 +903,7 @@
 					"port": "8000",
 					"path": [
 						"api",
-						"quizzes",
+						"quiz",
 						"range",
 						"2",
 						"5",

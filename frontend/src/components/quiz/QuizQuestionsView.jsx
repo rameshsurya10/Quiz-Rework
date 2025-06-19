@@ -261,7 +261,7 @@ const QuizQuestionsView = () => {
         </HStack>
       </HStack>
 
-      <Card mb={6} variant="outline">
+      <Card mb={6} variant="outline" className="glass-effect">
         <CardHeader bg="gray.50">
           <Heading size="md">Quiz Details</Heading>
         </CardHeader>
@@ -346,7 +346,7 @@ const QuizQuestionsView = () => {
               <>
                 <VStack spacing={4} align="stretch">
                   {currentQuestions.map((question, index) => (
-                    <Card key={question.id} variant="outline">
+                    <Card key={question.id} variant="outline" className="glass-effect">
                       <CardHeader bg="blue.50" py={3}>
                         <Flex justify="space-between" align="center">
                           <Heading size="sm">

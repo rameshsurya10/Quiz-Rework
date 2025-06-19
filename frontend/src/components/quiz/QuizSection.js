@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress
 } from '@mui/material';
@@ -7,6 +7,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import { styled } from '@mui/material/styles';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
 import FullLayout from '../FullLayout';
@@ -33,6 +34,7 @@ const QuizStyledCard = styled(Card)(({ theme }) => ({
 const QuizSection = () => {
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
+  const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -40,27 +42,40 @@ const QuizSection = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [quizToDeleteId, setQuizToDeleteId] = useState(null);
   const [isConfirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [departments, setDepartments] = useState([]);
+
+  const fetchQuizzes = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const response = await api.get('/api/quiz/');
+      const quizzesData = response.data.results || response.data || [];
+      setQuizzes(quizzesData);
+    } catch (err) {
+      console.error('Failed to fetch quizzes:', err);
+      setError('Failed to load quizzes. Please try again later.');
+      showSnackbar('Failed to fetch quizzes', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [showSnackbar]);
+
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/departments/');
+      setDepartments(data.results || data || []);
+    } catch (error) {
+      console.error('Failed to fetch departments:', error);
+      showSnackbar('Failed to load departments', 'error');
+    }
+  }, [showSnackbar]);
 
   useEffect(() => {
-    if (!isCreating) { // Only fetch when not in create/edit mode
-      const fetchQuizzes = async () => {
-        setIsLoading(true);
-        setError('');
-        try {
-          const response = await api.get('/api/quiz/');
-          const quizzesData = response.data.results || response.data || [];
-          setQuizzes(quizzesData);
-        } catch (err) {
-          console.error('Failed to fetch quizzes:', err);
-          setError('Failed to load quizzes. Please try again later.');
-          showSnackbar('Failed to fetch quizzes', 'error');
-        } finally {
-          setIsLoading(false);
-        }
-      };
+    if (!isCreating) {
       fetchQuizzes();
+      fetchDepartments();
     }
-  }, [showSnackbar, isCreating]);
+  }, [isCreating, fetchQuizzes, fetchDepartments]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -74,18 +89,43 @@ const QuizSection = () => {
     setIsCreating(false);
   };
 
-  const handleSaveQuiz = async (formData, onUploadProgress) => {
+  const handleSaveQuiz = async (quizData, onUploadProgress) => {
+    setIsCreating(true);
+
+    const data = new FormData();
+
+    // 1. Append files directly to FormData
+    if (quizData.files && quizData.files.length > 0) {
+      quizData.files.forEach(file => {
+        data.append('files', file);
+      });
+    }
+
+    // 2. Prepare the JSON part of the payload
+    const departmentIds = departments
+      .filter(dep => quizData.department.includes(dep.name))
+      .map(dep => dep.id);
+
+    const jsonPayload = { ...quizData };
+    delete jsonPayload.files; // Remove files from the JSON part
+    delete jsonPayload.department; // Remove old department names array
+    jsonPayload.department_ids = departmentIds; // Use the correct key with IDs
+
+    // 3. Append the JSON string to FormData under the key 'payload'
+    data.append('payload', JSON.stringify(jsonPayload));
+
     try {
-      await api.post('/api/quiz/', formData, {
+      await api.post('/api/quiz/', data, {
         onUploadProgress,
-        headers: { 'Content-Type': 'multipart/form-data' },
       });
       showSnackbar('Quiz created successfully!', 'success');
-      setIsCreating(false); // This will trigger a re-fetch due to useEffect dependency
+      fetchQuizzes();
+      setIsCreating(false);
     } catch (err) {
-      console.error('Failed to save quiz:', err);
-      const errorMessage = err.response?.data?.detail || 'An error occurred while saving the quiz.';
-      showSnackbar(errorMessage, 'error');
+      console.error('Error creating quiz:', err);
+      const errorMsg = err.response?.data?.error || 'Failed to create quiz.';
+      showSnackbar(errorMsg, 'error');
+      setIsCreating(false);
     }
   };
 
@@ -123,7 +163,7 @@ const QuizSection = () => {
         transition={{ delay: index * 0.05 }}
         style={{ height: '100%' }}
       >
-        <QuizStyledCard>
+        <QuizStyledCard className="glass-effect">
           <CardContent sx={{ flexGrow: 1 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 'bold', flexGrow: 1, mr: 1 }}>
@@ -152,7 +192,7 @@ const QuizSection = () => {
           <CardActions sx={{ justifyContent: 'space-between', p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
             <Button variant="contained" startIcon={<AssignmentIcon />} size="small">Assign</Button>
             <Box>
-              <IconButton size="small"><VisibilityIcon /></IconButton>
+              <IconButton size="small" onClick={() => navigate(`/quiz/${quiz.quiz_id}`)}><VisibilityIcon /></IconButton>
               <IconButton size="small" onClick={() => handleDelete(quiz.quiz_id)}><DeleteIcon /></IconButton>
             </Box>
           </CardActions>
@@ -168,7 +208,7 @@ const QuizSection = () => {
     <FullLayout>
       <Container maxWidth={false} sx={{ mt: 4, mb: 4 }}>
         {isCreating ? (
-          <QuizFormModern onSave={handleSaveQuiz} onCancel={handleCancelCreate} />
+          <QuizFormModern onSave={handleSaveQuiz} className="glass-effect" onCancel={handleCancelCreate} departments={departments} />
         ) : (
           <>
             <PageHeader
@@ -193,7 +233,7 @@ const QuizSection = () => {
             ) : (
               <>
                 <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
-                  <Paper elevation={3} sx={{ borderRadius: '50px', overflow: 'hidden' }}>
+                  <Paper elevation={3} sx={{ borderRadius: '50px', overflow: 'hidden' }} className="glass-effect">
                     <Tabs
                       value={activeTab}
                       onChange={handleTabChange}

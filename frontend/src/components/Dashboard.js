@@ -116,7 +116,7 @@ const Dashboard = () => {
     const exportDashboardReport = async () => {
         try {
             setExportLoading(true);
-            showMessage('Preparing report for download...', 'info');
+            showMessage('Preparing your download...', 'info');
             
             // Simulate API call delay
             await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -125,29 +125,29 @@ const Dashboard = () => {
             const csvRows = [];
             
             // Add headers
-            csvRows.push(["Quiz Dashboard Report", `Generated on ${new Date().toLocaleDateString()}`]);
+            csvRows.push(['Dashboard Report', `Generated on ${new Date().toLocaleDateString()}`]);
             csvRows.push([""]);
             
             // Add summary data
-            csvRows.push(["Summary Statistics"]);
-            csvRows.push(["Total Teachers", data.total_teachers || "0"]);
-            csvRows.push(["Total Students", data.total_students || "0"]);
-            csvRows.push(["Total quiz", data.total_quizes || "0"]);
-            csvRows.push(["Active Participants", data.total_participants || "0"]);
+            csvRows.push(['Summary Statistics']);
+            csvRows.push(['Total Teachers', data.total_teachers || "0"]);
+            csvRows.push(['Total Students', data.total_students || "0"]);
+            csvRows.push(['Total Quizzes', data.total_quizes || "0"]);
+            csvRows.push(['Active Participants', data.total_participants || "0"]);
             csvRows.push([""]);
             
             // Add performance metrics
-            csvRows.push(["Performance Metrics"]);
-            csvRows.push(["Average Score", `${data.average_score || 0}%`]);
-            csvRows.push(["Correct Answers", `${data.right_answers || 0}%`]);
-            csvRows.push(["Wrong Answers", `${data.wrong_answers || 0}%`]);
-            csvRows.push(["Unanswered Questions", `${data.unanswered_questions || 0}%`]);
-            csvRows.push(["Average Duration", formatTime(data.average_duration || 0)]);
+            csvRows.push(['Performance Metrics']);
+            csvRows.push(['Average Score', `${data.average_score || 0}%`]);
+            csvRows.push(['Correct Answers', `${data.right_answers || 0}%`]);
+            csvRows.push(['Wrong Answers', `${data.wrong_answers || 0}%`]);
+            csvRows.push(['Unanswered', `${data.unanswered_questions || 0}%`]);
+            csvRows.push(['Average Duration', formatTime(data.average_duration || 0)]);
             
             // Add trend data if available
             if (trendData && trendData.labels && trendData.scores) {
                 csvRows.push([""]);
-                csvRows.push(["Trend Data (Month, Score)"]);
+                csvRows.push(['Trend Data']);
                 trendData.labels.forEach((month, index) => {
                     csvRows.push([month, `${trendData.scores[index]}%`]);
                 });
@@ -167,10 +167,10 @@ const Dashboard = () => {
             link.click();
             document.body.removeChild(link);
             
-            showMessage('Report downloaded successfully', 'success');
+            showMessage('Report downloaded successfully!', 'success');
         } catch (error) {
             console.error('Error exporting report:', error);
-            showMessage('Failed to generate report', 'error');
+            showMessage('Failed to export report.', 'error');
         } finally {
             setExportLoading(false);
         }
@@ -188,7 +188,7 @@ const Dashboard = () => {
                 {},               // No filters needed
                 (error) => {
                     console.error('Dashboard endpoint error:', error);
-                    showMessage('Failed to load dashboard data', 'error');
+                    showMessage('Failed to load dashboard data.', 'error');
                 }
             );
             
@@ -196,13 +196,13 @@ const Dashboard = () => {
             
             if (dashboardData) {
                 setData(dashboardData);
-                showMessage('Dashboard data loaded successfully', 'success');
+                showMessage('Dashboard data loaded successfully.', 'success');
             } else {
-                showMessage('No data available', 'info');
+                showMessage('No dashboard data available yet.', 'info');
             }
         } catch (error) {
             console.error('Error in refresh:', error);
-            showMessage('Error loading dashboard data', 'error');
+            showMessage('An error occurred while loading dashboard data.', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -288,7 +288,7 @@ const Dashboard = () => {
                         </Typography>
                     </Box>
                 </Box>
-                <Typography variant="caption" color="textSecondary">vs last month</Typography>
+                <Typography variant="caption" color="textSecondary">vs. last month</Typography>
             </CardContent>
         </Card>
     );
@@ -347,22 +347,22 @@ const Dashboard = () => {
                 <Grid item xs={12} md={4}>
                     <Card sx={{ height: '100%', p: 2, background: alpha(theme.palette.primary.main, 0.05) }}>
                         <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-                            Performance Summary
+                            7-Day Performance Trend
                         </Typography>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography variant="body2">Avg. Monthly Score:</Typography>
+                            <Typography variant="body2">Avg. Monthly Score</Typography>
                             <Typography variant="body2" fontWeight="bold">
                                 {Math.round(trendData.scores.reduce((a, b) => a + b, 0) / trendData.scores.length)}%
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                            <Typography variant="body2">Total Participants:</Typography>
+                            <Typography variant="body2">Total Participants</Typography>
                             <Typography variant="body2" fontWeight="bold">
                                 {trendData.participants.reduce((a, b) => a + b, 0).toLocaleString()}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant="body2">Avg. Duration:</Typography>
+                            <Typography variant="body2">Avg. Duration</Typography>
                             <Typography variant="body2" fontWeight="bold">
                                 {formatTime(Math.round(trendData.duration.reduce((a, b) => a + b, 0) / trendData.duration.length))}
                             </Typography>
@@ -379,22 +379,22 @@ const Dashboard = () => {
                         <Grid container spacing={1}>
                             <Grid item xs={6} sm={3}>
                                 <Button fullWidth size="small" variant="outlined" startIcon={<AssessmentIcon />}>
-                                    Export
+                                    Export Report
                                 </Button>
                             </Grid>
                             <Grid item xs={6} sm={3}>
                                 <Button fullWidth size="small" variant="outlined" startIcon={<TrendingUpIcon />}>
-                                    Trends
+                                    View Trends
                                 </Button>
                             </Grid>
                             <Grid item xs={6} sm={3}>
                                 <Button fullWidth size="small" variant="outlined" startIcon={<StyleIcon />}>
-                                    Topics
+                                    Analyze Topics
                                 </Button>
                             </Grid>
                             <Grid item xs={6} sm={3}>
                                 <Button fullWidth size="small" variant="outlined" startIcon={<BarChartIcon />}>
-                                    Compare
+                                    Compare Results
                                 </Button>
                             </Grid>
                         </Grid>

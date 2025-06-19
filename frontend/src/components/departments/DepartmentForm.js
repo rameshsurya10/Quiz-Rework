@@ -91,7 +91,7 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
   };
 
   return (
-    <Box component="form" onSubmit={handleSubmit} sx={{ p: 2, minWidth: 400 }}>
+    <Box component="form" onSubmit={handleSubmit} className="glass-effect" sx={{ p: 3, borderRadius: '8px', minWidth: 400 }}>
       <Typography variant="h6" gutterBottom>
         {department ? 'Edit Department' : 'Create New Department'}
       </Typography>

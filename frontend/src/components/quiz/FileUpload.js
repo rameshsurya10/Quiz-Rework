@@ -95,7 +95,7 @@ const FileUpload = ({ onFilesSelect }) => {
     };
 
     return (
-        <div className="file-uploader-container">
+        <div className="file-uploader-container glass-effect">
             
             <div 
                 className={`file-drop-zone ${isDragging ? 'drag-over' : ''}`}
