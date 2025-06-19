@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Department
 from students.models import Student
-# from accounts.models import Teacher, Student
+from teacher.models import Teacher
 
 class StudentInDepartmentSerializer(serializers.ModelSerializer):
     """A simple serializer for listing students within a department."""
@@ -16,20 +16,38 @@ class DepartmentWithStudentsSerializer(serializers.ModelSerializer):
     """
     students = serializers.SerializerMethodField()
     student_count = serializers.SerializerMethodField()
+    teachers = serializers.SerializerMethodField()
+    teacher_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Department
         fields = [
-            'department_id', 'name', 'code', 'description', 
-            'student_count', 'students'
+            'department_id', 'name', 'code', 'teachers', 
+            'student_count', 'students', 'teacher_count'
         ]
 
-    def get_student_count(self, obj):
-        return Student.objects.filter(department_id=obj.department_id, is_deleted=False).count()
+    def get_teachers(self, obj):
+        teachers = Teacher.objects.filter(
+            department_ids__contains=[obj.department_id],
+            is_deleted=False    
+        )
+        return [{'teacher_id': t.teacher_id, 'name': t.name} for t in teachers]
+
+    def get_teacher_count(self, obj):
+        return Teacher.objects.filter(
+            department_ids__contains=[obj.department_id],
+            is_deleted=False
+        ).count()
 
     def get_students(self, obj):
         students = Student.objects.filter(department_id=obj.department_id, is_deleted=False)
         return StudentInDepartmentSerializer(students, many=True).data
+
+    def get_student_count(self, obj):
+        return Student.objects.filter(
+            department_id=obj.department_id,
+            is_deleted=False
+        ).count()
 
 class DepartmentSerializer(serializers.ModelSerializer):
     """Basic Department serializer matching the model fields"""

@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework.views import APIView
 from .models import Department
 from accounts.models import  User
-from .serializers import DepartmentSerializer, DepartmentDetailSerializer
+from .serializers import DepartmentSerializer, DepartmentDetailSerializer, DepartmentWithStudentsSerializer
 from django.db.models import Count, Q
 import csv
 import io
@@ -21,14 +21,14 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     
     # Explicitly define allowed HTTP methods
     http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
-    
-    def get_queryset(self):
-        """Return only departments where is_deleted is False."""
+ 
+    def list(self, request, *args, **kwargs):
+        """
+        List all departments with teacher names and student count.
+        """
         queryset = Department.objects.filter(is_deleted=False)
-        user = self.request.user
-        # Optionally, keep your role-based filtering here if needed
-        # For now, just return all non-deleted departments
-        return queryset
+        serializer = DepartmentWithStudentsSerializer(queryset, many=True)
+        return Response(serializer.data)
     
     def get_serializer_class(self):
         """Return different serializers for list and detail views"""
@@ -103,25 +103,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             'errors': errors,
         })
     
-    @action(detail=True, methods=['get'], url_path='students')
-    def students(self, request, pk=None):
-        """Get all students in department"""
-        department = self.get_object()
-        students = Student.objects.filter(department=department)
-        
-        from accounts.serializers import StudentSerializer
-        serializer = StudentSerializer(students, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['get'], url_path='teachers')
-    def teachers(self, request, pk=None):
-        """Get all teachers in department"""
-        department = self.get_object()
-        teachers = Teacher.objects.filter(departments=department)
-        
-        from accounts.serializers import TeacherSerializer
-        serializer = TeacherSerializer(teachers, many=True)
-        return Response(serializer.data)
+
     
     @action(detail=True, methods=['get'], url_path='dashboard')
     def dashboard(self, request, pk=None):
