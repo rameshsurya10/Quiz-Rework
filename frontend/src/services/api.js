@@ -148,7 +148,16 @@ export const quizApi = {
   getById: (id) => api.get(`/api/quiz/${id}/`),
   create: (data) => api.post('/api/quiz/', data),
   update: (id, data) => api.put(`/api/quiz/${id}/`, data),
+  patch: (id, data) => api.patch(`/api/quiz/${id}/`, data),
   delete: (id) => api.delete(`/api/quiz/${id}/`),
+  publish: (id) => api.post(`/api/quiz/${id}/publish/`),
+    uploadFile: (quizId, fileData, config) => api.post(`/api/quiz/${quizId}/files/upload/`, fileData, {
+    ...config,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      ...config?.headers,
+    },
+  }),
 };
 
 export const userApi = {

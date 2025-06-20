@@ -68,8 +68,8 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
 
   const validate = () => {
     const newErrors = {};
-    if (!formData.name.trim()) newErrors.name = 'Department name is required.';
-    if (!formData.code.trim()) newErrors.code = 'Department code is required.';
+    if (!formData.name.trim()) newErrors.name = 'Subject name is required.';
+    if (!formData.code.trim()) newErrors.code = 'Subject code is required.';
     // Add more validation as needed (e.g., code format)
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -93,11 +93,11 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
   return (
     <Box component="form" onSubmit={handleSubmit} className="glass-effect" sx={{ p: 3, borderRadius: '8px', minWidth: 400 }}>
       <Typography variant="h6" gutterBottom>
-        {department ? 'Edit Department' : 'Create New Department'}
+        {department ? 'Edit Subject' : 'Create New Subject'}
       </Typography>
       <TextField
         fullWidth
-        label="Department Name"
+        label="Subject Name"
         name="name"
         value={formData.name}
         onChange={handleInputChange}
@@ -109,7 +109,7 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
       />
       <TextField
         fullWidth
-        label="Department Code"
+        label="Subject Code"
         name="code"
         value={formData.code}
         onChange={handleInputChange}
@@ -172,7 +172,7 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
           disabled={isSubmitting || loadingTeachers}
           startIcon={isSubmitting ? <CircularProgress size={20} /> : null}
         >
-          {isSubmitting ? 'Saving...' : (department ? 'Update Department' : 'Create Department')}
+          {isSubmitting ? 'Saving...' : (department ? 'Update Subject' : 'Create Subject')}
         </Button>
       </Box>
     </Box>

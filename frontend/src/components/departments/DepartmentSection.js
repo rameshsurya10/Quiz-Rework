@@ -34,20 +34,20 @@ import {
 } from '@mui/icons-material';
 import { PageHeader, EmptyState } from '../common';
 import SummaryCard from '../common/SummaryCard';
-import { departmentApi, userApi, teacherApi } from '../../services/api';
+import { departmentApi } from '../../services/api';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { motion } from 'framer-motion';
 import DepartmentForm from './DepartmentForm';
-import StudentForm from '../students/StudentForm';
-import { studentApi } from '../../services/api';
+
+
 
 const DepartmentSection = () => {
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
 
   const [departments, setDepartments] = useState([]);
-  const [teachers, setTeachers] = useState([]);
-  const [students, setStudents] = useState([]);
+  
+  
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(9);
@@ -61,19 +61,9 @@ const DepartmentSection = () => {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [deptRes, teacherRes, studentRes] = await Promise.all([
-        departmentApi.getAll(),
-        teacherApi.getAll(),
-        studentApi.getAll(),
-      ]);
-
+      const deptRes = await departmentApi.getAll();
       const depts = deptRes?.data?.results || deptRes?.data || [];
-      const teachs = teacherRes?.data || [];
-      const studs = studentRes?.data?.results || studentRes?.data || [];
-
       setDepartments(Array.isArray(depts) ? depts : []);
-      setTeachers(Array.isArray(teachs) ? teachs : []);
-      setStudents(Array.isArray(studs) ? studs : []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
       showSnackbar('Failed to load data. Please try again.', 'error');
@@ -92,18 +82,18 @@ const DepartmentSection = () => {
       let savedDepartment;
       if (selectedDept?.department_id) {
         savedDepartment = await departmentApi.update(selectedDept.department_id, formData);
-        showSnackbar('Department updated successfully!', 'success');
+        showSnackbar('Subject updated successfully!', 'success');
         setDepartments(departments.map(d => d.department_id === selectedDept.department_id ? savedDepartment.data : d));
       } else {
         savedDepartment = await departmentApi.create(formData);
-        showSnackbar('Department created successfully!', 'success');
+        showSnackbar('Subject created successfully!', 'success');
         setDepartments([savedDepartment.data, ...departments]);
       }
       setOpenFormDialog(false);
       setSelectedDept(null);
     } catch (error) {
-      console.error('Failed to save department:', error);
-      showSnackbar(error.response?.data?.detail || 'Failed to save department', 'error');
+      console.error('Failed to save subject:', error);
+      showSnackbar(error.response?.data?.detail || 'Failed to save subject', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -113,13 +103,13 @@ const DepartmentSection = () => {
     if (!selectedDept) return;
     try {
       await departmentApi.delete(selectedDept.department_id);
-      showSnackbar('Department deleted successfully!', 'success');
+      showSnackbar('Subject deleted successfully!', 'success');
       setDepartments(departments.filter(d => d.department_id !== selectedDept.department_id));
       setOpenDeleteDialog(false);
       setSelectedDept(null);
     } catch (error) {
-      console.error('Failed to delete department:', error);
-      showSnackbar(error.response?.data?.detail || 'Failed to delete department', 'error');
+      console.error('Failed to delete subject:', error);
+      showSnackbar(error.response?.data?.detail || 'Failed to delete subject', 'error');
     }
   };
 
@@ -135,6 +125,28 @@ const DepartmentSection = () => {
   };
 
   const paginatedDepartments = filteredDepartments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+  // Aggregate totals
+  // Compute unique teachers to avoid double-counting when a teacher belongs to multiple subjects
+  const teacherIdSet = new Set();
+  departments.forEach((dept) => {
+    if (Array.isArray(dept.teachers)) {
+      dept.teachers.forEach((t) => {
+        const id = t?.teacher_id ?? t?.id ?? t?.uuid;
+        if (id !== undefined && id !== null) {
+          teacherIdSet.add(id);
+        }
+      });
+    } else if (typeof dept.teacher_count === 'number' && !Array.isArray(dept.teachers)) {
+      // Fallback – if only counts are provided and teacher list is missing, fall back to aggregated sum (may over-count)
+      // In this case, we simply push placeholders to approximate uniqueness; this branch keeps previous behaviour.
+      for (let i = 0; i < dept.teacher_count; i++) {
+        teacherIdSet.add(`dept${dept.subject_id || dept.id}_${i}`);
+      }
+    }
+  });
+  const totalTeachers = teacherIdSet.size;
+  const totalStudents = departments.reduce((acc, d) => acc + (d.student_count ?? 0), 0);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -152,11 +164,11 @@ const DepartmentSection = () => {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <PageHeader
-          title="Departments"
-          subtitle="Manage academic departments and their details"
+          title="Subjects"
+          subtitle="Manage academic subjects and their details"
           actions={[
             <Button
-              key="add-department"
+              key="add-subject"
               variant="contained"
               color="primary"
               startIcon={<AddIcon />}
@@ -165,16 +177,16 @@ const DepartmentSection = () => {
                 setOpenFormDialog(true);
               }}
             >
-              Add Department
+              Add Subject
             </Button>
           ]}
         />
       </motion.div>
 
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={4}><SummaryCard icon={<ClassIcon />} title="Total Departments" value={departments.length} color={theme.palette.primary.main} index={0} /></Grid>
-          <Grid item xs={12} sm={4}><SummaryCard icon={<PeopleIcon />} title="Total Teachers" value={teachers.length} color={theme.palette.secondary.main} index={1} /></Grid>
-          <Grid item xs={12} sm={4}><SummaryCard icon={<SchoolIcon />} title="Total Students" value={students.length} color={theme.palette.success.main} index={2} /></Grid>
+          <Grid item xs={12} sm={4}><SummaryCard icon={<ClassIcon />} title="Total Subjects" value={departments.length} color={theme.palette.primary.main} index={0} /></Grid>
+          <Grid item xs={12} sm={4}><SummaryCard icon={<PeopleIcon />} title="Total Teachers" value={totalTeachers} color={theme.palette.secondary.main} index={1} /></Grid>
+          <Grid item xs={12} sm={4}><SummaryCard icon={<SchoolIcon />} title="Total Students" value={totalStudents} color={theme.palette.success.main} index={2} /></Grid>
         </Grid>
 
       <Paper sx={{ p: 3, borderRadius: 2 }} elevation={2}>
@@ -197,17 +209,17 @@ const DepartmentSection = () => {
           <motion.div variants={containerVariants} initial="hidden" animate="visible">
             {paginatedDepartments.length === 0 ? (
               <EmptyState
-                title="No Departments Found"
-                message="Create a new department to get started."
+                title="No Subjects Found"
+                message="Create a new subject to get started."
                 action={() => setOpenFormDialog(true)}
-                actionLabel="Add Department"
+                actionLabel="Add Subject"
               />
             ) : (
               <>
                 <Grid container spacing={3}>
                   {paginatedDepartments.map((dept, index) => {
-                    const studentCount = students.filter(s => s.department_id === dept.id).length;
-                    const headTeacher = teachers.find(t => t.id === dept.head_teacher);
+                    const studentCount = dept.student_count ?? 0;
+                    const teacherCount = dept.teacher_count ?? (Array.isArray(dept.teachers) ? dept.teachers.length : 0);
                     
                     return (
                       <Grid item key={dept.id} xs={12} sm={6} md={4}>
@@ -234,7 +246,7 @@ const DepartmentSection = () => {
                                 <Avatar sx={{ width: 72, height: 72, m: 'auto', mb: 2, bgcolor: 'primary.light', fontSize: '2.5rem', color: 'primary.contrastText' }}>
                                   {dept.name ? dept.name.charAt(0).toUpperCase() : ''}
                                 </Avatar>
-                                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>{dept.name || 'Unnamed Department'}</Typography>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>{dept.name || 'Unnamed Subject'}</Typography>
                                 <Typography variant="body2" color="text.secondary">{dept.code}</Typography>
                             </Box>
                             
@@ -243,8 +255,8 @@ const DepartmentSection = () => {
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, backgroundColor: 'action.hover' }}>
                               <Box sx={{ display: 'flex', justifyContent: 'space-around', flexGrow: 1 }}>
                                 <Box textAlign="center">
-                                  <Typography variant="caption" color="text.secondary">Head of Dept.</Typography>
-                                  <Typography variant="body2" sx={{ fontWeight: 'medium', textTransform: 'capitalize' }}>{headTeacher ? headTeacher.name : 'N/A'}</Typography>
+                                  <Typography variant="caption" color="text.secondary">Teachers</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 'medium' }}>{teacherCount}</Typography>
                                 </Box>
                                 <Box textAlign="center">
                                   <Typography variant="caption" color="text.secondary">Students</Typography>
@@ -289,12 +301,12 @@ const DepartmentSection = () => {
       {/* Dialogs remain here */}
       <Dialog open={openFormDialog} onClose={() => { if (!isSubmitting) { setOpenFormDialog(false); setSelectedDept(null); } }} maxWidth="md" fullWidth>
         <DialogTitle>{selectedDept ? 'Edit Department' : 'Add New Department'}</DialogTitle>
-        <DialogContent><DepartmentForm onSubmit={handleSaveDepartment} initialData={selectedDept} isSubmitting={isSubmitting} teachers={teachers} /></DialogContent>
+        <DialogContent><DepartmentForm onSubmit={handleSaveDepartment} initialData={selectedDept} isSubmitting={isSubmitting} /></DialogContent>
       </Dialog>
 
       <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
         <DialogTitle>Confirm Deletion</DialogTitle>
-        <DialogContent><DialogContentText>Are you sure you want to delete the department "{selectedDept?.name}" (ID: {selectedDept?.id})? This action cannot be undone.</DialogContentText></DialogContent>
+        <DialogContent><DialogContentText>Are you sure you want to delete the subject "{selectedDept?.name}" (ID: {selectedDept?.id})? This action cannot be undone.</DialogContentText></DialogContent>
         <DialogActions><Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button><Button onClick={handleDelete} color="error">Delete</Button></DialogActions>
       </Dialog>
     </Container>

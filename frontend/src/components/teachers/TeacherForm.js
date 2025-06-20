@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+
+
 import {
   Box,
   TextField,
@@ -18,6 +20,15 @@ import {
 } from '@mui/material';
 import { departmentApi, teacherApi } from '../../services/api';
 
+// Simple country list; extend as needed
+const COUNTRY_OPTIONS = [
+  { code: '+91', name: 'India' },
+  { code: '+1', name: 'United States' },
+  { code: '+44', name: 'United Kingdom' },
+  { code: '+61', name: 'Australia' },
+  { code: '+81', name: 'Japan' },
+];
+
 const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
   const isEditMode = Boolean(teacher && teacher.teacher_id);
 
@@ -25,8 +36,11 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
     name: '',
     email: '',
     phone: '',
+    country_code: '',
+    country: '',
     department_ids: [], // Always use IDs in state
     join_date: '',
+    join_time: '',
   });
 
   const [errors, setErrors] = useState({});
@@ -45,7 +59,7 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
         setAllDepartments(fetchedDepartments);
       } catch (error) {
         console.error('Error fetching departments:', error);
-        setErrors(prev => ({ ...prev, form: 'Failed to load departments.' }));
+        setErrors(prev => ({ ...prev, form: 'Failed to load subjects.' }));
       }
       setIsFetchingDepartments(false);
     };
@@ -59,20 +73,30 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
         name: teacher.name || '',
         email: teacher.email || '',
         phone: teacher.phone || '',
+        country_code: teacher.country_code || '',
+        country: teacher.country || '',
         // The teacher object from the list may not have a full 'departments' array.
         // It might just have a `departmentId`. We need to handle this gracefully.
         // The `teacher` object passed to the form should have the full departments array.
         department_ids: teacher.departments?.map(dept => dept.department_id).filter(id => id != null) || [],
-        join_date: teacher.join_date || (teacher.created_at ? teacher.created_at.split('T')[0] : ''),
+        join_date: teacher.join_date ? teacher.join_date.split('T')[0] : (teacher.created_at ? teacher.created_at.split('T')[0] : ''),
+        join_time: teacher.join_date ? teacher.join_date.split('T')[1]?.slice(0,5) : '',
       });
     } else {
-      // Reset form for create mode
+      // Reset form for create mode with current UTC defaults
+      const now = new Date();
+      const isoDate = now.toISOString(); // e.g., 2025-06-19T09:25:30.123Z
+      const today = isoDate.split('T')[0];
+      const timePart = isoDate.split('T')[1].slice(0,5); // HH:MM
       setFormData({
         name: '',
         email: '',
         phone: '',
+        country_code: '',
+        country: '',
         department_ids: [],
-        join_date: '',
+        join_date: today,
+        join_time: timePart,
       });
     }
   }, [teacher, isEditMode]);
@@ -110,6 +134,14 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
         newErrors.phone = 'Enter a valid phone number (e.g., +1234567890)';
     }
     if (!formData.join_date) newErrors.join_date = 'Join date is required';
+    if (!formData.join_time) newErrors.join_time = 'Join time is required';
+    // Prevent past datetime
+    if (formData.join_date && formData.join_time) {
+      const selectedDT = new Date(`${formData.join_date}T${formData.join_time}`);
+      if (selectedDT < new Date()) {
+        newErrors.join_time = 'Join date/time cannot be in the past';
+      }
+    }
     if (formData.department_ids.length === 0) newErrors.department_ids = 'At least one department must be selected';
     
     setErrors(newErrors);
@@ -127,27 +159,16 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
       name: formData.name,
       email: formData.email,
       phone: formData.phone,
-      join_date: formData.join_date,
+      country_code: formData.country_code,
+      country: formData.country,
+      // Combine date & time, assume local then convert to UTC ISO
+      join_date: new Date(`${formData.join_date}T${formData.join_time}`).toISOString(),
     };
 
-    let finalPayload;
-
-    if (isEditMode) {
-      // For updates, the backend expects 'department_ids'
-      finalPayload = {
-        ...basePayload,
-        department_ids: formData.department_ids,
-      };
-    } else {
-      // For creates, the backend expects 'department_names'
-      finalPayload = {
-        ...basePayload,
-        department_names: formData.department_ids.map(id => {
-          const dept = allDepartments.find(d => d.id === id);
-          return dept ? dept.name : '';
-        }).filter(name => name && name.trim() !== ''),
-      };
-    }
+    const finalPayload = {
+      ...basePayload,
+      department_ids: formData.department_ids,
+    };
 
     try {
       if (isEditMode) {
@@ -206,14 +227,82 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
         <Grid item xs={12} sm={6}>
           <TextField fullWidth label="Phone Number" name="phone" value={formData.phone} onChange={handleInputChange} error={!!errors.phone} helperText={errors.phone} required />
         </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField fullWidth label="Join Date" name="join_date" type="date" value={formData.join_date} onChange={handleInputChange} error={!!errors.join_date} helperText={errors.join_date} InputLabelProps={{ shrink: true }} required />
+        <Grid item xs={12} sm={3}>
+          <FormControl fullWidth>
+            <InputLabel id="country-code-label">Country Code</InputLabel>
+            <Select
+              labelId="country-code-label"
+              name="country_code"
+              value={formData.country_code}
+              label="Country Code"
+              onChange={(e) => {
+                const selectedCode = e.target.value;
+                const match = COUNTRY_OPTIONS.find(c => c.code === selectedCode);
+                setFormData(prev => ({
+                  ...prev,
+                  country_code: selectedCode,
+                  country: match ? match.name : prev.country,
+                }));
+              }}
+            >
+              {COUNTRY_OPTIONS.map((c) => (
+                <MenuItem key={c.code} value={c.code}>{c.code} — {c.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField fullWidth label="Country" name="country" value={formData.country} onChange={handleInputChange} />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth
+            label="Join Date"
+            name="join_date"
+            type="date"
+            value={formData.join_date}
+            onChange={(e) => {
+              handleInputChange(e);
+              // if date changes and equals today, ensure time is >= now
+              const selectedDate = e.target.value;
+              const today = new Date().toISOString().split('T')[0];
+              if (selectedDate !== today) {
+                // reset time min
+                setFormData(prev => ({ ...prev, join_time: prev.join_time || '00:00' }));
+              }
+            }}
+            error={!!errors.join_date}
+            helperText={errors.join_date}
+            InputLabelProps={{ shrink: true }}
+            inputProps={{ min: new Date().toISOString().split('T')[0] }}
+            required
+          />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth
+            label="Join Time"
+            name="join_time"
+            type="time"
+            value={formData.join_time}
+            onChange={handleInputChange}
+            error={!!errors.join_time}
+            helperText={errors.join_time}
+            InputLabelProps={{ shrink: true }}
+            inputProps={{
+              min: (() => {
+                const today = new Date().toISOString().split('T')[0];
+                return formData.join_date === today ? new Date().toISOString().slice(11,16) : '00:00';
+              })(),
+            }}
+            required
+          />
         </Grid>
 
         {/* Department Multi-Select */}
         <Grid item xs={12}>
           <FormControl fullWidth error={!!errors.department_ids} required>
-            <InputLabel id="department-select-label">Departments *</InputLabel>
+            <InputLabel id="department-select-label">Subjects *</InputLabel>
             <Select
               labelId="department-select-label"
               id="department-select"
@@ -223,7 +312,7 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
               onClose={() => setDepartmentSelectOpen(false)}
               value={formData.department_ids} // Use IDs for the value
               onChange={handleDepartmentChange}
-              input={<OutlinedInput label="Departments *" />}
+              input={<OutlinedInput label="Subjects *" />}
               renderValue={(selectedIds) => (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                   {selectedIds.map((id) => {
@@ -235,9 +324,9 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
               MenuProps={{ PaperProps: { style: { maxHeight: 300, width: 250 } } }}
             >
               {isFetchingDepartments ? (
-                <MenuItem disabled>Loading departments...</MenuItem>
+                <MenuItem disabled>Loading subjects...</MenuItem>
               ) : allDepartments.length === 0 ? (
-                <MenuItem disabled>No departments available.</MenuItem>
+                <MenuItem disabled>No subjects available.</MenuItem>
               ) : (
                 [
                   ...allDepartments.map((dept) => (

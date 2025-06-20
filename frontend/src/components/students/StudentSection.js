@@ -207,7 +207,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
       {/* <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={4}><SummaryCard icon={<SchoolIcon />} title="Total Students" value={students.length} color={theme.palette.primary.main} index={0} /></Grid>
         <Grid item xs={12} sm={4}><SummaryCard icon={<PeopleIcon />} title="Total Teachers" value={teachers.length} color={theme.palette.secondary.main} index={1} /></Grid>
-        <Grid item xs={12} sm={4}><SummaryCard icon={<ClassIcon />} title="Total Departments" value={departments.length} color={theme.palette.success.main} index={2} /></Grid>
+        <Grid item xs={12} sm={4}><SummaryCard icon={<ClassIcon />} title="Total Subjects" value={departments.length} color={theme.palette.success.main} index={2} /></Grid>
       </Grid> */}
       
       <Card sx={{ mb: 2 }}>
@@ -231,13 +231,13 @@ const StudentSection = ({ initialOpenDialog = false }) => {
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
               <FormControl fullWidth variant="outlined">
-                <InputLabel>Department</InputLabel>
+                <InputLabel>Subject</InputLabel>
                 <Select
                   value={selectedDept}
                   onChange={(e) => setSelectedDept(e.target.value)}
-                  label="Department"
+                  label="Subject"
                 >
-                  <MenuItem value="all">All Departments</MenuItem>
+                  <MenuItem value="all">All Subjects</MenuItem>
                   {departments.map((dept) => (
                     <MenuItem key={dept.department_id} value={dept.department_id}>
                       {dept.name}

@@ -12,6 +12,9 @@ import LanguageIcon from '@mui/icons-material/Language';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import DownloadIcon from '@mui/icons-material/Download';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { ThemeContext } from '../../contexts/ThemeContext';
 import { getTimezoneOptions } from '../../utils/localeUtils';
@@ -239,13 +242,20 @@ const SettingsPage = () => {
           {/* Security Tab */}
           <TabPanel value={tabValue} index={4}>
             <Typography variant="h6" gutterBottom>Security Settings</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Button variant="outlined">Change Password</Button>
-              <Button variant="outlined">Setup Two-Factor Authentication</Button>
-              <Divider sx={{ my: 1 }} />
-              <Button variant="outlined" color="info">Export My Data</Button>
-              <Button variant="outlined" color="error" onClick={() => setConfirmOpen(true)}>Delete My Account</Button>
-            </Box>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <Button fullWidth variant="outlined" startIcon={<VpnKeyIcon />}>Change Password</Button>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Button fullWidth variant="outlined" startIcon={<ShieldOutlinedIcon />}>Setup Two-Factor Authentication</Button>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Button fullWidth variant="outlined" color="info" startIcon={<DownloadIcon />}>Export My Data</Button>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Button fullWidth variant="outlined" color="error" startIcon={<DeleteForeverIcon />} onClick={() => setConfirmOpen(true)}>Delete My Account</Button>
+              </Grid>
+            </Grid>
           </TabPanel>
 
           <Divider />
