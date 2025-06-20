@@ -51,7 +51,6 @@ INSTALLED_APPS = [
     'students',
     # 'quize',
     'dashboard',
-    'ai_processing',
     'departments',
     'notifications',
     'reports',

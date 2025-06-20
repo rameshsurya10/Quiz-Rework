@@ -11,6 +11,76 @@ A modern web application that generates quiz from PDF documents using AI.
 - Quiz Sharing via Unique URLs
 - Analytics and Performance Tracking
 
+## Recent Updates
+
+### Codebase Optimization (July 2024)
+
+- **Vector Database Integration**: Migrated from local file storage to vector database storage for improved document management
+- **Code Consolidation**: Removed duplicate text extraction code and centralized document processing utilities
+- **Storage Optimization**: Eliminated redundant upload directories and streamlined file handling
+- **API Response Improvement**: Modified document upload responses to include file metadata instead of exposing generated questions
+- **Unused Module Removal**: Removed the unused ai_processing module as its functionality had been moved elsewhere
+- **Package Management Optimization**: Consolidated package.json files and removed redundant node_modules directories
+
+## Project Structure
+
+### Backend (Django)
+
+- **accounts**: User authentication and management
+- **documents**: Document upload, storage, and processing
+- **quiz**: Quiz creation, management, and question generation
+- **departments**: Department management
+- **students**: Student management
+- **teacher**: Teacher management
+- **settings**: Application settings
+- **notifications**: User notifications
+- **dashboard**: Analytics and reporting
+
+### Frontend (React)
+
+- **components**: Reusable UI components
+- **contexts**: React contexts for state management
+- **services**: API service integrations
+- **utils**: Utility functions
+
+## Technology Stack
+
+- **Backend**: Django, Django REST Framework
+- **Frontend**: React, Material-UI
+- **Database**: PostgreSQL with pgvector extension
+- **Storage**: Vector Database for documents
+- **AI**: OpenAI API for question generation
+- **Authentication**: JWT Token-based authentication
+
+## Setup Instructions
+
+1. Clone the repository
+2. Install frontend dependencies: `cd frontend && npm install`
+3. Install backend dependencies: `cd backend && pip install -r requirements.txt`
+4. Configure environment variables
+5. Run migrations: `cd backend && python manage.py migrate`
+6. Start the backend server: `cd backend && python manage.py runserver`
+7. Start the frontend development server: `cd frontend && npm start`
+
+## Environment Variables
+
+Create a `.env` file in the backend directory with the following variables:
+
+```
+SECRET_KEY=your_django_secret_key
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+OPENAI_API_KEY=your_openai_api_key
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_key
+SUPABASE_SECRET=your_supabase_secret
+USE_SUPABASE_STORAGE=True
+```
+
+## API Documentation
+
+API documentation is available at `/api/docs/` when the backend server is running.
+
 ## Tech Stack
 
 ### Backend
@@ -18,6 +88,7 @@ A modern web application that generates quiz from PDF documents using AI.
 - PostgreSQL
 - OpenAI API & LangChain
 - PyPDF2 for PDF processing
+- pgvector for vector database storage
 
 ### Frontend
 - React.js
@@ -74,6 +145,7 @@ The application implements a dual storage strategy:
 
 - **Default**: Django's standard file storage system
 - **Supabase**: Cloud-based storage when enabled via settings
+- **Vector Database**: pgvector extension for PostgreSQL to store document embeddings
 
 The implementation is toggled via the `USE_SUPABASE_STORAGE` setting in `.env`. No code changes are required to switch between storage backends.
 

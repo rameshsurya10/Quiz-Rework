@@ -61,7 +61,7 @@ urlpatterns = [
     # path('api/accounts/', include('accounts.urls')),
     path('api/documents/', include('documents.urls')),
     path('api/quiz/', include('quiz.urls')),
-    path('api/ai/', include('ai_processing.urls')),
+    # path('api/ai/', include('ai_processing.urls')),  # Removed as unused
     path('api/departments/', include('departments.urls')),
     path('api/notifications/', include('notifications.urls')),
     path('api/students/', include('students.urls')),

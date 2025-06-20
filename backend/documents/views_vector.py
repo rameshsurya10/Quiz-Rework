@@ -27,11 +27,11 @@ from .models import Document, DocumentVector
 try:
     import pytesseract
     from PIL import Image
-    from pypdf import PdfReader
+    from PyPDF2 import PdfReader
     TEXT_EXTRACTION_AVAILABLE = True
 except ImportError:
     TEXT_EXTRACTION_AVAILABLE = False
-    logging.warning("Text extraction packages not available. Install with: pip install pytesseract pillow pypdf")
+    logging.warning("Text extraction packages not available. Install with: pip install pytesseract pillow PyPDF2")
 
 # Import vector database utilities
 from config.vector_db import VectorDB
@@ -541,7 +541,8 @@ class QuizDocumentUploadView(APIView):
                     'storage_type': 'vector_db',
                     'vector_created': embedding is not None,
                     'question_count': len(questions),
-                    'questions': questions
+                    'file_size': file.size,
+                    'file_type': file.content_type
                 }, status=status.HTTP_201_CREATED)
             else:
                 # Update document status to failed
@@ -978,13 +979,14 @@ class DocumentAnalysisWebhookView(APIView):
                         'quiz_id': quiz.quiz_id,
                         'question_count': len(questions),
                         'analysis_result': {
-                            'questions': questions,
                             'metadata': {
                                 'document_title': document.title,
                                 'quiz_title': quiz.title,
                                 'question_type': question_type,
                                 'quiz_type': quiz_type,
-                                'generated_at': timezone.now().isoformat()
+                                'generated_at': timezone.now().isoformat(),
+                                'file_size': document.file_size,
+                                'file_type': document.file_type
                             }
                         }
                     }, status=status.HTTP_200_OK)

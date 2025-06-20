@@ -134,7 +134,9 @@ class QuizFileUploadView(APIView):
             'name': filename,
             'path': db_file_path,
             'document_id': document.id,
-            'vector_uuid': doc_uuid
+            'vector_uuid': doc_uuid,
+            'file_size': uploaded_file.size,
+            'file_type': uploaded_file.content_type
         }
         quiz.uploadedfiles.append(file_info)
         quiz.save()
@@ -388,6 +390,8 @@ class QuizFileUploadView(APIView):
             return Response({
                 "message": "File uploaded and questions generated successfully.",
                 "file": file_info,
+                "file_size": uploaded_file.size,
+                "file_type": uploaded_file.content_type,
                 "quiz_id": quiz.quiz_id
             }, status=status.HTTP_201_CREATED)
 
@@ -970,7 +974,9 @@ class QuizQuestionGenerateFromPromptView(APIView):
         # Store file info in the database
         file_info = {
             'name': filename,
-            'path': db_file_path
+            'path': db_file_path,
+            'file_size': uploaded_file.size,
+            'file_type': uploaded_file.content_type
         }
 
         quiz.uploadedfiles.append(file_info)
@@ -1024,8 +1030,9 @@ class QuizQuestionGenerateFromPromptView(APIView):
             return Response({
                 "message": "Questions generated successfully",
                 "file": file_info,
-                "quiz_id": quiz.quiz_id,
-                "questions": generated_questions
+                "file_size": uploaded_file.size,
+                "file_type": uploaded_file.content_type,
+                "quiz_id": quiz.quiz_id
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
@@ -1170,32 +1177,39 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
         self.check_object_permissions(self.request, quiz)
         return quiz
 
-    def extract_text_from_pdf(self, file_path):
-        """Extract text from PDF file"""
-        try:
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                text = ""
-                for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
-                return text
-        except Exception as e:
-            raise Exception(f"Error reading PDF file: {str(e)}")
-
     def get_file_content(self, file_info):
         """Get content from file based on file type"""
         file_path = os.path.join(settings.BASE_DIR, 'backend', file_info['path'])
         
         if not os.path.exists(file_path):
             raise Exception("File not found on server")
-
-        file_extension = os.path.splitext(file_path)[1].lower()
-        if file_extension == '.pdf':
-            return self.extract_text_from_pdf(file_path)
-        else:
-            # For text files
-            with open(file_path, 'r', encoding='utf-8') as file:
-                return file.read()
+            
+        # Use the centralized text extraction utility
+        from documents.utils import extract_text_from_file
+        
+        # Open the file
+        with open(file_path, 'rb') as file:
+            # Create a file-like object that mimics Django's UploadedFile
+            from django.core.files.uploadedfile import InMemoryUploadedFile
+            import io
+            
+            # Read the file content
+            file_content = file.read()
+            file_name = os.path.basename(file_path)
+            file_size = len(file_content)
+            
+            # Create a file-like object
+            file_obj = InMemoryUploadedFile(
+                io.BytesIO(file_content),
+                'file',
+                file_name,
+                'application/octet-stream',
+                file_size,
+                None
+            )
+            
+            # Use the centralized utility
+            return extract_text_from_file(file_obj)
 
     def generate_questions_from_content(self, content, question_type, quiz_type, num_questions):
         try:
@@ -1526,14 +1540,17 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
             # Generate questions using quiz settings
             questions = self.generate_questions_from_content(content, question_type, quiz_type, num_questions)
             
+            # Get file info
+            file_info = quiz.uploadedfiles[-1]  # Get the last uploaded file
+            
             return Response({
                 "quiz_id": quiz.quiz_id,
                 "quiz_type": quiz_type,
                 "question_type": question_type,
                 "num_questions": num_questions,
-                "questions": questions,
                 "quiz_title": quiz.title,
-                "quiz_description": quiz.description
+                "quiz_description": quiz.description,
+                "file": file_info
             })
 
         except Exception as e:
@@ -1594,7 +1611,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 "quiz_type": quiz_type,
                 "question_type": question_type,
                 "num_questions": num_questions,
-                "questions": questions
+                "file": file_info
             })
 
         except Exception as e:

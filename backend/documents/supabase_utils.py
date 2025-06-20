@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from django.conf import settings
 from config.supabase import SupabaseStorage, SupabaseDB
-from pypdf import PdfReader
+from PyPDF2 import PdfReader
 from io import BytesIO
 
 
@@ -54,28 +54,30 @@ class SupabaseDocumentHandler:
         page_count = 0
         extracted_text = ""
         
-        if ext.lower() == '.pdf':
-            try:
-                pdf = PdfReader(BytesIO(file.read()))
+        # Use the centralized text extraction utility
+        from documents.utils import extract_text_from_file
+        
+        try:
+            # Reset file pointer
+            file.seek(0)
+            
+            # Extract text
+            extracted_text = extract_text_from_file(file)
+            
+            # Get page count for PDF files
+            if ext.lower() == '.pdf':
+                file.seek(0)
+                pdf = PdfReader(file)
                 page_count = len(pdf.pages)
-                
-                # Extract text from first few pages for preview
-                max_preview_pages = min(3, page_count)
-                preview_text = []
-                
-                for i in range(max_preview_pages):
-                    page_text = pdf.pages[i].extract_text()
-                    if page_text:
-                        preview_text.append(page_text)
-                
-                extracted_text = "\n\n".join(preview_text)
-                
+            
+            # Create a preview of the extracted text
+            if extracted_text:
                 # Limit preview text length
                 if len(extracted_text) > 1000:
                     extracted_text = extracted_text[:997] + "..."
                     
-            except Exception as e:
-                print(f"Error processing PDF: {str(e)}")
+        except Exception as e:
+            print(f"Error processing file: {str(e)}")
         
         # Create document metadata in database
         current_time = datetime.now().isoformat()
@@ -109,7 +111,7 @@ class SupabaseDocumentHandler:
     
     def extract_full_text(self, document_id, filename):
         """
-        Extract full text from a PDF document and update the database.
+        Extract full text from a document and update the database.
         
         Args:
             document_id: ID of the document
@@ -122,18 +124,23 @@ class SupabaseDocumentHandler:
             # Download the document from Supabase Storage
             file_data = self.storage.download_file(self.bucket, filename)
             
-            # Process the PDF
-            pdf = PdfReader(BytesIO(file_data))
-            page_count = len(pdf.pages)
+            # Use the centralized text extraction utility
+            from documents.utils import extract_text_from_file
+            from django.core.files.uploadedfile import InMemoryUploadedFile
+            import io
             
-            # Extract text from all pages
-            all_text = []
-            for i in range(page_count):
-                page_text = pdf.pages[i].extract_text()
-                if page_text:
-                    all_text.append(page_text)
+            # Create a file-like object
+            file_obj = InMemoryUploadedFile(
+                io.BytesIO(file_data),
+                'file',
+                filename,
+                'application/octet-stream',
+                len(file_data),
+                None
+            )
             
-            extracted_text = "\n\n".join(all_text)
+            # Extract text
+            extracted_text = extract_text_from_file(file_obj)
             
             # Update the document in the database
             self.db.update(
