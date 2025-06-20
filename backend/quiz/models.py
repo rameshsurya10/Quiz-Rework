@@ -7,13 +7,35 @@ User = get_user_model()
 
 class Quiz(models.Model):
     """Model representing a quiz"""
+    QUIZ_TYPE_CHOICES = [
+        ('easy', 'Easy'),
+        ('medium', 'Medium'),
+        ('hard', 'Hard'),
+    ]
+    
+    QUESTION_TYPE_CHOICES = [
+        ('mcq', 'Multiple Choice'),
+        ('fill', 'Fill in the Blank'),
+        ('truefalse', 'True/False'),
+        ('oneline', 'One Line Answer'),
+        ('mixed', 'Mixed Types'),
+    ]
+    
     quiz_id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    no_of_questions = models.IntegerField(default=10)
-    quiz_type = models.CharField(max_length=50, default='easy')
-    question_type = models.CharField(max_length=50, default='multiple_choice', help_text="Type of questions in the quiz (e.g., multiple_choice, fill_in_blank)")
-    uploadedfiles = models.JSONField(help_text="List of uploaded files with their metadata", null=True, blank=True, default=list)
+    quiz_type = models.CharField(max_length=50, choices=QUIZ_TYPE_CHOICES, default='medium')
+    question_type = models.CharField(max_length=50, choices=QUESTION_TYPE_CHOICES, default='mcq')
+    no_of_questions = models.IntegerField(default=5)
+    time_limit_minutes = models.IntegerField(default=30)
+    passing_score = models.IntegerField(null=True, blank=True)
+    share_url = models.URLField(max_length=500, blank=True, null=True, help_text="URL for sharing the quiz")
+    created_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who created the quiz")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_modified_at = models.DateTimeField(auto_now=True)
+    last_modified_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who last modified the quiz")
+    is_published = models.BooleanField(default=False)
+    uploadedfiles = models.JSONField(default=list, blank=True, null=True)
     pages = models.JSONField(help_text="List of page ranges to generate questions from", null=True, blank=True, default=list)
     department = models.ForeignKey(
         'departments.Department',
@@ -23,7 +45,6 @@ class Quiz(models.Model):
         db_column='department_id'
     )
     quiz_date = models.DateTimeField(default=timezone.now)
-    is_published = models.BooleanField(default=False)
     published_at = models.DateTimeField(null=True, blank=True)
     is_deleted = models.BooleanField(default=False)
     creator = models.CharField(max_length=255, null=True, blank=True, help_text="Name of the user who created the quiz")
@@ -31,8 +52,6 @@ class Quiz(models.Model):
     created_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who created the quiz")
     last_modified_at = models.DateTimeField(auto_now=True)
     last_modified_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who last modified the quiz")
-    time_limit_minutes = models.IntegerField(null=True, blank=True)
-    passing_score = models.IntegerField(null=True, blank=True)
     
     class Meta:
         db_table = 'quizzes'  
@@ -50,26 +69,17 @@ class Quiz(models.Model):
         # Set published_at when quiz is published
         if self.is_published and not self.published_at:
             self.published_at = timezone.now()
+            
+        # Generate share_url when quiz is published if it doesn't exist
+        if self.is_published and not self.share_url:
+            base_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else ''
+            self.share_url = f"{base_url}/quiz/take/{self.quiz_id}"
+            
         super().save(*args, **kwargs)
 
 class Question(models.Model):
     """Model representing a quiz question"""
-    QUESTION_TYPES = (
-        ('multiple_choice', 'Multiple Choice'),
-        ('one_line', 'One Line'),
-        ('fill_in_blank', 'Fill in the Blank'),
-        ('true_false', 'True/False'),
-        ('mixed', 'Mixed'),
-    )
-    
-    DIFFICULTY_LEVELS = (
-        ('easy', 'Easy'),
-        ('medium', 'Medium'),
-        ('hard', 'Hard'),
-    )
-
     question_id = models.AutoField(primary_key=True)
-    # quiz = models.ForeignKey(Quiz, related_name='questions', on_delete=models.CASCADE)
     quiz = models.ForeignKey(
         Quiz,
         on_delete=models.CASCADE,
@@ -77,15 +87,24 @@ class Question(models.Model):
         db_column='quiz_id'
     )
     question = models.TextField()
-    question_type = models.CharField(max_length=20, choices=QUESTION_TYPES, default='multiple_choice')
-    correct_answer = models.TextField(help_text="The correct answer for this question")
-    options = models.JSONField(null=True, blank=True, help_text="List of options for multiple choice questions")
-    difficulty = models.CharField(max_length=10, choices=DIFFICULTY_LEVELS, default='easy')
-    explanation = models.TextField(null=True, blank=True, help_text="Explanation for the question")
-    created_at = models.DateTimeField(auto_now_add=True)
+    question_type = models.CharField(max_length=50)
+    difficulty = models.CharField(max_length=50)
+    options = models.JSONField(null=True, blank=True)
+    correct_answer = models.CharField(max_length=255, null=True, blank=True)
+    explanation = models.TextField(null=True, blank=True)
     created_by = models.CharField(max_length=255, null=True, blank=True)
     last_modified_at = models.DateTimeField(auto_now=True)
     last_modified_by = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    # Add document relationship
+    document = models.ForeignKey(
+        'documents.Document',
+        on_delete=models.SET_NULL,
+        related_name='questions',
+        null=True,
+        blank=True,
+        db_column='document_id'
+    )
 
     class Meta:
         db_table = 'questions'
@@ -105,3 +124,37 @@ class Question(models.Model):
             self.last_modified_at = timezone.make_aware(self.last_modified_at)
             
         super().save(*args, **kwargs)
+
+class QuizAttempt(models.Model):
+    attempt_id = models.AutoField(primary_key=True)
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='attempts')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='quiz_attempts')
+    start_time = models.DateTimeField(default=timezone.now)
+    end_time = models.DateTimeField(null=True, blank=True)
+    score = models.FloatField(null=True, blank=True)
+    status = models.CharField(max_length=50, default='in_progress')  # in_progress, completed, abandoned
+    answers = models.JSONField(default=dict)
+    
+    def __str__(self):
+        return f"Attempt {self.attempt_id} by {self.user.email} on {self.quiz.title}"
+    
+    def calculate_score(self):
+        if not self.answers:
+            return 0
+        
+        correct_count = 0
+        total_questions = len(self.answers)
+        
+        for question_id, answer_data in self.answers.items():
+            if answer_data.get('is_correct', False):
+                correct_count += 1
+        
+        if total_questions > 0:
+            return (correct_count / total_questions) * 100
+        return 0
+    
+    def complete_attempt(self):
+        self.end_time = timezone.now()
+        self.score = self.calculate_score()
+        self.status = 'completed'
+        self.save()

@@ -102,6 +102,9 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD', 'Jumbo@quiz08'),
         'HOST': os.getenv('DB_HOST', 'aws-0-ap-south-1.pooler.supabase.com'),
         'PORT': os.getenv('DB_PORT', '5432'),
+        'OPTIONS': {
+            'sslmode': 'require',
+        }
     }
 }
 
@@ -129,7 +132,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Media files
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'upload')
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -166,6 +169,9 @@ CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 CORS_ALLOW_HEADERS = ['*']
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 
+# Frontend URL for generating share links
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+
 # Media files (user-uploaded files)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'upload')
@@ -173,8 +179,14 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'upload')
 # Create upload directory if it doesn't exist
 os.makedirs(MEDIA_ROOT, exist_ok=True)
 
-# File Storage Configuration (AWS S3 or Supabase)
-# Use Supabase by default if configured
+# File Storage Configuration (Vector DB, AWS S3, or Supabase)
+# Use Vector DB by default for documents
+USE_VECTOR_DB = os.getenv('USE_VECTOR_DB', 'True') == 'True'
+
+# Default to Vector Storage for document uploads
+DEFAULT_FILE_STORAGE = 'config.vector_storage.VectorStorage'
+
+# Use Supabase if configured and not using Vector DB exclusively
 if os.getenv('USE_SUPABASE_STORAGE', 'False') == 'True' and SUPABASE_URL and SUPABASE_KEY:
     # Supabase Storage settings
     SUPABASE_URL_EXPIRY_SECONDS = int(os.getenv('SUPABASE_URL_EXPIRY_SECONDS', 3600))
@@ -185,10 +197,9 @@ if os.getenv('USE_SUPABASE_STORAGE', 'False') == 'True' and SUPABASE_URL and SUP
     
     # Media files will be stored in Supabase
     MEDIA_URL = '/media/'
-    DEFAULT_FILE_STORAGE = 'config.supabase_storage.SupabasePublicStorage'
     PRIVATE_FILE_STORAGE = 'config.supabase_storage.SupabasePrivateStorage'
 
-# Use AWS S3 if configured and not using Supabase
+# Use AWS S3 if configured and not using Vector DB or Supabase
 elif os.getenv('USE_S3', 'False') == 'True':
     AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
@@ -217,13 +228,11 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
 if not OPENAI_API_KEY:
     print("WARNING: OPENAI_API_KEY not found in environment variables")
     print("Please set OPENAI_API_KEY in your .env file")
-elif not OPENAI_API_KEY.startswith('sk-') or OPENAI_API_KEY.startswith('sk-proj-'):
+elif not OPENAI_API_KEY.startswith('sk-'):
     print("WARNING: Invalid OpenAI API key format")
-    print("API key should start with 'sk-' (not 'sk-proj-')")
+    print("API key should start with 'sk-'")
     print("Please get a valid API key from: https://platform.openai.com/account/api-keys")
     print("Current key starts with:", OPENAI_API_KEY[:10] + "...")
-    # Set to None to prevent invalid key usage
-    OPENAI_API_KEY = None
 else:
     print("OpenAI API Key found:", OPENAI_API_KEY[:10] + "...")
 
@@ -259,3 +268,6 @@ except ImportError:
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 if not OPENAI_API_KEY:
     print("Warning: OPENAI_API_KEY not found in environment variables")
+
+# Webhook configuration
+WEBHOOK_SECRET_KEY = os.environ.get('WEBHOOK_SECRET_KEY', 'your-webhook-secret-key-here')

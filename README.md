@@ -8,6 +8,7 @@ A modern web application that generates quiz from PDF documents using AI.
 - AI-Generated Questions from PDF Content
 - Role-Based Authentication (Admin/Teacher/Student)
 - Quiz Creation and Management
+- Quiz Sharing via Unique URLs
 - Analytics and Performance Tracking
 
 ## Tech Stack
@@ -63,6 +64,7 @@ quiz-app/
 - **User Management**: Role-based access control with Admin, Teacher, and Student roles
 - **Document Processing**: PDF upload and text extraction with AI processing capability
 - **Quiz Generation**: AI-powered quiz question generation and management
+- **Quiz Sharing**: Share quizzes via unique URLs for easy distribution to students
 - **Department Management**: Organization structure with bulk student management 
 - **Notification System**: Email and SMS notifications for quiz assignments
 
@@ -78,6 +80,15 @@ The implementation is toggled via the `USE_SUPABASE_STORAGE` setting in `.env`. 
 ### Database Migrations
 
 Migrations are consolidated in a central `migrations` app, which simplifies schema evolution across tightly coupled models. To apply migrations, use `python manage.py migrate migrations`.
+
+### Database Structure
+
+Key tables in the application:
+
+- **quizzes**: Stores quiz information including title, description, settings, and share URLs
+- **questions**: Stores quiz questions linked to quizzes
+- **documents_document**: Stores document information and metadata
+- **documents_documentvector**: Stores vector embeddings for document content
 
 ### Sample Templates
 
@@ -164,6 +175,3 @@ You can toggle between Supabase Storage and AWS S3:
 
 - To use Supabase Storage, set `USE_SUPABASE_STORAGE=True` in your `.env` file
 - To use AWS S3, set `USE_SUPABASE_STORAGE=False` and `USE_S3=True`
-=======
-# Jumbo_Quiz
->>>>>>> ff944bbd16af5d65b039a535551d197e4209f1a6

@@ -1,33 +1,41 @@
 # Django & Django REST Framework
-django==4.2.7
+Django==4.2.1
 djangorestframework==3.14.0
-django-cors-headers==4.3.0
-djangorestframework-simplejwt==5.3.0
-django-filter==23.3
-djoser==2.2.0
-drf-yasg==1.21.7
+django-cors-headers==4.0.0
+django-filter==23.2
+django-rest-auth==0.9.5
+djangorestframework-simplejwt==5.2.2
 django-phonenumber-field==7.1.0
 phonenumbers==8.13.19
-pandas==2.3.0
+pandas==2.0.2
 python-dateutil==2.9.0
-openpyxl==3.1.5
+openpyxl==3.1.2
 langgraph==0.4.8
 langgraph-checkpoints==0.1.70
 langgraph-sdk==0.1.70
 
 # PostgreSQL Adapter
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.6
 
 # PDF Processing
 pypdf2==3.0.1
+pypdf==3.15.1
+
+# Image Processing & OCR
+pytesseract==0.3.10
+Pillow==9.5.0
+
+# Vector Database
+vecs==0.3.0
+numpy==1.24.3
 
 # AI Integration
 langchain==0.2.0
-openai==1.3.3
+openai==1.3.0
 
 # Storage
-django-storages==1.14.2
-boto3==1.33.6
+django-storages==1.13.2
+boto3==1.26.151
 
 # Supabase
 supabase==1.0.3
@@ -36,7 +44,7 @@ supabase==1.0.3
 python-dotenv==1.0.0
 
 # Production
-gunicorn==21.2.0
+gunicorn==20.1.0
 whitenoise==6.5.0
 
 # Development
@@ -46,3 +54,9 @@ isort==5.12.0
 flake8==6.1.0
 pytest==7.4.3
 pytest-django==4.7.0
+
+# New packages from the code block
+python-docx==0.8.11
+pgvector==0.2.0
+cryptography==41.0.1
+dj-database-url==2.0.0

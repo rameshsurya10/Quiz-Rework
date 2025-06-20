@@ -14,6 +14,7 @@ urlpatterns = [
     path('', views.QuizListCreateView.as_view(), name='quiz-list-create'),
     path('<int:quiz_id>/', views.QuizRetrieveUpdateDestroyView.as_view(), name='quiz-detail'),
     path('<int:quiz_id>/publish/', views.QuizPublishView.as_view(), name='quiz-publish'),
+    path('<int:quiz_id>/share/', views.QuizShareView.as_view(), name='quiz-share'),
     # path('<int:quiz_id>/generate-from-prompt/', views.QuizQuestionGenerateFromPromptView.as_view(), name='quiz-generate-from-prompt'),
     
     # File management endpoints

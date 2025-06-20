@@ -8,6 +8,13 @@ from .views import (
     ExtractTextView,
 )
 
+# Import Vector DB views
+from .views_vector import (
+    VectorDocumentUploadView,
+    VectorSearchView,
+    QuizDocumentUploadView,
+)
+
 # Import Supabase views if Supabase is configured
 if settings.SUPABASE_URL and settings.SUPABASE_KEY and settings.SUPABASE_SECRET:
     from .views_supabase import (
@@ -23,6 +30,13 @@ else:
 
 app_name = 'documents'
 
+# Vector database views (always available)
+vector_urlpatterns = [
+    path('vector/upload/', VectorDocumentUploadView.as_view(), name='vector_upload'),
+    path('vector/search/', VectorSearchView.as_view(), name='vector_search'),
+    path('quiz/<int:quiz_id>/upload/', QuizDocumentUploadView.as_view(), name='quiz-document-upload'),
+]
+
 # Use the appropriate views based on configuration
 if use_supabase:
     # Supabase storage views
@@ -31,7 +45,7 @@ if use_supabase:
         path('<int:document_id>/', SupabaseDocumentDetailView.as_view(), name='document_detail'),
         path('upload/', SupabaseDocumentUploadView.as_view(), name='document_upload'),
         path('extract-text/', SupabaseExtractTextView.as_view(), name='extract_text'),
-    ]
+    ] + vector_urlpatterns
 else:
     # Default Django storage views
     urlpatterns = [
@@ -39,4 +53,4 @@ else:
         path('<int:pk>/', DocumentDetailView.as_view(), name='document_detail'),
         path('upload/', DocumentUploadView.as_view(), name='document_upload'),
         path('extract-text/', ExtractTextView.as_view(), name='extract_text'),
-    ]
+    ] + vector_urlpatterns

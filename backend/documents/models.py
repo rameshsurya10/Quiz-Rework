@@ -13,23 +13,53 @@ def document_file_path(instance, filename):
     unique_id = str(uuid.uuid4())
     new_filename = f"{slugify(instance.title)}-{unique_id}.{ext}"
     # Return the file path
-    return os.path.join('documents', new_filename)
+    return os.path.join('vector_documents', new_filename)
 
 
 class Document(models.Model):
     """Model for storing PDF documents"""
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    file = models.FileField(upload_to=document_file_path)
+    file = models.FileField(upload_to=document_file_path, blank=True, null=True)
     extracted_text = models.TextField(blank=True)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='documents'
     )
+    # Add quiz relationship - nullable to support documents not linked to quizzes
+    quiz = models.ForeignKey(
+        'quiz.Quiz',
+        on_delete=models.SET_NULL,
+        related_name='documents',
+        null=True,
+        blank=True
+    )
+    # Question generation fields
+    question_count = models.IntegerField(default=0)
+    question_types = models.JSONField(default=list, blank=True)
+    questions_generated = models.BooleanField(default=False)
+    generation_status = models.CharField(max_length=20, default='pending', 
+                                        choices=[
+                                            ('pending', 'Pending'),
+                                            ('processing', 'Processing'),
+                                            ('completed', 'Completed'),
+                                            ('failed', 'Failed')
+                                        ])
+    # File storage fields
+    storage_type = models.CharField(max_length=20, default='local',
+                                   choices=[
+                                       ('local', 'Local Storage'),
+                                       ('supabase', 'Supabase Storage'),
+                                       ('s3', 'AWS S3'),
+                                       ('vector_db', 'Vector Database')
+                                   ])
+    storage_path = models.CharField(max_length=255, blank=True)
+    storage_url = models.URLField(blank=True)
     is_processed = models.BooleanField(default=False)
     page_count = models.IntegerField(default=0)
     file_size = models.IntegerField(default=0)  # Size in bytes
+    file_type = models.CharField(max_length=50, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -47,3 +77,21 @@ class Document(models.Model):
             return f"{self.file_size / 1024:.2f} KB"
         else:
             return f"{self.file_size / (1024 * 1024):.2f} MB"
+
+
+class DocumentVector(models.Model):
+    """Model for storing document vector embeddings"""
+    document = models.OneToOneField(
+        Document,
+        on_delete=models.CASCADE,
+        related_name='vector'
+    )
+    vector_uuid = models.UUIDField(default=uuid.uuid4, editable=False)
+    embedding = models.BinaryField(null=True, blank=True)  # Store binary representation of vector
+    is_indexed = models.BooleanField(default=False)
+    metadata = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"Vector for {self.document.title}"

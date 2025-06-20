@@ -55,28 +55,92 @@ class QuizFileUploadView(APIView):
         if uploaded_file.size > 10 * 1024 * 1024:
             return Response({"error": "File size exceeds 10MB"}, status=status.HTTP_400_BAD_REQUEST)
 
-        upload_dir = os.path.join(settings.BASE_DIR, 'backend', 'upload')
-        os.makedirs(upload_dir, exist_ok=True)
-
+        # Generate a unique ID for the file
+        import uuid
+        from django.utils.text import slugify
+        
+        doc_uuid = str(uuid.uuid4())
         filename = uploaded_file.name
-        db_file_path = f"upload/{filename}"
-        abs_file_path = os.path.join(upload_dir, filename)
-
-        with open(abs_file_path, 'wb+') as destination:
-            for chunk in uploaded_file.chunks():
-                destination.write(chunk)
-
+        ext = os.path.splitext(filename)[1].lower()
+        new_filename = f"{slugify(doc_uuid)}{ext}"
+        
+        # Create a virtual file path (not saved to disk)
+        db_file_path = f"vector_documents/{new_filename}"
+        
+        # Import document models and utils
+        from documents.models import Document, DocumentVector  
+        from documents.utils import extract_text_from_file
+        from config.vector_db import VectorDB
+        import pickle
+        
+        # Extract text from the file using our centralized utility
+        extracted_text = extract_text_from_file(uploaded_file)
+        
+        # Create document in the database
+        document = Document(
+            title=filename,
+            description=f"Uploaded for quiz {quiz_id}",
+            extracted_text=extracted_text,
+            user=request.user,
+            is_processed=True,
+            file_size=uploaded_file.size,
+            storage_type='vector_db',
+            storage_path=db_file_path,
+            file_type=uploaded_file.content_type,
+            quiz=quiz  # Associate with the quiz directly
+        )
+        document.save()
+        
+        # Store in vector database
+        try:
+            metadata = {
+                'title': filename,
+                'description': f"Uploaded for quiz {quiz_id}",
+                'original_filename': filename,
+                'file_size': uploaded_file.size,
+                'content_type': uploaded_file.content_type,
+                'user_id': str(request.user.id),
+                'quiz_id': quiz_id,
+            }
+            
+            # Initialize vector database
+            vector_db = VectorDB()
+            
+            # Generate embedding
+            embedding = vector_db.generate_embedding(extracted_text)
+            
+            if embedding:
+                # Store in vector database
+                vector_db.upsert_file(doc_uuid, db_file_path, extracted_text, metadata)
+                
+                # Create DocumentVector record
+                binary_embedding = pickle.dumps(embedding)
+                document_vector = DocumentVector(
+                    document=document,
+                    vector_uuid=uuid.UUID(doc_uuid),
+                    embedding=binary_embedding,
+                    is_indexed=True,
+                    metadata=metadata
+                )
+                document_vector.save()
+        except Exception as e:
+            logger.error(f"Error storing in vector database: {e}")
+        
+        # Update quiz uploadedfiles field for backward compatibility
         if not isinstance(quiz.uploadedfiles, list):
             quiz.uploadedfiles = []
 
         file_info = {
             'name': filename,
-            'path': db_file_path
+            'path': db_file_path,
+            'document_id': document.id,
+            'vector_uuid': doc_uuid
         }
         quiz.uploadedfiles.append(file_info)
         quiz.save()
 
-        file_text = self.extract_text_from_pdf(abs_file_path)
+        # Text extraction is already done, use extracted_text variable
+        file_text = extracted_text
         if not file_text:
             return Response({"error": "Failed to read file content for question generation."}, status=500)
 
@@ -1775,3 +1839,60 @@ class QuizQuestionsView(APIView):
             return Response({
                 "error": f"Error creating questions: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class QuizShareView(APIView):
+    """
+    API endpoint for accessing a quiz via its share URL
+    - GET: Retrieve a quiz using its share token
+    """
+    permission_classes = [permissions.AllowAny]  # Allow public access for shared quizzes
+    
+    def get(self, request, quiz_id):
+        try:
+            # Get the quiz by ID
+            quiz = Quiz.objects.get(quiz_id=quiz_id, is_published=True)
+            
+            # If the quiz is not published or doesn't have a share URL, return 404
+            if not quiz.is_published or not quiz.share_url:
+                return Response(
+                    {"error": "This quiz is not available for public access."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Return the quiz data with its questions
+            questions = Question.objects.filter(quiz=quiz)
+            quiz_data = QuizSerializer(quiz).data
+            
+            # Remove sensitive information
+            if 'created_by' in quiz_data:
+                quiz_data['created_by'] = None
+            if 'last_modified_by' in quiz_data:
+                quiz_data['last_modified_by'] = None
+                
+            # Add questions data
+            quiz_data['questions'] = []
+            for question in questions:
+                question_data = {
+                    'question_id': question.question_id,
+                    'question': question.question,
+                    'question_type': question.question_type,
+                    'difficulty': question.difficulty,
+                    'options': question.options,
+                    # Don't include correct answer in the response
+                    'explanation': None  # Don't show explanation initially
+                }
+                quiz_data['questions'].append(question_data)
+            
+            return Response(quiz_data, status=status.HTTP_200_OK)
+            
+        except Quiz.DoesNotExist:
+            return Response(
+                {"error": "Quiz not found or not available."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
