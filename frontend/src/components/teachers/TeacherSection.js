@@ -15,7 +15,8 @@ import {
   ListItemAvatar,
   ListItemText,
   Tooltip,
-  Chip
+  Chip,
+  TablePagination
 } from "@mui/material";
 import CloseIcon from '@mui/icons-material/Close';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -63,6 +64,16 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
     totalTeachers: 0,
     departments: 0,
   });
+
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(12);
+
+  const handleChangePage = (event, newPage) => setPage(newPage);
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
 
   const fetchTeacherData = useCallback(async () => {
     setIsLoading(true);
@@ -194,6 +205,8 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
 
   const filteredTeachers = [...teacherData]; // Keep the data structure but remove filtering
 
+  const paginatedTeachers = filteredTeachers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
   return (
     <Box
       component="main"
@@ -250,7 +263,7 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
         <Grid container spacing={3} sx={{ mb: 4 }}>
           {[
             { title: 'Total Teachers', value: stats.totalTeachers, icon: <PersonIcon />, color: 'primary' },
-            { title: 'Departments', value: stats.departments, icon: <BusinessIcon />, color: 'secondary' },
+            { title: 'Subjects', value: stats.departments, icon: <BusinessIcon />, color: 'secondary' },
           ].map((stat, index) => (
             <Grid item xs={12} sm={6} key={index}>
               <SummaryCard
@@ -293,9 +306,10 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
               </Button>
             </Paper>
           ) : (
+            <> 
             <Grid container spacing={3}>
               <AnimatePresence>
-                {filteredTeachers.map((teacher, index) => (
+                {paginatedTeachers.map((teacher, index) => (
                   <Grid item xs={12} sm={6} md={4} lg={3} key={teacher.uuid || teacher.teacher_id}>
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
@@ -334,7 +348,7 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                               ))
                             ) : (
                               <Typography variant="body2" color="text.secondary">
-                                No Department Assigned
+                                No Department PUBLISHed
                               </Typography>
                             )}
                           </Box>
@@ -383,6 +397,19 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                 ))}
               </AnimatePresence>
             </Grid>
+            {teacherData.length > 0 && (
+              <TablePagination
+                component="div"
+                rowsPerPageOptions={[12,16,20]}
+                count={filteredTeachers.length}
+                rowsPerPage={rowsPerPage}
+                page={page}
+                onPageChange={handleChangePage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                sx={{ mt: 3 }}
+              />
+            )}
+            </>
           )}
         </Box>
 
@@ -392,7 +419,7 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
           onClose={handleTeacherCreateCancel}
           fullWidth
           maxWidth="md"
-          PaperProps={{ sx: { maxHeight: '90vh' } }}
+          PaperProps={{ sx: { maxHeight: '120vh' } }}
         >
           <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             {editingTeacher ? 'Edit Teacher' : 'Add New Teacher'}
@@ -434,16 +461,6 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                   Details
                 </Typography>
                 <Box>
-                  <Tooltip title="Edit">
-                    <IconButton size="small" onClick={() => { /* TODO: Handle Edit */ }}>
-                      <EditIcon />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Delete">
-                    <IconButton size="small" onClick={() => handleOpenDeleteDialog(viewTeacher)} >
-                      <DeleteIcon sx={{ color: 'error.main' }} />
-                    </IconButton>
-                  </Tooltip>
                   <Tooltip title="Close">
                     <IconButton size="small" onClick={handleCloseViewDialog}>
                       <CloseIcon />

@@ -260,7 +260,7 @@ const FullLayout = ({ children, hideToolbar = false }) => {
       title: 'Management',
       items: [
         { 
-          name: 'Departments',
+          name: 'Subjects',
           icon: <CategoryIcon />,
           path: '/departments',
           activePaths: ['/departments']

@@ -9,13 +9,15 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText, ListItemIcon, Checkbox } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 import FullLayout from '../FullLayout';
 import PageHeader from '../../common/PageHeader';
 import QuizFormModern from './QuizFormModern';
 import ConfirmationDialog from '../ConfirmationDialog';
 import { useSnackbar } from '../../contexts/SnackbarContext';
-import api from '../../services/api';
+import { quizApi, departmentApi } from '../../services/api';
 
 const QuizStyledCard = styled(Card)(({ theme }) => ({
   height: '100%',
@@ -44,11 +46,16 @@ const QuizSection = () => {
   const [isConfirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [departments, setDepartments] = useState([]);
 
+  // State for question view modal
+  const [selectedQuiz, setSelectedQuiz] = useState(null);
+  const [isViewModalOpen, setViewModalOpen] = useState(false);
+  const [isQuestionsLoading, setQuestionsLoading] = useState(false);
+
   const fetchQuizzes = useCallback(async () => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await api.get('/api/quiz/');
+      const response = await quizApi.getAll();
       const quizzesData = response.data.results || response.data || [];
       setQuizzes(quizzesData);
     } catch (err) {
@@ -62,7 +69,7 @@ const QuizSection = () => {
 
   const fetchDepartments = useCallback(async () => {
     try {
-      const { data } = await api.get('/api/departments/');
+      const { data } = await departmentApi.getAll();
       setDepartments(data.results || data || []);
     } catch (error) {
       console.error('Failed to fetch departments:', error);
@@ -92,38 +99,43 @@ const QuizSection = () => {
   const handleSaveQuiz = async (quizData, onUploadProgress) => {
     setIsCreating(true);
 
-    const data = new FormData();
-
-    // 1. Append files directly to FormData
-    if (quizData.files && quizData.files.length > 0) {
-      quizData.files.forEach(file => {
-        data.append('files', file);
-      });
-    }
-
-    // 2. Prepare the JSON part of the payload
+    // 1. Prepare the JSON payload for quiz creation
     const departmentIds = departments
       .filter(dep => quizData.department.includes(dep.name))
       .map(dep => dep.id);
 
     const jsonPayload = { ...quizData };
-    delete jsonPayload.files; // Remove files from the JSON part
-    delete jsonPayload.department; // Remove old department names array
-    jsonPayload.department_ids = departmentIds; // Use the correct key with IDs
-
-    // 3. Append the JSON string to FormData under the key 'payload'
-    data.append('payload', JSON.stringify(jsonPayload));
+    const filesToUpload = jsonPayload.files; // Keep files for the next step
+    delete jsonPayload.files;
+    delete jsonPayload.department;
+    jsonPayload.department_ids = departmentIds;
 
     try {
-      await api.post('/api/quiz/', data, {
-        onUploadProgress,
-      });
+      // 2. Create the quiz with JSON data
+      const createResponse = await quizApi.create(jsonPayload);
+      const newQuizId = createResponse.data.quiz_id;
+
+      if (!newQuizId) {
+        console.error('Quiz creation response did not include a quiz_id:', createResponse.data);
+        throw new Error('Failed to get new quiz ID.');
+      }
+
+      // 3. Upload files if any
+      if (filesToUpload && filesToUpload.length > 0) {
+        const formData = new FormData();
+        filesToUpload.forEach(file => {
+          formData.append('file', file);
+        });
+
+        await quizApi.uploadFile(newQuizId, formData, { onUploadProgress });
+      }
+
       showSnackbar('Quiz created successfully!', 'success');
       fetchQuizzes();
       setIsCreating(false);
     } catch (err) {
       console.error('Error creating quiz:', err);
-      const errorMsg = err.response?.data?.error || 'Failed to create quiz.';
+      const errorMsg = err.response?.data?.detail || err.response?.data?.error || 'Failed to create quiz.';
       showSnackbar(errorMsg, 'error');
       setIsCreating(false);
     }
@@ -137,7 +149,7 @@ const QuizSection = () => {
   const confirmDelete = async () => {
     if (!quizToDeleteId) return;
     try {
-      await api.delete(`/api/quiz/${quizToDeleteId}/`);
+      await quizApi.delete(quizToDeleteId);
       setQuizzes(quizzes.filter(q => q.quiz_id !== quizToDeleteId));
       showSnackbar('Quiz deleted successfully', 'success');
     } catch (err) {
@@ -147,6 +159,59 @@ const QuizSection = () => {
       setConfirmDialogOpen(false);
       setQuizToDeleteId(null);
     }
+  };
+
+  // Publish quiz and refresh list
+  const handlePublishClick = async (quizId) => {
+    try {
+      await quizApi.patch(quizId, { is_published: true });
+      await fetchQuizzes();
+      showSnackbar('Publish status updated', 'success');
+    } catch (error) {
+      console.error('Failed to publish quiz:', error);
+      showSnackbar('Failed to update publish status', 'error');
+    }
+  };
+
+  // View quiz questions in modal
+  const handleViewQuiz = async (quizId) => {
+    try {
+      setQuestionsLoading(true);
+      setSelectedQuiz(null);
+      setViewModalOpen(true);
+      const response = await quizApi.getById(quizId);
+      const quizData = response.data;
+      // Normalize questions structure if needed
+      if (quizData.questions && quizData.questions.length === 1 && quizData.questions[0].options === null) {
+        try {
+          const raw = quizData.questions[0].question;
+          const parsed = JSON.parse(raw);
+          quizData.questions = parsed.map((q) => ({
+            question_text: q.question,
+            options: Object.values(q.options).map((text, idx) => ({
+              option_text: text,
+              is_correct: String.fromCharCode(65 + idx) === q.correct_answer,
+              id: idx
+            })),
+            explanation: q.explanation || ''
+          }));
+        } catch (e) {
+          console.error('Failed to parse embedded questions JSON', e);
+        }
+      }
+      setSelectedQuiz(quizData);
+    } catch (error) {
+      console.error('Failed to fetch quiz details:', error);
+      showSnackbar('Failed to load quiz questions. Please try again.', 'error');
+      setViewModalOpen(false);
+    } finally {
+      setQuestionsLoading(false);
+    }
+  };
+
+  const closeViewModal = () => {
+    setViewModalOpen(false);
+    setSelectedQuiz(null);
   };
 
   const getStatusChip = (isPublished) => {
@@ -190,9 +255,9 @@ const QuizSection = () => {
             </Typography>
           </CardContent>
           <CardActions sx={{ justifyContent: 'space-between', p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
-            <Button variant="contained" startIcon={<AssignmentIcon />} size="small">Assign</Button>
+          <Button variant="contained" startIcon={<AssignmentIcon />} size="small" onClick={() => handlePublishClick(quiz.quiz_id)}>PUBLISH</Button>
             <Box>
-              <IconButton size="small" onClick={() => navigate(`/quiz/${quiz.quiz_id}`)}><VisibilityIcon /></IconButton>
+              <IconButton size="small" onClick={() => handleViewQuiz(quiz.quiz_id)}><VisibilityIcon /></IconButton>
               <IconButton size="small" onClick={() => handleDelete(quiz.quiz_id)}><DeleteIcon /></IconButton>
             </Box>
           </CardActions>
@@ -279,6 +344,58 @@ const QuizSection = () => {
           title="Confirm Deletion"
           message="Are you sure you want to delete this quiz? This action cannot be undone."
         />
+
+        <Dialog open={isViewModalOpen} onClose={closeViewModal} fullWidth maxWidth="md" scroll="paper">
+          <DialogTitle>{selectedQuiz?.title || 'Loading...'}</DialogTitle>
+          <DialogContent dividers>
+            {isQuestionsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box>
+            ) : selectedQuiz && selectedQuiz.questions && selectedQuiz.questions.length > 0 ? (
+              <List>
+                {selectedQuiz.questions.map((question, index) => (
+                  <ListItem key={question.id || index} sx={{ flexDirection: 'column', alignItems: 'flex-start', mb: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                    <ListItemText primary={`${index + 1}. ${question.question_text}`} primaryTypographyProps={{ fontWeight: 'bold' }} />
+                    <List sx={{ width: '100%' }}>
+                      {(question.options || []).map((option) => (
+                        <ListItem key={option.id} sx={{ bgcolor: option.is_correct ? alpha(theme.palette.success.main, 0.1) : 'transparent', borderRadius: 1 }}>
+                          <ListItemIcon sx={{ minWidth: 32 }}>
+                            {option.is_correct && <CheckCircleIcon color="success" fontSize="small" />}
+                          </ListItemIcon>
+                          <ListItemText primary={option.option_text} />
+                        </ListItem>
+                      ))}
+                    </List>
+                    {question.explanation && (
+                      <Box sx={{ p: 1, mt: 1, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1, width: '100%' }}>
+                        <Typography variant="caption" sx={{ fontWeight: 'bold' }}>Explanation:</Typography>
+                        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{question.explanation}</Typography>
+                      </Box>
+                    )}
+                  </ListItem>
+                ))}
+              </List>
+            ) : selectedQuiz ? (
+              <Typography sx={{ textAlign: 'center', my: 4 }}>No questions found for this quiz.</Typography>
+            ) : (
+              <Typography sx={{ textAlign: 'center', my: 4 }}>Failed to load quiz details.</Typography>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeViewModal}>Close</Button>
+            <Button 
+              variant="contained" 
+              onClick={() => {
+                if (selectedQuiz) {
+                  navigate(`/PUBLISH-quiz/${selectedQuiz.quiz_id}`);
+                  closeViewModal();
+                }
+              }}
+            >
+              Proceed to PUBLISH
+            </Button>
+          </DialogActions>
+        </Dialog>
+
       </Container>
     </FullLayout>
   );

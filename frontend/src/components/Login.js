@@ -186,6 +186,7 @@ const Login = () => {
             type={showPassword ? 'text' : 'password'}
             id="password"
             autoComplete="current-password"
+            InputLabelProps={{ shrink: true }}
             value={formData.password}
             onChange={handleChange}
             InputProps={{

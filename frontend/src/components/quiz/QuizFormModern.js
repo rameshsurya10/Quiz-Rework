@@ -246,7 +246,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
               {/* Department Multi-select */}
               <Grid item xs={12}>
                 <FormControl fullWidth error={!!errors.department} required>
-                  <InputLabel id="department-select-label">Departments *</InputLabel>
+                  <InputLabel id="department-select-label">Subjects *</InputLabel>
                   <Select
                     labelId="department-select-label"
                     id="department-select"
@@ -263,7 +263,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                         typeof value === 'string' ? value.split(',') : value,
                       );
                     }}
-                    input={<OutlinedInput label="Departments *" />}
+                    input={<OutlinedInput label="Subjects *" />}
                     renderValue={(selected) => (
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                         {(Array.isArray(selected) ? selected : []).map((name) => (

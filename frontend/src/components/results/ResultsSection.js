@@ -204,7 +204,7 @@ const ResultsSection = () => {
           <EmptyState
             icon={<AssessmentIcon sx={{ fontSize: 60 }} />}
             title="No quiz results yet"
-            message="Start creating and assigning quiz to see results here."
+            message="Start creating and PUBLISHing quiz to see results here."
             action={
               <Button variant="contained" color="primary">
                 Create a Quiz
