@@ -10,6 +10,7 @@ class Student(models.Model):
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
     department_id = models.IntegerField(null=True, blank=True, db_column='department_id')
+    is_verified = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     last_modified_at = models.DateTimeField(auto_now=True)

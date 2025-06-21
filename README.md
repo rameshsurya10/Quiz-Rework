@@ -137,7 +137,7 @@ quiz-app/
 - **Quiz Generation**: AI-powered quiz question generation and management
 - **Quiz Sharing**: Share quizzes via unique URLs for easy distribution to students
 - **Department Management**: Organization structure with bulk student management 
-- **Notification System**: Email and SMS notifications for quiz assignments
+- **Notification System**: Email and SMS notifications for quiz Assigns
 
 ### Storage Strategy
 
