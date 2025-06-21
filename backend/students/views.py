@@ -6,6 +6,18 @@ from django.shortcuts import get_object_or_404
 from .models import Student
 from .serializers import StudentSerializer
 from .serializers import StudentBulkUploadSerializer
+from django.core.mail import send_mail
+from django.urls import reverse
+from django.conf import settings
+from teacher.models import Teacher
+from django.views import View
+from django.http import HttpResponse
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from departments.models import Department
+from .utils import send_student_verification_email
+
 
 class StudentViewSet(viewsets.ModelViewSet):
     """
@@ -226,7 +238,96 @@ class StudentCreateView(generics.CreateAPIView):
     def perform_create(self, serializer):
         user_identifier = getattr(self.request.user, 'username', 
                                getattr(self.request.user, 'email', 'system'))
-        serializer.save(
+        student = serializer.save(
             created_by=user_identifier,
             last_modified_by=user_identifier
-        )
+            )
+        send_student_verification_email(student)
+
+class StudentVerificationView(View):
+    def get(self, request, student_id):
+        try:
+            student = Student.objects.get(student_id=student_id)
+
+            if student.is_verified:
+                return HttpResponse("""
+                    <html>
+                        <body>
+                            <p>You have already verified your enrollment.</p>
+                            <button disabled style="padding: 10px 20px; background-color: #ccc; color: white; border-radius: 5px;">Verified</button>
+                        </body>
+                    </html>
+                """)
+
+            # ✅ 1. Mark student as verified
+            student.is_verified = True
+            student.save()
+
+           # ✅ 2. Get department and teacher
+            department = Department.objects.filter(department_id=student.department_id, is_deleted=False).first()
+            department_name = department.name if department else "Unknown"
+            print("Department Name:", department_name)
+
+            teacher = Teacher.objects.filter(department_ids__contains=[student.department_id], is_deleted=False).first()
+            print("Teacher:", teacher)
+            
+            if teacher:
+                teacher_email = teacher.email
+                print("Teacher Email:", teacher_email)
+                subject = f"Student {student.name} Verified"
+                plain_message = (
+                    f"Dear {teacher.name if teacher.name else 'Teacher'},\n\n"
+                    f"The student {student.name} has successfully verified their enrollment in the {department_name} department.\n\n"
+                    f"Details:\n"
+                    f"- Name: {student.name}\n"
+                    f"- Email: {student.email}\n"
+                    f"- Department: {department_name}\n\n"
+                    f"Regards,\nRedlitmus teams"
+                )
+
+                html_message = f"""
+                <html>
+                <body style="font-family: Arial, sans-serif; color: #333;">
+                    <p>Dear {teacher.name if teacher.name else "Teacher"},</p>
+                    <p>The student <strong>{student.name}</strong> has successfully 
+                    <strong>verified </strong> their enrollment in the <strong>{department_name}</strong> department.</p>
+
+                    <p><strong>Student Details:</strong></p>
+                    <ul>
+                    <li><strong>Name:</strong> {student.name}</li>
+                    <li><strong>Email:</strong> {student.email}</li>
+                    <li><strong>Department:</strong> {department_name}</li>
+                    </ul>
+
+                    <p>You may now proceed with any onboarding or academic actions required for this student.</p>
+
+                    <p>Best regards,<br>
+                    <em>Redlitmus teams</em></p>
+                </body>
+                </html>
+                """
+
+                send_mail(
+                    subject=subject,
+                    message=plain_message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[teacher.email],
+                    html_message=html_message 
+                )
+
+            # ✅ 3. Show disabled "Verified" button to student
+            return HttpResponse(f"""
+                <html>
+                    <body>
+                        <p>Thank you {student.name}, you have successfully confirmed your enrollment.</p>
+                        <button disabled style="padding: 10px 15px; background-color: #ccc; 
+                                                color: white; border-radius: 5px;">
+                            Verified
+                        </button>
+                    </body>
+                </html>
+            """)
+
+        except Student.DoesNotExist:
+            return HttpResponse("Invalid or expired verification link.")
+
