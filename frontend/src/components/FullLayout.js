@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { styled } from '@mui/material/styles';
+import { styled, keyframes } from '@mui/material/styles';
 import {
   Box, Drawer, List, CssBaseline, Typography, Toolbar,
   Divider, IconButton, ListItem, ListItemButton, ListItemIcon,
   ListItemText, useTheme, useMediaQuery, Avatar, Tooltip,
   Menu, MenuItem, alpha, Stack, Paper, AppBar, Toolbar as MuiToolbar,
-  useScrollTrigger, Slide
+  useScrollTrigger, Slide, Chip
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -31,142 +31,42 @@ import {
   VerticalAlignTopOutlined as VerticalAlignTopOutlinedIcon,
   PeopleAltOutlined as PeopleIcon,
   AssessmentOutlined as AssessmentIcon,
-  CategoryOutlined as CategoryIcon
+  CategoryOutlined as CategoryIcon,
+  HomeOutlined as HomeIcon,
+  SearchOutlined as SearchIcon,
+  DescriptionOutlined as DocumentsIcon,
+  LocalOfferOutlined as OffersIcon,
+  ScheduleOutlined as ScheduleIcon,
+  ChatOutlined as ChatIcon
 } from '@mui/icons-material';
 import apiService from '../api';
 
-// Custom styled components for better organization
-const StyledAppBar = styled(AppBar, {
-  shouldForwardProp: (prop) => prop !== 'drawerwidth' && prop !== 'open',
-})(({ theme, open, drawerwidth }) => ({
-  zIndex: theme.zIndex.drawer + 1,
-  transition: theme.transitions.create(['width', 'margin'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  ...(open && {
-    marginLeft: drawerwidth,
-    width: `calc(100% - ${drawerwidth}px)`,
-    [theme.breakpoints.down('md')]: {
-      marginLeft: 0,
-      width: '100%',
-    },
-    transition: theme.transitions.create(['width', 'margin'], {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-  }),
-  backgroundColor: theme.palette.background.paper,
-  color: theme.palette.text.primary,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-}));
+// Subtle glow animation
+const subtleGlow = keyframes`
+  0% { box-shadow: 0 0 15px rgba(120, 119, 198, 0.1); }
+  50% { box-shadow: 0 0 25px rgba(120, 119, 198, 0.15); }
+  100% { box-shadow: 0 0 15px rgba(120, 119, 198, 0.1); }
+`;
 
-const MainContent = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })(({ theme, open }) => ({
-  backgroundColor: theme.palette.mode === 'dark' ? alpha(theme.palette.common.black, 0.1) : alpha(theme.palette.grey[50], 0.95), // Subtle background for main content area
-  flexGrow: 1,
-  padding: theme.spacing(3),
-  transition: theme.transitions.create('margin', {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  marginLeft: theme.spacing(7),
-  ...(open && !theme.breakpoints.down('md') && {
-    marginLeft: drawerWidth,
-    transition: theme.transitions.create('margin', {
-      easing: theme.transitions.easing.easeOut,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-  }),
-  [theme.breakpoints.down('md')]: {
-    marginLeft: 0,
-    padding: theme.spacing(2),
-  },
-}));
+// Floating animation for elements
+const gentleFloat = keyframes`
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-2px); }
+  100% { transform: translateY(0px); }
+`;
 
-const DrawerHeader = styled('div')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'flex-end',
-  padding: theme.spacing(0, 1),
-  ...theme.mixins.toolbar,
-}));
-
-const StyledDrawer = styled(Drawer, {
-  shouldForwardProp: (prop) => prop !== 'open',
-})(({ theme, open }) => ({
-  '& .MuiDrawer-paper': {
-    position: 'relative',
-    whiteSpace: 'nowrap',
-    width: drawerWidth,
-    backgroundColor: theme.palette.mode === 'dark' ? alpha(theme.palette.grey[900], 0.97) : theme.palette.common.white,
-    borderRight: theme.palette.mode === 'dark' ? `1px solid ${alpha(theme.palette.divider, 0.15)}` : 'none',
-    boxShadow: theme.palette.mode === 'light' ? '0px 4px 12px rgba(0,0,0,0.05)' : '0px 4px 15px rgba(0,0,0,0.2)',
-    '& .MuiListItemButton-root': {
-      paddingLeft: theme.spacing(3),
-      paddingRight: theme.spacing(3),
-      marginBottom: theme.spacing(0.5),
-      borderRadius: theme.shape.borderRadius * 2,
-      margin: theme.spacing(0.5, 1.5),
-      '&:hover': {
-        backgroundColor: alpha(theme.palette.primary.main, 0.08),
-        color: theme.palette.primary.main,
-        '& .MuiListItemIcon-root': {
-          color: theme.palette.primary.main,
-        },
-      },
-      '&.Mui-selected': {
-        backgroundColor: alpha(theme.palette.primary.main, 0.12),
-        color: theme.palette.primary.main,
-        fontWeight: 'bold',
-        '& .MuiListItemIcon-root': {
-          color: theme.palette.primary.main,
-        },
-        '&:hover': {
-          backgroundColor: alpha(theme.palette.primary.main, 0.15),
-        }
-      },
-    },
-    '& .MuiListItemIcon-root': {
-      minWidth: 'auto',
-      marginRight: theme.spacing(2),
-      color: theme.palette.text.secondary,
-    },
-    '& .MuiListItemText-primary': {
-      fontSize: '0.95rem',
-      color: theme.palette.text.primary,
-    },
-    transition: theme.transitions.create('width', {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-    boxSizing: 'border-box',
-    ...(!open && {
-      overflowX: 'hidden',
-      transition: theme.transitions.create('width', {
-        easing: theme.transitions.easing.sharp,
-        duration: theme.transitions.duration.leavingScreen,
-      }),
-      width: theme.spacing(7),
-      [theme.breakpoints.up('sm')]: {
-        width: theme.spacing(9),
-      },
-    }),
-  },
-}));
-
-
-const drawerWidth = 280; // Slightly wider for better spacing 
+const drawerWidth = 280;
 
 const FullLayout = ({ children, hideToolbar = false }) => {
   const theme = useTheme();
-  const collapsedDrawerWidth = theme.spacing(9); // Consistent with MUI spacing
+  const collapsedDrawerWidth = 72;
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [open, setOpen] = useState(!isMobile);
-    const [anchorElUser, setAnchorElUser] = useState(null);
-    const [userName, setUserName] = useState('Guest');
+  const [anchorElUser, setAnchorElUser] = useState(null);
+  const [userName, setUserName] = useState('Guest');
   const [userRole, setUserRole] = useState('');
 
   // Handle drawer toggle for both mobile and desktop
@@ -193,11 +93,11 @@ const FullLayout = ({ children, hideToolbar = false }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, [isMobile]);
 
-    useEffect(() => {
+  useEffect(() => {
     if (isMobile) {
-      setOpen(false); // Keep sidebar closed by default on mobile
+      setOpen(false);
     } else {
-      setOpen(true); // Keep sidebar open by default on desktop
+      setOpen(true);
     }
   }, [isMobile]);
 
@@ -240,125 +140,209 @@ const FullLayout = ({ children, hideToolbar = false }) => {
 
   const menuSections = [
     {
-      title: 'Main',
+      title: 'MENU',
       items: [
         { 
-          name: 'Dashboard', 
-          icon: <DashboardIcon />, 
+          name: 'Home', 
+          icon: <HomeIcon />, 
           path: '/dashboard',
-          activePaths: ['/dashboard']
+          activePaths: ['/dashboard'],
+          color: '#4ecdc4'
+        },
+        { 
+          name: 'Search', 
+          icon: <SearchIcon />, 
+          path: '/search',
+          activePaths: ['/search'],
+          color: '#4ecdc4'
+        },
+        { 
+          name: 'Documents', 
+          icon: <DocumentsIcon />, 
+          path: '/documents',
+          activePaths: ['/documents'],
+          color: '#4ecdc4'
+        },
+        { 
+          name: 'Offers', 
+          icon: <OffersIcon />, 
+          path: '/offers',
+          activePaths: ['/offers'],
+          color: '#4ecdc4'
+        },
+        { 
+          name: 'Schedule', 
+          icon: <ScheduleIcon />, 
+          path: '/schedule',
+          activePaths: ['/schedule'],
+          color: '#4ecdc4'
         },
         { 
           name: 'Manage Quiz', 
           icon: <QuizIcon />, 
           path: '/quiz',
-          activePaths: ['/quiz', '/quiz/*']
+          activePaths: ['/quiz', '/quiz/*'],
+          color: '#4ecdc4'
         },
       ]
     },
     {
-      title: 'Management',
+      title: 'MANAGEMENT',
       items: [
         { 
           name: 'Subjects',
           icon: <CategoryIcon />,
           path: '/departments',
-          activePaths: ['/departments']
+          activePaths: ['/departments'],
+          color: '#7877c6'
         },
         { 
           name: 'Teachers', 
           icon: <SchoolIcon />, 
           path: '/teachers',
-          activePaths: ['/teachers', '/teachers/*']
+          activePaths: ['/teachers', '/teachers/*'],
+          color: '#7877c6'
         },
-        // {
-        //   name: 'Student Reports',
-        //   icon: <AssessmentIcon />,
-        //   path: '/student-reports',
-        //   activePaths: ['/student-reports']
-        // },
         { 
           name: 'Students', 
           icon: <PeopleIcon />, 
           path: '/students',
-          activePaths: ['/students', '/students/*']
+          activePaths: ['/students', '/students/*'],
+          color: '#7877c6'
         },
         { 
           name: 'Results', 
           icon: <AssessmentIcon />, 
           path: '/results',
-          activePaths: ['/results', '/results/*']
-        },
-
-      ]
-    },
-    {
-      title: 'Account',
-      items: [
-        { 
-          name: 'Profile', 
-          icon: <AccountCircleIcon />, 
-          path: '/profile',
-          activePaths: ['/profile']
+          activePaths: ['/results', '/results/*'],
+          color: '#7877c6'
         },
         { 
           name: 'Settings', 
           icon: <SettingsIcon />, 
           path: '/settings',
-          activePaths: ['/settings']
+          activePaths: ['/settings'],
+          color: '#7877c6'
         },
       ]
     }
   ];
 
-  // Determine current theme based on image (dark or light)
-  // Using theme's primary colors
-  const sidebarPaperBg = theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.common.white;
-  const sidebarTextColor = theme.palette.text.secondary; 
-  const sidebarIconColor = theme.palette.text.secondary;
-
   const drawerContent = (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: sidebarPaperBg }}>
+    <Box 
+      sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100%',
+        background: 'linear-gradient(180deg, rgba(26, 26, 46, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%)',
+        backdropFilter: 'blur(20px)',
+        border: 'none',
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: '1px',
+          height: '100%',
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.1) 100%)',
+        }
+      }}
+    >
       {/* Drawer Header */}
-      <DrawerHeader sx={{ px: open ? 2.5 : (collapsedDrawerWidth / 8 - 2.5), justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ 
+        p: open ? 2.5 : 1.5, 
+        display: 'flex', 
+        alignItems: 'center',
+        justifyContent: open ? 'space-between' : 'center',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        background: 'rgba(255, 255, 255, 0.02)'
+      }}>
         {open && (
-          <Box component={Link} to="/dashboard" sx={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
-            <Avatar sx={{ bgcolor: theme.palette.primary.main, color: theme.palette.primary.contrastText, width: 40, height: 40, mr: open ? 1.5 : 0 }}>
-              {userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-            </Avatar>
-            <Typography variant="h6" noWrap sx={{ color: theme.palette.text.primary, fontWeight: 'bold' }}>
-              QuizMaster
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            {/* Robot Avatar */}
+            <Box
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, rgba(120, 119, 198, 0.8) 0%, rgba(78, 205, 196, 0.8) 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                animation: `${subtleGlow} 4s ease-in-out infinite`,
+              }}
+            >
+              <img 
+                src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaXZ3cjNzZzVjcDR6Y2s1aWx6aG9wcHNkcjNkeTNyeGV6YnZwbWw3NSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/L1R1tvI9svkIWwpVYr/giphy.gif" 
+                alt="Jumbo Quiz Robot"
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  objectFit: 'cover'
+                }}
+              />
+            </Box>
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                color: '#ffffff',
+                fontWeight: 600,
+                fontSize: '1.1rem',
+                background: 'linear-gradient(135deg, #ffffff 0%, #4ecdc4 100%)',
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              Jumbo Quiz
             </Typography>
           </Box>
         )}
-        <IconButton onClick={handleDrawerToggle} sx={{ color: theme.palette.text.secondary, ml: open ? 0 : 'auto', mr: open ? 0 : 'auto' }}>
-           {isMobile ? (open ? <CloseIcon /> : <MenuIcon />) : (open ? <ChevronLeftIcon /> : <ChevronRightIcon />)}
+        <IconButton 
+          onClick={handleDrawerToggle} 
+          size="small"
+          sx={{ 
+            color: 'rgba(255, 255, 255, 0.7)',
+            background: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            '&:hover': {
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#4ecdc4'
+            }
+          }}
+        >
+          {open ? <ChevronLeftIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
         </IconButton>
-      </DrawerHeader>
-      <Divider sx={{ borderColor: alpha(theme.palette.divider, 0.2) }} />
+      </Box>
 
       {/* Navigation List */}
-      <List sx={{ flexGrow: 1, pt: 1, px: open ? 1.5 : 1 }}>
+      <List sx={{ flex: 1, px: 1, py: 2 }}>
         {menuSections.map((section, sectionIndex) => (
-          <React.Fragment key={section.title + '-' + sectionIndex}>
-            {open && section.title && (
+          <React.Fragment key={section.title}>
+            {open && (
               <Typography
-                variant="overline"
+                variant="caption"
                 sx={{
                   display: 'block',
-                  color: alpha(sidebarTextColor, 0.7),
-                  fontWeight: 500,
-                  pt: sectionIndex > 0 ? 2.25 : 1,
-                  pb: 0.75,
-                  pl: 1.5, 
+                  color: 'rgba(255, 255, 255, 0.5)',
+                  fontWeight: 600,
+                  fontSize: '0.65rem',
+                  pt: sectionIndex > 0 ? 3 : 1,
+                  pb: 1,
+                  pl: 2,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  fontSize: '0.65rem'
+                  letterSpacing: '0.1em',
                 }}
               >
                 {section.title}
               </Typography>
             )}
+            
             {section.items.map((item) => {
               const isActive = item.activePaths?.some(path => 
                 path.endsWith('*') 
@@ -367,44 +351,79 @@ const FullLayout = ({ children, hideToolbar = false }) => {
               ) || false;
               
               return (
-                <ListItem key={item.name} disablePadding sx={{ display: 'block', my: open ? 0.25 : 0.5 }}>
+                <ListItem key={item.name} disablePadding sx={{ mb: 0.5 }}>
                   <Tooltip title={open ? '' : item.name} placement="right">
                     <ListItemButton
                       component={Link}
                       to={item.path}
                       selected={isActive}
                       sx={{
-                        minHeight: 46,
+                        minHeight: 44,
                         justifyContent: open ? 'initial' : 'center',
-                        px: open ? 2 : (collapsedDrawerWidth / 8 - 2.75),
-                        py: open ? 1.1 : 1.25,
-                        borderRadius: theme.shape.borderRadius * 1.5,
-                        color: isActive ? theme.palette.primary.main : theme.palette.text.primary,
-                        backgroundColor: isActive ? alpha(theme.palette.primary.main, 0.12) : 'transparent',
+                        px: open ? 2 : 1.5,
+                        py: 1,
+                        mx: 0.5,
+                        borderRadius: '12px',
+                        background: isActive ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                        backdropFilter: isActive ? 'blur(10px)' : 'none',
+                        border: isActive ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid transparent',
+                        color: isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.7)',
+                        transition: 'all 0.3s ease',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        '&::before': isActive ? {
+                          content: '""',
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: '3px',
+                          background: item.color || '#4ecdc4',
+                          borderRadius: '0 2px 2px 0',
+                        } : {},
                         '&:hover': {
-                          backgroundColor: isActive ? alpha(theme.palette.primary.main, 0.15) : alpha(theme.palette.action.hover, theme.palette.mode === 'dark' ? 0.2 : 0.5),
-                          color: isActive ? theme.palette.primary.main : theme.palette.text.primary,
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          backdropFilter: 'blur(10px)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          color: '#ffffff',
+                          transform: 'translateY(-1px)',
                           '& .MuiListItemIcon-root': {
-                            color: isActive ? theme.palette.primary.main : (theme.palette.mode === 'dark' ? theme.palette.primary.light : theme.palette.primary.main),
+                            color: item.color || '#4ecdc4',
+                            transform: 'scale(1.1)',
                           },
                         },
                         '&.Mui-selected': {
-                          color: theme.palette.primary.main,
-                          fontWeight: '600',
-                          backgroundColor: alpha(theme.palette.primary.main, 0.12),
+                          background: 'rgba(255, 255, 255, 0.1)',
                           '& .MuiListItemIcon-root': {
-                            color: theme.palette.primary.main,
+                            color: item.color || '#4ecdc4',
                           },
-                           '&:hover': {
-                             backgroundColor: alpha(theme.palette.primary.main, 0.15),
-                           }
                         },
                       }}
                     >
-                      <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : 'auto', justifyContent: 'center', color: isActive ? theme.palette.primary.main : sidebarIconColor, fontSize: '1.3rem' }}>
-                        {React.cloneElement(item.icon, { sx: { fontSize: 'inherit' } })}
+                      <ListItemIcon 
+                        sx={{ 
+                          minWidth: 0, 
+                          mr: open ? 2 : 'auto', 
+                          justifyContent: 'center',
+                          color: isActive ? (item.color || '#4ecdc4') : 'rgba(255, 255, 255, 0.6)',
+                          fontSize: '20px',
+                          transition: 'all 0.3s ease',
+                        }}
+                      >
+                        {React.cloneElement(item.icon, { sx: { fontSize: '20px' } })}
                       </ListItemIcon>
-                      {open && <ListItemText primary={item.name} sx={{ '& .MuiListItemText-primary': { fontWeight: isActive ? 500 : 400, fontSize: '0.92rem' } }} />}
+                      {open && (
+                        <ListItemText 
+                          primary={item.name} 
+                          sx={{ 
+                            '& .MuiListItemText-primary': { 
+                              fontWeight: isActive ? 600 : 400, 
+                              fontSize: '0.9rem',
+                              color: 'inherit'
+                            } 
+                          }} 
+                        />
+                      )}
                     </ListItemButton>
                   </Tooltip>
                 </ListItem>
@@ -414,95 +433,118 @@ const FullLayout = ({ children, hideToolbar = false }) => {
         ))}
       </List>
 
-      {/* User Profile Section at the bottom of the drawer */}
-      <Box sx={{ p: open ? 2 : (collapsedDrawerWidth / 8 - 2.5), py: 2, mt: 'auto', borderTop: `1px solid ${alpha(theme.palette.divider, 0.2)}` }}>
-        <Tooltip title={open ? '' : 'User Profile'} placement="right">
-          <Box 
-            id="profile-button-anchor"
-            aria-controls={Boolean(anchorElUser) ? 'profile-menu' : undefined}
-            aria-haspopup="true"
-            aria-expanded={Boolean(anchorElUser) ? 'true' : undefined}
-            onClick={handleProfileMenuOpen} 
+      {/* User Profile Section at the bottom */}
+      <Box sx={{ 
+        p: open ? 2 : 1, 
+        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+        background: 'rgba(255, 255, 255, 0.02)'
+      }}>
+        <Tooltip title={open ? '' : 'Profile Menu'} placement="right">
+          <Box
+            onClick={handleProfileMenuOpen}
             sx={{
-                display: 'flex', 
-                alignItems: 'center', 
-                cursor: 'pointer', 
-                p: open ? 1 : 0.5, 
-                borderRadius: '10px',
-                backgroundColor: Boolean(anchorElUser) ? alpha(theme.palette.action.selected, 0.5) : 'transparent',
-                '&:hover': { backgroundColor: alpha(theme.palette.action.hover, 0.7) },
-                justifyContent: open ? 'flex-start' : 'center'
-            }}
-          >
-            <Avatar 
-                sx={{ 
-                    width: open ? 36 : 30, 
-                    height: open ? 36 : 30, 
-                    bgcolor: theme.palette.primary.main, 
-                    color: theme.palette.primary.contrastText,
-                    mr: open ? 1.5 : 0,
-                    fontSize: open ? '1rem' : '0.85rem'
-                }}
-            >
-                {userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-            </Avatar>
-            {open && (
-                <Box sx={{ color: theme.palette.text.primary, textAlign: 'left', flexGrow: 1 }}>
-                    <Typography variant="subtitle2" sx={{lineHeight: 1.2, fontWeight: 500}}>{userName}</Typography>
-                    <Typography variant="caption" sx={{opacity: 0.8, color: theme.palette.text.secondary}}>{userRole.charAt(0).toUpperCase() + userRole.slice(1)}</Typography>
-                </Box>
-            )}
-            {open && <ChevronRightIcon sx={{ color: theme.palette.text.secondary, opacity: 0.7 }} />}
-          </Box>
-        </Tooltip>
-        <Menu
-            anchorEl={anchorElUser}
-            id="profile-menu"
-            open={Boolean(anchorElUser)}
-            onClose={handleProfileMenuClose}
-            MenuListProps={{ 'aria-labelledby': 'profile-button-anchor' }}
-            anchorOrigin={{ vertical: 'top', horizontal: open ? 'right' : 'left' }}
-            transformOrigin={{ vertical: 'bottom', horizontal: open ? 'right' : 'left' }}
-            PaperProps={{
-              elevation: 3,
-              sx: {
-                overflow: 'visible',
-                filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.15))',
-                mt: open ? -7.5 : -7, 
-                ml: open ? 0 : 1.5,
-                minWidth: 200,
-                borderRadius: '10px',
-                backgroundColor: theme.palette.background.paper,
-                color: theme.palette.text.primary,
-                '& .MuiMenuItem-root': {
-                  fontSize: '0.9rem',
-                  py: 1.25,
-                  '&:hover': {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.08),
-                  },
-                  '& .MuiSvgIcon-root': {
-                    color: theme.palette.text.secondary,
-                    marginRight: theme.spacing(1.5),
-                  }
-                }
+              display: 'flex',
+              alignItems: 'center',
+              gap: open ? 1.5 : 0,
+              p: 1,
+              borderRadius: '12px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              justifyContent: open ? 'flex-start' : 'center',
+              '&:hover': {
+                background: 'rgba(255, 255, 255, 0.1)',
+                transform: 'translateY(-1px)',
               }
             }}
           >
-            <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/profile'); }} component={Link} to="/profile">
-              <ListItemIcon><AccountCircleIcon fontSize="small" /></ListItemIcon>
-              Profile
-            </MenuItem>
-            <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }} component={Link} to="/settings">
-              <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
-              Settings
-            </MenuItem>
-            <Divider sx={{ my: 0.5 }}/>
-            <MenuItem onClick={handleLogout}>
-              <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
-              Logout
-            </MenuItem>
-          </Menu>
-        </Box>
+            <Avatar 
+              sx={{ 
+                width: 32, 
+                height: 32,
+                background: 'linear-gradient(135deg, #7877c6 0%, #4ecdc4 100%)',
+                fontSize: '0.8rem',
+                fontWeight: 600
+              }}
+            >
+              {userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+            </Avatar>
+            {open && (
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    color: '#ffffff',
+                    fontWeight: 500,
+                    fontSize: '0.85rem',
+                    lineHeight: 1.2
+                  }}
+                  noWrap
+                >
+                  {userName}
+                </Typography>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    fontSize: '0.7rem'
+                  }}
+                  noWrap
+                >
+                  {userRole || 'User'}
+                </Typography>
+              </Box>
+            )}
+            {open && <ChevronRightIcon sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '16px' }} />}
+          </Box>
+        </Tooltip>
+
+        <Menu
+          anchorEl={anchorElUser}
+          id="profile-menu"
+          open={Boolean(anchorElUser)}
+          onClose={handleProfileMenuClose}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          PaperProps={{
+            sx: {
+              background: 'rgba(26, 26, 46, 0.95)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              minWidth: 200,
+              '& .MuiMenuItem-root': {
+                color: '#ffffff',
+                fontSize: '0.9rem',
+                py: 1,
+                '&:hover': {
+                  background: 'rgba(255, 255, 255, 0.1)',
+                },
+                '& .MuiListItemIcon-root': {
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  minWidth: 36,
+                }
+              }
+            }
+          }}
+        >
+          <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/profile'); }}>
+            <ListItemIcon><AccountCircleIcon fontSize="small" /></ListItemIcon>
+            Profile
+          </MenuItem>
+          <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
+            <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
+            Settings
+          </MenuItem>
+          <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)', my: 0.5 }}/>
+          <MenuItem onClick={handleLogout}>
+            <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
+            Logout
+          </MenuItem>
+        </Menu>
+      </Box>
     </Box>
   );
 
@@ -510,22 +552,23 @@ const FullLayout = ({ children, hideToolbar = false }) => {
     <Box sx={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
       <CssBaseline />
       
-      {/* Mobile menu button only */}
+      {/* Mobile menu button */}
       <Box sx={{ 
         position: 'fixed',
-        top: 10,
-        left: 10,
-        zIndex: (theme) => theme.zIndex.drawer + 1,
-        display: { xs: 'block', md: 'none' } // Only show on mobile
+        top: 16,
+        left: 16,
+        zIndex: 1300,
+        display: { xs: 'block', md: 'none' }
       }}>
         <IconButton
           onClick={handleDrawerToggle}
           sx={{
-            color: theme.palette.primary.main,
-            backgroundColor: theme.palette.background.paper,
-            boxShadow: 1,
+            background: 'rgba(26, 26, 46, 0.9)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            color: '#ffffff',
             '&:hover': {
-              backgroundColor: theme.palette.action.hover,
+              background: 'rgba(26, 26, 46, 0.95)',
             },
           }}
         >
@@ -550,18 +593,14 @@ const FullLayout = ({ children, hideToolbar = false }) => {
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true, // Better open performance on mobile
-          }}
+          ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: 'block', md: 'none' },
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
-              width: '75%',
-              maxWidth: drawerWidth,
-              backgroundColor: theme.palette.background.paper,
-              borderRight: 'none',
-              boxShadow: theme.shadows[8],
+              width: drawerWidth,
+              border: 'none',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
             },
           }}
         >
@@ -576,18 +615,12 @@ const FullLayout = ({ children, hideToolbar = false }) => {
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
               width: open ? drawerWidth : collapsedDrawerWidth,
-              backgroundColor: theme.palette.background.paper,
-              borderRight: '1px solid rgba(0, 0, 0, 0.12)',
+              border: 'none',
               transition: theme.transitions.create('width', {
                 easing: theme.transitions.easing.sharp,
                 duration: theme.transitions.duration.leavingScreen,
               }),
               overflowX: 'hidden',
-              '&:hover': {
-                '& .MuiListItemIcon-root': {
-                  opacity: 1,
-                },
-              },
             },
           }}
           open={open}
@@ -601,29 +634,30 @@ const FullLayout = ({ children, hideToolbar = false }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 0,
-          m: 0,
-          backgroundColor: theme.palette.background.default,
-          overflowY: 'auto',
+          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
           minHeight: '100vh',
-          width: '100%',
-          marginLeft: 0,
-          paddingTop: 0,
-          transition: theme.transitions.create(['margin', 'width'], {
+          position: 'relative',
+          transition: theme.transitions.create(['margin'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.leavingScreen,
           }),
-          '& > *': {
-            p: 0,
-            m: 0,
-          },
-          [theme.breakpoints.down('sm')]: {
-            paddingTop: 0,
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: `
+              radial-gradient(circle at 25% 25%, rgba(120, 119, 198, 0.08) 0%, transparent 50%),
+              radial-gradient(circle at 75% 75%, rgba(255, 107, 107, 0.06) 0%, transparent 50%),
+              radial-gradient(circle at 50% 50%, rgba(78, 205, 196, 0.04) 0%, transparent 50%)
+            `,
+            pointerEvents: 'none',
           },
         }}
       >
-        <Toolbar sx={{ minHeight: '0 !important', p: 0, m: 0 }} />
-        <Box sx={{ p: 0, m: 0, width: '100%' }}>
+        <Box sx={{ position: 'relative', zIndex: 1, minHeight: '100vh' }}>
           {children}
         </Box>
       </Box>
