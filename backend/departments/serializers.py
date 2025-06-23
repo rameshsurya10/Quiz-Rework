@@ -7,7 +7,7 @@ class StudentInDepartmentSerializer(serializers.ModelSerializer):
     """A simple serializer for listing students within a department."""
     class Meta:
         model = Student
-        fields = ['student_id', 'name']
+        fields = ['student_id', 'name', 'is_verified']
 
 class DepartmentWithStudentsSerializer(serializers.ModelSerializer):
     """
@@ -27,11 +27,32 @@ class DepartmentWithStudentsSerializer(serializers.ModelSerializer):
         ]
 
     def get_teachers(self, obj):
-        teachers = Teacher.objects.filter(
-            department_ids__contains=[obj.department_id],
-            is_deleted=False    
-        )
-        return [{'teacher_id': t.teacher_id, 'name': t.name} for t in teachers]
+        from teacher.models import Teacher
+
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+
+        # Show only the current teacher if user is a teacher
+        if user and hasattr(user, 'role') and user.role == 'TEACHER':
+            try:
+                teacher = Teacher.objects.get(email=user.email, is_deleted=False)
+                if obj.department_id in teacher.department_ids:
+                    return [{
+                        'teacher_id': teacher.teacher_id,
+                        'name': teacher.name
+                    }]
+                else:
+                    return []  # Not assigned to this department
+            except Teacher.DoesNotExist:
+                return []
+
+        # Admin or others: show all teachers assigned to the department
+        else:
+            teachers = Teacher.objects.filter(
+                department_ids__contains=[obj.department_id],
+                is_deleted=False
+            )
+            return [{'teacher_id': t.teacher_id, 'name': t.name} for t in teachers]
 
     def get_teacher_count(self, obj):
         return Teacher.objects.filter(

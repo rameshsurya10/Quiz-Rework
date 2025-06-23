@@ -22,6 +22,9 @@ import fitz  # PyMuPDF for PDF text extraction
 from django.core.mail import send_mail
 from django.contrib.sites.shortcuts import get_current_site
 from django.urls import reverse
+from teacher.models import Teacher
+from students.models import Student
+from django.db.models import Q
 
 
 class QuizFileUploadView(APIView):
@@ -499,17 +502,43 @@ class QuizListCreateView(generics.ListCreateAPIView):
     MAX_QUESTIONS = 35
 
     def get_queryset(self):
-        """Return quizzes created by the user or all quizzes for admins"""
+        user = self.request.user
+        print("user:",user)
         queryset = Quiz.objects.filter(is_deleted=False)
-        if not self.request.user.is_admin:
-            queryset = queryset.filter(creator=self.request.user)
-        
-        # Add department filter if provided
-        department_id = self.request.query_params.get('department_id')
-        if department_id:
-            queryset = queryset.filter(department_id=department_id)
+        now = timezone.now()
+
+        if hasattr(user, 'role') and user.role == 'ADMIN':
+            # Admin sees all quizzes
+            print("Admin")
+            return queryset.order_by('-created_at')
+
+        elif user.role == 'TEACHER':
+            print("Teacher")
+            teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+            if not teacher:
+                return Quiz.objects.none()
             
-        return queryset.order_by('-created_at')
+            department_ids = teacher.department_ids or []
+            return queryset.filter(
+                Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
+            ).order_by('-created_at')
+
+        elif user.role == 'student':
+            print("Student")
+            student = Student.objects.filter(email=user.email, is_deleted=False).first()
+            if not student:
+                return Quiz.objects.none()
+
+            dept_id = student.department_id
+            quiz_queryset = queryset.filter(department_id=dept_id)
+
+            # Separate filtering logic if needed on the frontend
+            # Example: return all and let frontend sort by date
+            return quiz_queryset.order_by('start_time')
+
+        else:
+            # Unauthorized or unknown role
+            return Quiz.objects.none()
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -577,10 +606,37 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     
     def get_queryset(self):
+        user = self.request.user
+        print("user:",user)
         queryset = Quiz.objects.filter(is_deleted=False)
-        if not self.request.user.is_admin:
-            queryset = queryset.filter(creator=self.request.user)
-        return queryset
+
+        if hasattr(user, 'role') and user.role == 'ADMIN':
+            print("Admin")
+            # Admins can access all quizzes
+            return queryset
+
+        elif user.role == 'TEACHER':
+            print("Teacher")
+            # Teachers can access their own quizzes or ones in their departments
+            teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+            if not teacher:
+                return Quiz.objects.none()
+
+            department_ids = teacher.department_ids or []
+            return queryset.filter(
+                Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
+            )
+
+        elif user.role == 'student':
+            print("Student")
+            # Students can only access quizzes from their department
+            student = Student.objects.filter(email=user.email, is_deleted=False).first()
+            if not student:
+                return Quiz.objects.none()
+
+            return queryset.filter(department_id=student.department_id)
+
+        return Quiz.objects.none()
     
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:

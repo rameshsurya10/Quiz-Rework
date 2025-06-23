@@ -82,15 +82,6 @@ class StudentViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = 'attachment; filename=student_upload_template.xlsx'
         return response
     
-    # def perform_create(self, serializer):
-    #     # Add created_by and last_modified_by from request user
-    #     user_identifier = getattr(self.request.user, 'username', 
-    #                            getattr(self.request.user, 'email', 'system'))
-    #     serializer.save(
-    #         created_by=user_identifier,
-    #         last_modified_by=user_identifier
-    #     )
-    
     def perform_update(self, serializer):
         # Update last_modified_by
         user_identifier = getattr(self.request.user, 'username', 
@@ -191,8 +182,36 @@ class StudentListCreateView(generics.ListCreateAPIView):
     serializer_class = StudentSerializer
     permission_classes = [IsAuthenticated]
     
+    # def get_queryset(self):
+    #     return Student.objects.filter(is_deleted=False)
+    
     def get_queryset(self):
-        return Student.objects.filter(is_deleted=False)
+        user = self.request.user
+        print("user:",user)
+
+        # Admin: See all students
+        if hasattr(user, 'role') and user.role == 'ADMIN':
+            print("Admin")
+            return Student.objects.filter(is_deleted=False)
+
+        # Teacher: See students in their departments
+        elif hasattr(user, 'role') and user.role == 'TEACHER':
+            print("Teacher")
+            teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+            
+            if not teacher:
+                print("No matching teacher found.")
+                return Student.objects.none()  # Return empty queryset if no teacher found
+
+            department_ids = teacher.department_ids or []
+            print("department_ids:", department_ids)
+
+            return Student.objects.filter(is_deleted=False, department_id__in=department_ids)
+
+        # Other users: return none
+        else:
+            print("Unauthorized or unknown role.")
+            return Student.objects.none()
     
     def perform_create(self, serializer):
         serializer.save(
@@ -208,8 +227,8 @@ class StudentDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
     lookup_field = 'student_id'
     
-    def get_queryset(self):
-        return Student.objects.filter(is_deleted=False)
+    # def get_queryset(self):
+    #     return Student.objects.filter(is_deleted=False)
     
     def perform_update(self, serializer):
         user_identifier = getattr(self.request.user, 'username', 

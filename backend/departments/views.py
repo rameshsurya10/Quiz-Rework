@@ -22,12 +22,38 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     # Explicitly define allowed HTTP methods
     http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
  
+    # def list(self, request, *args, **kwargs):
+    #     """
+    #     List all departments with teacher names and student count.
+    #     """
+    #     queryset = Department.objects.filter(is_deleted=False)
+    #     serializer = DepartmentWithStudentsSerializer(queryset, many=True)
+    #     return Response(serializer.data)
+
     def list(self, request, *args, **kwargs):
         """
-        List all departments with teacher names and student count.
+        List departments:
+        - Admins see all departments.
+        - Teachers see only their assigned departments.
         """
-        queryset = Department.objects.filter(is_deleted=False)
-        serializer = DepartmentWithStudentsSerializer(queryset, many=True)
+        user = request.user
+
+        if hasattr(user, 'role') and user.role == 'TEACHER':
+            from teacher.models import Teacher
+            try:
+                teacher = Teacher.objects.get(email=user.email, is_deleted=False)
+                department_ids = teacher.department_ids or []
+                queryset = Department.objects.filter(
+                    department_id__in=department_ids,
+                    is_deleted=False
+                )
+            except Teacher.DoesNotExist:
+                queryset = Department.objects.none()
+        else:
+            queryset = Department.objects.filter(is_deleted=False)
+
+        # Important: always pass context so serializer can access request.user
+        serializer = DepartmentWithStudentsSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
     
     def get_serializer_class(self):
