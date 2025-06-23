@@ -217,39 +217,20 @@ class InitiateLoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        email = request.data.get("email")
-        role = request.data.get("role", "").lower().strip()
+        serializer = UnifiedLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        if not email or not role:
-            return Response({"message": "Email and role are required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Validate role & get user name from student/teacher
-        if role == "student":
-            student = Student.objects.filter(email=email, is_deleted=False).first()
-            if not student:
-                return Response({"message": "You are not entered in the student table."}, status=status.HTTP_404_NOT_FOUND)
-            name = student.name
-
-        elif role == "teacher":
-            teacher = Teacher.objects.filter(email=email, is_deleted=False).first()
-            if not teacher:
-                return Response({"message": "You are not entered in the teacher table."}, status=status.HTTP_404_NOT_FOUND)
-            name = teacher.name
-
-        else:
-            return Response({"message": "Invalid role."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # ✅ Generate and cache OTP
-        otp = generate_otp()
-        cache_key = f"login_otp_{email}"
-        cache.set(cache_key, otp, timeout=300)  # 5 minutes
-
-        # ✅ Send email
-        subject = "Your OTP for Login"
-        message = f"Hello {name},\n\nYour OTP for login is: {otp}\n\nThis OTP is valid for 5 minutes."
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
-
-        return Response({"message": "OTP has been sent to your email.", "otp": otp}, status=status.HTTP_200_OK)
+        # Only reached for admin
+        return Response({
+            "message": "Admin login successful.",
+            "user": {
+                "id": serializer.validated_data["user"].id,
+                "email": serializer.validated_data["user"].email,
+                "role": "admin"
+            },
+            "refresh": serializer.validated_data["token_response"]["refresh"],
+            "access": serializer.validated_data["token_response"]["access"],
+        }, status=status.HTTP_200_OK)
 
 class VerifyOTPView(APIView):
     permission_classes = [permissions.AllowAny]
