@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import connection
 
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
