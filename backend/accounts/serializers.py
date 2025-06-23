@@ -192,36 +192,42 @@ class VerifyOTPSerializer(serializers.Serializer):
         role = attrs["role"].lower().strip()
         otp = attrs["otp"]
 
-        # ✅ Check if user exists in student/teacher (but don't create auth user)
+        # ✅ Get model object
         if role == "student":
-            student = Student.objects.filter(email=email, is_deleted=False).first()
-            if not student:
-                raise serializers.ValidationError({"email": ["No student found with this email."]})
-            user = student
-
+            user_obj = Student.objects.filter(email=email, is_deleted=False).first()
+            if not user_obj:
+                raise serializers.ValidationError({"email": ["No student found."]})
         elif role == "teacher":
-            teacher = Teacher.objects.filter(email=email, is_deleted=False).first()
-            if not teacher:
-                raise serializers.ValidationError({"email": ["No teacher found with this email."]})
-            user = teacher
-
+            user_obj = Teacher.objects.filter(email=email, is_deleted=False).first()
+            if not user_obj:
+                raise serializers.ValidationError({"email": ["No teacher found."]})
         else:
-            raise serializers.ValidationError({"role": ["Invalid role. Only 'student' or 'teacher' allowed."]})
+            raise serializers.ValidationError({"role": ["Invalid role."]})
 
         # ✅ OTP check
         cache_key = f"{self.OTP_CACHE_PREFIX}{email}"
         cached_otp = cache.get(cache_key)
 
         if not cached_otp:
-            raise serializers.ValidationError({"otp": ["OTP has expired. Please request a new one."]})
-
+            raise serializers.ValidationError({"otp": ["OTP has expired."]})
         if str(cached_otp) != str(otp):
             raise serializers.ValidationError({"otp": ["Invalid OTP."]})
-
-        # ✅ OTP is valid – delete from cache
         cache.delete(cache_key)
 
-        attrs["user"] = user  # Can be student or teacher object
+        # ✅ Ensure auth user exists for token creation
+        auth_user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                "role": role.upper(),
+                "first_name": user_obj.name.split()[0],
+                "last_name": " ".join(user_obj.name.split()[1:]),
+                "password": User.objects.make_random_password()
+            }
+        )
+
+        attrs["user_obj"] = user_obj
+        attrs["auth_user"] = auth_user
+        attrs["role"] = role
         return attrs
 
 

@@ -239,24 +239,22 @@ class VerifyOTPView(APIView):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = serializer.validated_data["user"]  # ✅ now guaranteed to exist
-        # refresh = RefreshToken.for_user(user)
-        role = request.data.get("role", "").lower().strip()
+        user_obj = serializer.validated_data["user_obj"]      # Student or Teacher
+        auth_user = serializer.validated_data["auth_user"]    # Django auth user
+        role = serializer.validated_data["role"]
 
-        if role == "student":
-            user_id = user.student_id
-        elif role == "teacher":
-            user_id = user.teacher_id
-        else:
-            user_id = None
+        refresh = RefreshToken.for_user(auth_user)
+
+        pk_name = user_obj._meta.pk.name
+        user_id = getattr(user_obj, pk_name)
 
         return Response({
-            # "refresh": str(refresh),
-            # "access": str(refresh.access_token),
+            "message": f"{role.capitalize()} login successful.",
             "user": {
                 "id": user_id,
-                "name": user.name,
-                "email": user.email,
-                "type": role
-            }
+                "email": user_obj.email,
+                "role": role
+            },
+            "refresh": str(refresh),
+            "access": str(refresh.access_token)
         }, status=status.HTTP_200_OK)
