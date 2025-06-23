@@ -52,6 +52,7 @@ class Quiz(models.Model):
     created_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who created the quiz")
     last_modified_at = models.DateTimeField(auto_now=True)
     last_modified_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who last modified the quiz")
+    metadata = models.JSONField(default=dict, blank=True, null=True, help_text="Additional metadata for the quiz")
     
     class Meta:
         db_table = 'quizzes'  

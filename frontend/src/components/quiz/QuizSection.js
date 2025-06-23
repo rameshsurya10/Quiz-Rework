@@ -96,48 +96,56 @@ const QuizSection = () => {
     setIsCreating(false);
   };
 
-  const handleSaveQuiz = async (quizData, onUploadProgress) => {
-    setIsCreating(true);
-
-    // 1. Prepare the JSON payload for quiz creation
-    const departmentIds = departments
-      .filter(dep => quizData.department.includes(dep.name))
-      .map(dep => dep.id);
-
-    const jsonPayload = { ...quizData };
-    const filesToUpload = jsonPayload.files; // Keep files for the next step
-    delete jsonPayload.files;
-    delete jsonPayload.department;
-    jsonPayload.department_ids = departmentIds;
-
+  const handleCreateQuiz = async (formData, onUploadProgress) => {
     try {
-      // 2. Create the quiz with JSON data
-      const createResponse = await quizApi.create(jsonPayload);
-      const newQuizId = createResponse.data.quiz_id;
-
-      if (!newQuizId) {
-        console.error('Quiz creation response did not include a quiz_id:', createResponse.data);
-        throw new Error('Failed to get new quiz ID.');
+      setIsCreating(true);
+      
+      // Extract files from formData for separate upload
+      const files = formData.files || [];
+      
+      // Remove files from the JSON payload but keep page_ranges in both places
+      const { files: removedFiles, ...quizData } = formData;
+      
+      // Add page_ranges to the quiz metadata if it exists
+      if (formData.page_ranges) {
+        if (!quizData.metadata) {
+          quizData.metadata = {};
+        }
+        quizData.metadata.page_ranges_str = formData.page_ranges;
       }
-
-      // 3. Upload files if any
-      if (filesToUpload && filesToUpload.length > 0) {
-        const formData = new FormData();
-        filesToUpload.forEach(file => {
-          formData.append('file', file);
+      
+      // Create the quiz first
+      const response = await quizApi.create(quizData);
+      const quizId = response.data.quiz_id;
+      
+      // If we have files, upload them
+      if (files.length > 0) {
+        const uploadPromises = files.map(async (file) => {
+          const fileFormData = new FormData();
+          fileFormData.append('file', file);
+          
+          // Add page_ranges to the form data if it exists
+          if (formData.page_ranges) {
+            fileFormData.append('page_ranges', formData.page_ranges);
+          }
+          
+          return quizApi.uploadFile(quizId, fileFormData, { onUploadProgress });
         });
-
-        await quizApi.uploadFile(newQuizId, formData, { onUploadProgress });
+        
+        await Promise.all(uploadPromises);
       }
-
-      showSnackbar('Quiz created successfully!', 'success');
+      
+      // Refresh the quiz list
       fetchQuizzes();
       setIsCreating(false);
-    } catch (err) {
-      console.error('Error creating quiz:', err);
-      const errorMsg = err.response?.data?.detail || err.response?.data?.error || 'Failed to create quiz.';
-      showSnackbar(errorMsg, 'error');
+      
+      // Show success message
+      showSnackbar('Quiz created successfully!', 'success');
+      
+    } catch (error) {
+      console.error('Error creating quiz:', error);
       setIsCreating(false);
+      showSnackbar(error.response?.data?.error || 'Failed to create quiz', 'error');
     }
   };
 
@@ -181,24 +189,58 @@ const QuizSection = () => {
       setViewModalOpen(true);
       const response = await quizApi.getById(quizId);
       const quizData = response.data;
+      
       // Normalize questions structure if needed
-      if (quizData.questions && quizData.questions.length === 1 && quizData.questions[0].options === null) {
+      if (quizData.questions) {
         try {
-          const raw = quizData.questions[0].question;
-          const parsed = JSON.parse(raw);
-          quizData.questions = parsed.map((q) => ({
-            question_text: q.question,
-            options: Object.values(q.options).map((text, idx) => ({
-              option_text: text,
-              is_correct: String.fromCharCode(65 + idx) === q.correct_answer,
-              id: idx
-            })),
-            explanation: q.explanation || ''
-          }));
+          // Check if questions is a string that needs parsing
+          if (quizData.questions.length === 1 && typeof quizData.questions[0].question === 'string') {
+            try {
+              const raw = quizData.questions[0].question;
+              const parsed = JSON.parse(raw);
+              quizData.questions = parsed.map((q) => ({
+                question_text: q.question,
+                options: q.options && typeof q.options === 'object' ? 
+                  Object.entries(q.options).map(([key, text], idx) => ({
+                    option_text: text,
+                    is_correct: key === q.correct_answer,
+                    id: idx
+                  })) : [],
+                explanation: q.explanation || '',
+                type: q.type || 'mcq'
+              }));
+            } catch (e) {
+              console.error('Failed to parse embedded questions JSON', e);
+            }
+          } 
+          // Handle array of question objects with direct structure
+          else if (Array.isArray(quizData.questions) && quizData.questions.length > 0) {
+            quizData.questions = quizData.questions.map((q) => {
+              // If question is already in the correct format
+              if (q.question_text) {
+                return q;
+              }
+              
+              // Convert from API format to display format
+              return {
+                question_text: q.question,
+                options: q.options && typeof q.options === 'object' ? 
+                  Object.entries(q.options).map(([key, text], idx) => ({
+                    option_text: text,
+                    is_correct: key === q.correct_answer,
+                    id: idx
+                  })) : [],
+                explanation: q.explanation || '',
+                type: q.type || 'mcq'
+              };
+            });
+          }
         } catch (e) {
-          console.error('Failed to parse embedded questions JSON', e);
+          console.error('Failed to normalize questions:', e);
         }
       }
+      
+      console.log("Processed quiz data:", quizData);
       setSelectedQuiz(quizData);
     } catch (error) {
       console.error('Failed to fetch quiz details:', error);
@@ -273,7 +315,7 @@ const QuizSection = () => {
     <FullLayout>
       <Container maxWidth={false} sx={{ mt: 4, mb: 4 }}>
         {isCreating ? (
-          <QuizFormModern onSave={handleSaveQuiz} className="glass-effect" onCancel={handleCancelCreate} departments={departments} />
+          <QuizFormModern onSave={handleCreateQuiz} className="glass-effect" onCancel={handleCancelCreate} departments={departments} />
         ) : (
           <>
             <PageHeader
@@ -353,18 +395,69 @@ const QuizSection = () => {
             ) : selectedQuiz && selectedQuiz.questions && selectedQuiz.questions.length > 0 ? (
               <List>
                 {selectedQuiz.questions.map((question, index) => (
-                  <ListItem key={question.id || index} sx={{ flexDirection: 'column', alignItems: 'flex-start', mb: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
-                    <ListItemText primary={`${index + 1}. ${question.question_text}`} primaryTypographyProps={{ fontWeight: 'bold' }} />
-                    <List sx={{ width: '100%' }}>
-                      {(question.options || []).map((option) => (
-                        <ListItem key={option.id} sx={{ bgcolor: option.is_correct ? alpha(theme.palette.success.main, 0.1) : 'transparent', borderRadius: 1 }}>
-                          <ListItemIcon sx={{ minWidth: 32 }}>
-                            {option.is_correct && <CheckCircleIcon color="success" fontSize="small" />}
-                          </ListItemIcon>
-                          <ListItemText primary={option.option_text} />
-                        </ListItem>
-                      ))}
-                    </List>
+                  <ListItem key={question.id || index} sx={{ flexDirection: 'column', alignItems: 'flex-start', mb: 2, border: 1, borderColor: 'divider', borderRadius: 2, p: 2 }}>
+                    <Box sx={{ display: 'flex', width: '100%', justifyContent: 'space-between', mb: 1 }}>
+                      <ListItemText 
+                        primary={`${index + 1}. ${question.question_text || question.question}`} 
+                        primaryTypographyProps={{ fontWeight: 'bold' }} 
+                      />
+                      <Chip 
+                        label={question.type || 'mcq'} 
+                        size="small" 
+                        color={
+                          question.type === 'mcq' ? 'primary' : 
+                          question.type === 'truefalse' ? 'secondary' : 
+                          question.type === 'fill' ? 'info' : 'default'
+                        } 
+                        sx={{ ml: 1 }} 
+                      />
+                    </Box>
+                    
+                    {/* Multiple choice options */}
+                    {(question.type === 'mcq' || (question.options && Object.keys(question.options).length > 0)) && (
+                      <List sx={{ width: '100%' }}>
+                        {question.options && typeof question.options === 'object' ? (
+                          // Handle options as object (API format)
+                          Object.entries(question.options).map(([key, value], idx) => (
+                            <ListItem key={idx} sx={{ 
+                              bgcolor: key === question.correct_answer ? alpha(theme.palette.success.main, 0.1) : 'transparent', 
+                              borderRadius: 1,
+                              mb: 0.5
+                            }}>
+                              <ListItemIcon sx={{ minWidth: 32 }}>
+                                {key === question.correct_answer && <CheckCircleIcon color="success" fontSize="small" />}
+                              </ListItemIcon>
+                              <ListItemText primary={`${key}: ${value}`} />
+                            </ListItem>
+                          ))
+                        ) : (
+                          // Handle options as array (normalized format)
+                          (question.options || []).map((option) => (
+                            <ListItem key={option.id} sx={{ 
+                              bgcolor: option.is_correct ? alpha(theme.palette.success.main, 0.1) : 'transparent', 
+                              borderRadius: 1,
+                              mb: 0.5
+                            }}>
+                              <ListItemIcon sx={{ minWidth: 32 }}>
+                                {option.is_correct && <CheckCircleIcon color="success" fontSize="small" />}
+                              </ListItemIcon>
+                              <ListItemText primary={option.option_text} />
+                            </ListItem>
+                          ))
+                        )}
+                      </List>
+                    )}
+                    
+                    {/* True/False, Fill, or One-line answer types */}
+                    {(question.type === 'truefalse' || question.type === 'fill' || question.type === 'oneline') && (
+                      <Box sx={{ width: '100%', mt: 1, mb: 1, p: 1, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          Correct Answer: {question.correct_answer}
+                        </Typography>
+                      </Box>
+                    )}
+                    
+                    {/* Explanation for all question types */}
                     {question.explanation && (
                       <Box sx={{ p: 1, mt: 1, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1, width: '100%' }}>
                         <Typography variant="caption" sx={{ fontWeight: 'bold' }}>Explanation:</Typography>

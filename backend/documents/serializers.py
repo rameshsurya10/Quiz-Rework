@@ -14,7 +14,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'description', 'file', 'file_url', 'file_size',
             'file_size_display', 'page_count', 'is_processed', 'user',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'metadata'
         ]
         read_only_fields = ['id', 'file_size', 'page_count', 'is_processed', 'created_at', 'updated_at']
     
@@ -50,6 +50,10 @@ class DocumentUploadSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
     file = serializers.FileField(write_only=True)
     process_immediately = serializers.BooleanField(default=True)
+    page_ranges = serializers.CharField(
+        required=False, 
+        help_text="Page ranges in format '1-5,7,10-15' to extract specific pages from PDF"
+    )
 
 
 class ExtractedTextSerializer(serializers.Serializer):

@@ -126,11 +126,13 @@ class QuizSerializer(serializers.ModelSerializer):
             'uploaded_files',
             'uploadedfiles',
             'time_limit_minutes', 'passing_score',
-            'questions'
+            'questions',
+            'metadata'
         ]
         read_only_fields = ['quiz_id', 'created_at', 'last_modified_at']
         extra_kwargs = {
-            'pages': {'required': False, 'default': []}
+            'pages': {'required': False, 'default': []},
+            'metadata': {'required': False, 'default': {}}
         }
 
     def to_representation(self, instance):
@@ -183,13 +185,52 @@ class QuizCreateSerializer(serializers.Serializer):
     quiz_id = serializers.IntegerField(read_only=True)
     title = serializers.CharField(max_length=255)
     description = serializers.CharField(allow_blank=True, required=False)
-    no_of_questions = serializers.IntegerField(required=False)
+    no_of_questions = serializers.IntegerField(required=False, min_value=1, max_value=35)
     quiz_type = serializers.CharField(max_length=50, required=False)
     question_type = serializers.CharField(max_length=50, required=False, default='multiple_choice')
     pages = serializers.JSONField(required=False, default=list)
     department_id = serializers.IntegerField(required=False, allow_null=True)
     quiz_date = CustomDateTimeField(required=True)
     uploadedfiles = serializers.JSONField(required=False, default=list)
+    metadata = serializers.JSONField(required=False, default=dict)
+
+    def validate_no_of_questions(self, value):
+        """Validate number of questions"""
+        try:
+            # Convert to integer if it's a string
+            value = int(value) if isinstance(value, str) else value
+            
+            if value > 35:
+                raise serializers.ValidationError({
+                    "error": "Number of questions cannot exceed 35",
+                    "message": f"You've requested {value} questions, but the maximum allowed is 35. Please reduce the number of questions.",
+                    "title": "Question Limit Exceeded"
+                })
+        except (ValueError, TypeError):
+            raise serializers.ValidationError({
+                "error": "Invalid number of questions",
+                "message": "Please enter a valid number between 1 and 35.",
+                "title": "Invalid Input"
+            })
+        return value
+
+    def validate_uploadedfiles(self, value):
+        """Validate uploaded files"""
+        if value:
+            total_size = 0
+            for file_info in value:
+                if 'file_size' in file_info:
+                    total_size += file_info['file_size']
+            
+            # Check if total size exceeds 60MB
+            max_size = 60 * 1024 * 1024  # 60MB in bytes
+            if total_size > max_size:
+                raise serializers.ValidationError({
+                    "error": f"Total file size cannot exceed 60MB",
+                    "message": f"The total size of all uploaded files ({total_size/(1024*1024):.2f}MB) exceeds the maximum allowed (60MB). Please reduce the file sizes or upload fewer files.",
+                    "title": "File Size Limit Exceeded"
+                })
+        return value
 
     def create(self, validated_data):
         """Create and return a new Quiz instance, given the validated data."""
@@ -198,17 +239,25 @@ class QuizCreateSerializer(serializers.Serializer):
         quiz_data['description'] = validated_data.get('description', '')
         quiz_data['pages'] = validated_data.get('pages', [])
         quiz_data['uploadedfiles'] = validated_data.get('uploadedfiles', [])
-
-        # Map payload keys to model field names
-        if 'no_of_questions' in validated_data:
-            quiz_data['no_of_questions'] = validated_data['no_of_questions']
+        quiz_data['metadata'] = validated_data.get('metadata', {})
         
-        if 'quiz_type' in validated_data:
-            quiz_data['quiz_type'] = validated_data['quiz_type']
-
-        if 'question_type' in validated_data:
-            quiz_data['question_type'] = validated_data['question_type']
-
+        # Log the metadata for debugging
+        print(f"Creating quiz with metadata: {quiz_data['metadata']}")
+        
+        # Map payload keys to model field names
+        field_mapping = {
+            'quiz_type': 'quiz_type',
+            'question_type': 'question_type',
+            'no_of_questions': 'no_of_questions',
+            'time_limit_minutes': 'time_limit_minutes',
+            'passing_score': 'passing_score',
+            'quiz_date': 'quiz_date'
+        }
+        
+        for payload_key, model_field in field_mapping.items():
+            if payload_key in validated_data:
+                quiz_data[model_field] = validated_data.get(payload_key)
+        
         # Handle department_id
         department_id_payload = validated_data.get('department_id')
         if department_id_payload is not None:
@@ -217,10 +266,6 @@ class QuizCreateSerializer(serializers.Serializer):
                 quiz_data['department'] = department_instance
             except Quiz.department.field.related_model.DoesNotExist:
                 raise serializers.ValidationError({'department_id': f"Department with id {department_id_payload} not found."})
-        
-        # Handle quiz_date - set it directly from validated_data
-        if 'quiz_date' in validated_data:
-            quiz_data['quiz_date'] = validated_data['quiz_date']
         
         # Get the request user
         request = self.context.get('request')
@@ -231,11 +276,10 @@ class QuizCreateSerializer(serializers.Serializer):
             quiz_data['creator'] = user.get_full_name() or user.username
             quiz_data['created_by'] = user.email
             quiz_data['last_modified_by'] = user.email
-
-        # Create the quiz instance
+        
+        # Create the quiz
         quiz = Quiz.objects.create(**quiz_data)
         
-        # Return the created quiz with all fields
         return quiz
 
     def update(self, instance, validated_data):

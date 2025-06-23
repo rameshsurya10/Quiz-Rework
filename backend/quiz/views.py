@@ -28,6 +28,9 @@ class QuizFileUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
 
+    # Maximum file size (60MB)
+    MAX_FILE_SIZE = 60 * 1024 * 1024  # 60MB in bytes
+
     def get_quiz(self, quiz_id):
         quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
         questions = Question.objects.filter(quiz_id=quiz.quiz_id)
@@ -52,8 +55,12 @@ class QuizFileUploadView(APIView):
             return Response({"error": "No file was provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         uploaded_file = request.FILES['file']
-        if uploaded_file.size > 10 * 1024 * 1024:
-            return Response({"error": "File size exceeds 10MB"}, status=status.HTTP_400_BAD_REQUEST)
+        if uploaded_file.size > self.MAX_FILE_SIZE:
+            return Response({
+                "error": f"File size exceeds {self.MAX_FILE_SIZE // (1024*1024)}MB",
+                "message": f"The uploaded file is too large. Maximum file size allowed is {self.MAX_FILE_SIZE // (1024*1024)}MB.",
+                "title": "File Size Limit Exceeded"
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         # Generate a unique ID for the file
         import uuid
@@ -185,7 +192,7 @@ class QuizFileUploadView(APIView):
 
             client = OpenAI(api_key=settings.OPENAI_API_KEY)
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a quiz generator."},
                     {"role": "user", "content": base_prompt}
@@ -484,6 +491,9 @@ class QuizListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsTeacherOrAdmin]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
+    # Maximum number of questions allowed
+    MAX_QUESTIONS = 35
+
     def get_queryset(self):
         """Return quizzes created by the user or all quizzes for admins"""
         queryset = Quiz.objects.filter(is_deleted=False)
@@ -510,6 +520,19 @@ class QuizListCreateView(generics.ListCreateAPIView):
         
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
+        
+        # Validate number of questions - handle both string and integer inputs
+        try:
+            no_of_questions = int(data.get('no_of_questions', 0))
+            if no_of_questions > self.MAX_QUESTIONS:
+                return Response({
+                    "error": f"Number of questions cannot exceed {self.MAX_QUESTIONS}",
+                    "message": f"You've requested {no_of_questions} questions, but the maximum allowed is {self.MAX_QUESTIONS}. Please reduce the number of questions.",
+                    "title": "Question Limit Exceeded"
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except (ValueError, TypeError):
+            # If the value can't be converted to int, let the serializer handle it
+            pass
         
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
@@ -586,16 +609,12 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                     
                     # Check if the parsed result is a list or a single object
                     if isinstance(parsed_json, list):
-                        # For API endpoint /api/quiz/<id>/, return just the parsed questions array
-                        if request.path.endswith(f'/{instance.quiz_id}/'):
-                            return Response(parsed_json)
-                        # Otherwise include it in the full response
+                        # Add the parsed questions to the processed_questions list
+                        # Include the full quiz data with the questions
                         data['questions'] = parsed_json
                         return Response(data)
                     else:
                         # If it's a single object, wrap it in a list
-                        if request.path.endswith(f'/{instance.quiz_id}/'):
-                            return Response([parsed_json])
                         data['questions'] = [parsed_json]
                         return Response(data)
                 except (json.JSONDecodeError, TypeError):
@@ -727,7 +746,7 @@ class QuizQuestionGenerateView(APIView):
             print("Client: ", client)
             print("success")
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4",
                 messages=[{"role": "system", "content": "You are a quiz generator."},
                           {"role": "user", "content": prompt}]
             )
@@ -792,7 +811,7 @@ class QuizPublishView(APIView):
                         
                         # Generate questions using OpenAI
                         response = client.chat.completions.create(
-                            model="gpt-3.5-turbo",
+                            model="gpt-4",
                             messages=[
                                 {"role": "system", "content": "You are a professional quiz question generator. Generate clear, well-structured questions with exactly 4 options and a clear explanation."},
                                 {"role": "user", "content": base_prompt}
@@ -1280,7 +1299,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                         """
                         
                         response = client.chat.completions.create(
-                            model="gpt-3.5-turbo",
+                            model="gpt-4",
                             messages=[
                                 {"role": "system", "content": f"You are a professional quiz question generator. Generate exactly 1 {q_type} question at {difficulty} difficulty level."},
                                 {"role": "user", "content": prompt}
@@ -1697,7 +1716,7 @@ class QuizQuestionGenerateByTypeView(APIView):
             
             # Generate questions using OpenAI
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a professional quiz question generator."},
                     {"role": "user", "content": base_prompt}
@@ -1764,15 +1783,49 @@ class QuizQuestionsView(APIView):
                 if question.question_type == 'mixed':
                     try:
                         parsed_json = json.loads(question.question)
-                        # Return the parsed JSON directly as the questions array
+                        
+                        # Validate the parsed JSON structure
+                        if isinstance(parsed_json, list):
+                            # Ensure each question has the required fields
+                            for q in parsed_json:
+                                if not isinstance(q, dict):
+                                    continue
+                                    
+                                # Make sure required fields exist
+                                if 'question' not in q:
+                                    q['question'] = "Missing question text"
+                                if 'type' not in q:
+                                    q['type'] = "oneline"
+                                if 'correct_answer' not in q:
+                                    q['correct_answer'] = "Unknown"
+                                if 'explanation' not in q:
+                                    q['explanation'] = "No explanation provided"
+                                    
+                                # Ensure MCQ questions have options
+                                if q.get('type') == 'mcq' and (not q.get('options') or len(q.get('options', {})) < 4):
+                                    q['options'] = {
+                                        "A": "Option A",
+                                        "B": "Option B",
+                                        "C": "Option C",
+                                        "D": "Option D"
+                                    }
+                                    
+                                # Ensure fill questions have [BLANK] in the question
+                                if q.get('type') == 'fill' and '[BLANK]' not in q.get('question', ''):
+                                    q['question'] = q.get('question', '') + " [BLANK]"
+                        
+                        # Return the parsed and validated JSON
                         return Response({
                             "quiz_id": quiz_id,
                             "title": quiz.title,
                             "questions": parsed_json
                         })
-                    except (json.JSONDecodeError, TypeError):
-                        # If parsing fails, return the raw question
+                    except (json.JSONDecodeError, TypeError) as e:
+                        # If parsing fails, log the error and return the raw question
+                        import logging
+                        logging.error(f"Error parsing question JSON: {str(e)}")
                         question_data["question"] = question.question
+                        question_data["error"] = "Failed to parse question JSON"
                 else:
                     # For non-mixed questions, include all fields
                     question_data["question"] = question.question
@@ -1811,6 +1864,37 @@ class QuizQuestionsView(APIView):
             
             # For mixed question types, store as JSON
             if quiz.question_type == 'mixed':
+                # Validate the structure of the questions
+                if isinstance(questions_data, list):
+                    for i, q in enumerate(questions_data):
+                        # Ensure each question has the required fields
+                        if not isinstance(q, dict):
+                            return Response({
+                                "error": f"Question {i+1} is not a valid object"
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                            
+                        # Check for required fields
+                        if 'question' not in q:
+                            return Response({
+                                "error": f"Question {i+1} is missing the 'question' field"
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                            
+                        if 'type' not in q:
+                            return Response({
+                                "error": f"Question {i+1} is missing the 'type' field"
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                            
+                        if 'correct_answer' not in q:
+                            return Response({
+                                "error": f"Question {i+1} is missing the 'correct_answer' field"
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                            
+                        # Validate MCQ questions have options
+                        if q.get('type') == 'mcq' and not q.get('options'):
+                            return Response({
+                                "error": f"MCQ question {i+1} is missing 'options'"
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                
                 # Store the questions as a JSON string
                 question = Question.objects.create(
                     quiz=quiz,
@@ -1820,6 +1904,12 @@ class QuizQuestionsView(APIView):
                     created_by=request.user.email,
                     last_modified_by=request.user.email
                 )
+                
+                # Update quiz metadata if it contains page_ranges_str
+                if hasattr(quiz, 'metadata') and quiz.metadata:
+                    if 'page_ranges_str' in quiz.metadata:
+                        # Store the page ranges in the question's metadata if needed
+                        pass
                 
                 return Response({
                     "message": "Questions created successfully",

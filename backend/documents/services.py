@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union, Tuple
 from PyPDF2 import PdfReader
 import re
 import io
@@ -14,13 +14,15 @@ class DocumentProcessingService:
     """Service for processing uploaded documents"""
     
     @staticmethod
-    def extract_text_from_pdf(document: Document, page_range: tuple = None) -> bool:
+    def extract_text_from_pdf(document: Document, page_ranges: List[Union[int, Tuple[int, int]]] = None) -> bool:
         """
         Extract text from a PDF document and update the document's extracted_text field
         
         Args:
             document: The Document model instance to extract text from
-            page_range: Optional tuple (start_page, end_page) to extract specific pages (0-indexed)
+            page_ranges: Optional list of page ranges to extract. Format:
+                        - [1, 5, 10] - Extract pages 1, 5, and 10 (1-indexed)
+                        - [(1, 5), 10, (20, 30)] - Extract pages 1-5, 10, and 20-30
             
         Returns:
             bool: True if extraction was successful, False otherwise
@@ -38,8 +40,14 @@ class DocumentProcessingService:
                 pdf_reader = PdfReader(io.BytesIO(file_content))
                 document.page_count = len(pdf_reader.pages)
                 
-                # Extract text using centralized utility
-                extracted_text = extract_text_from_file(document.file)
+                # Store the page ranges in document metadata if provided
+                if page_ranges:
+                    if not hasattr(document, 'metadata') or document.metadata is None:
+                        document.metadata = {}
+                    document.metadata['selected_pages'] = page_ranges
+                
+                # Extract text using centralized utility with page ranges
+                extracted_text = extract_text_from_file(document.file, page_ranges)
                 
                 # Clean and preprocess text
                 cleaned_text = DocumentProcessingService._clean_text(extracted_text)

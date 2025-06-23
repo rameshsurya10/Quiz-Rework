@@ -60,6 +60,8 @@ class Document(models.Model):
     page_count = models.IntegerField(default=0)
     file_size = models.IntegerField(default=0)  # Size in bytes
     file_type = models.CharField(max_length=50, blank=True)
+    # Additional metadata as JSON (for selected pages, etc.)
+    metadata = models.JSONField(default=dict, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

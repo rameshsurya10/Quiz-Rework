@@ -19,7 +19,12 @@ import {
   Chip,
   FormControl,
   ListItemText,
-  FormHelperText
+  FormHelperText,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
 } from '@mui/material';
 import { Autocomplete } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -39,15 +44,24 @@ const initialFormState = {
   quiz_type: '',
   department: [],
   passing_score: '',
-  quiz_date: ''
+  quiz_date: '',
+  page_ranges: '',
+  metadata: {}
 };
 
 const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) => {
+  // Add constants for limits
+  const MAX_FILE_SIZE = 60; // 60MB
+  const MAX_QUESTIONS = 35;
+  
   const [form, setForm] = useState(initialFormState);
   const [loading, setLoading] = useState(false);
   const [departments, setDepartments] = useState(initialDepartments || []);
   const [deptLoading, setDeptLoading] = useState(!initialDepartments);
   const [errors, setErrors] = useState({});
+  const [hasPdf, setHasPdf] = useState(false);
+  // Add state for error dialog
+  const [errorDialog, setErrorDialog] = useState({ open: false, title: '', message: '' });
 
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isFadingOut, setIsFadingOut] = useState(false);
@@ -76,12 +90,39 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
     });
   }, [errors]);
 
-  const handleFilesSelect = (selectedFiles) => {
+  const handleFilesSelect = useCallback((selectedFiles) => {
+    // Check if at least one PDF file is included
+    const containsPdf = selectedFiles.some(file => file.type === 'application/pdf');
+    setHasPdf(containsPdf);
+    
     setForm(prev => ({
       ...prev,
       files: selectedFiles
     }));
-  };
+  }, []);
+  
+  const handlePageRangesChange = useCallback((pageRanges) => {
+    // Only update if the value has actually changed
+    if (form.page_ranges !== pageRanges) {
+      setForm(prev => ({
+        ...prev,
+        page_ranges: pageRanges,
+        metadata: {
+          ...prev.metadata,
+          page_ranges_str: pageRanges
+        }
+      }));
+      
+      // Clear any existing page range errors when the value changes
+      if (errors.page_ranges) {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.page_ranges;
+          return newErrors;
+        });
+      }
+    }
+  }, [form.page_ranges, errors.page_ranges]);
 
   const validate = () => {
     const errs = {};
@@ -89,7 +130,40 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       if (!form[field]) errs[field] = 'Required';
     });
     if (!form.department.length) errs.department = 'Select at least one';
-    if (!form.quiz_date) errs.quiz_date = 'Quiz date is required'; // <-- NEW
+    if (!form.quiz_date) errs.quiz_date = 'Quiz date is required';
+    
+    // Check number of questions limit
+    if (form.no_of_questions && parseInt(form.no_of_questions) > MAX_QUESTIONS) {
+      errs.no_of_questions = `Maximum ${MAX_QUESTIONS} questions allowed`;
+    }
+    
+    // Validate page ranges if provided
+    if (form.page_ranges) {
+      const pattern = /^(\d+(-\d+)?)(,\d+(-\d+)?)*$/;
+      if (!pattern.test(form.page_ranges)) {
+        errs.page_ranges = 'Invalid page range format';
+      } else {
+        // Check that ranges are valid (start <= end)
+        const rangeParts = form.page_ranges.split(',');
+        for (const part of rangeParts) {
+          if (part.includes('-')) {
+            const [start, end] = part.split('-').map(Number);
+            if (start > end) {
+              errs.page_ranges = `Invalid range: ${start}-${end}. Start must be <= end.`;
+              break;
+            }
+            if (start <= 0) {
+              errs.page_ranges = "Page numbers must be positive";
+              break;
+            }
+          } else if (parseInt(part) <= 0) {
+            errs.page_ranges = "Page numbers must be positive";
+            break;
+          }
+        }
+      }
+    }
+    
     setErrors(errs);
     return !Object.keys(errs).length;
   };
@@ -110,12 +184,22 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       'Mixed': 'mixed'
     };
 
+    // Create a copy of the form data
     const payload = {
       ...form,
       quiz_type: form.complexity,
       question_type: questionTypeMapping[form.quiz_type] || form.quiz_type,
     };
     delete payload.complexity;
+    
+    // Ensure page_ranges are included in both the payload and metadata
+    if (form.page_ranges) {
+      if (!payload.metadata) {
+        payload.metadata = {};
+      }
+      payload.metadata.page_ranges_str = form.page_ranges;
+      payload.page_ranges = form.page_ranges;
+    }
 
     try {
       // Use onUploadProgress to show real progress, capped at 95%
@@ -140,6 +224,27 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
     } catch (err) {
       console.error('Upload failed:', err);
       setLoading(false); // Hide loader on error
+      
+      // Check for limit error responses
+      if (err.response && err.response.data) {
+        const { title, message } = err.response.data;
+        if (title && message) {
+          // Show error dialog with the server's message
+          setErrorDialog({
+            open: true,
+            title: title,
+            message: message
+          });
+          return;
+        }
+      }
+      
+      // Generic error handling
+      setErrorDialog({
+        open: true,
+        title: 'Error',
+        message: 'Failed to create quiz. Please try again.'
+      });
     }
   };
 
@@ -169,7 +274,26 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
 
               {/* File Upload */}
               <Grid item xs={12}>
-                <FileUpload onFilesSelect={handleFilesSelect} />
+                <FileUpload 
+                  onFilesSelect={handleFilesSelect} 
+                  onPageRangesChange={handlePageRangesChange}
+                />
+                
+                {form.page_ranges && (
+                  <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(25, 118, 210, 0.08)', borderRadius: 1 }}>
+                    <Typography variant="caption" color="primary">
+                      <strong>Selected Pages:</strong> {form.page_ranges}
+                    </Typography>
+                  </Box>
+                )}
+                
+                {errors.page_ranges && (
+                  <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(244, 67, 54, 0.08)', borderRadius: 1 }}>
+                    <Typography variant="caption" color="error">
+                      {errors.page_ranges}
+                    </Typography>
+                  </Box>
+                )}
               </Grid>
 
               {/* Description */}
@@ -191,7 +315,32 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   type="number"
                   label="Number of Questions"
                   value={form.no_of_questions}
-                  onChange={e => handleField('no_of_questions', e.target.value)}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    if (!isNaN(value) && value > MAX_QUESTIONS) {
+                      setErrors(prev => ({
+                        ...prev,
+                        no_of_questions: `Maximum ${MAX_QUESTIONS} questions allowed`
+                      }));
+                      // Optionally cap the value at MAX_QUESTIONS
+                      handleField('no_of_questions', MAX_QUESTIONS.toString());
+                    } else {
+                      handleField('no_of_questions', e.target.value);
+                      if (errors.no_of_questions) {
+                        setErrors(prev => {
+                          const newErrors = { ...prev };
+                          delete newErrors.no_of_questions;
+                          return newErrors;
+                        });
+                      }
+                    }
+                  }}
+                  error={!!errors.no_of_questions}
+                  helperText={errors.no_of_questions || `Maximum ${MAX_QUESTIONS} questions allowed`}
+                  inputProps={{
+                    min: 1,
+                    max: MAX_QUESTIONS
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -227,6 +376,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   options={['MCQ','Fill ups','Mixed','True/False','One Line']}
                   value={form.quiz_type}
                   onChange={(e, v) => handleField('quiz_type', v)}
+                  isOptionEqualToValue={(option, value) => option === value}
                   renderInput={params => (
                     <TextField {...params} label="Question Type" error={!!errors.quiz_type} helperText={errors.quiz_type} />
                   )}
@@ -237,6 +387,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   options={['Easy','Medium','Hard','Mixed']}
                   value={form.complexity}
                   onChange={(e, v) => handleField('complexity', v)}
+                  isOptionEqualToValue={(option, value) => option === value}
                   renderInput={params => (
                     <TextField {...params} label="Complexity" error={!!errors.complexity} helperText={errors.complexity} />
                   )}
@@ -335,6 +486,27 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
         </Grid>
       </form>
       {loading && <CreatingQuizLoader progress={uploadProgress} isFadingOut={isFadingOut} />}
+      {/* Error Dialog */}
+      {errorDialog.open && (
+        <Dialog
+          open={errorDialog.open}
+          onClose={() => setErrorDialog({ ...errorDialog, open: false })}
+          aria-labelledby="alert-dialog-title"
+          aria-describedby="alert-dialog-description"
+        >
+          <DialogTitle id="alert-dialog-title">{errorDialog.title}</DialogTitle>
+          <DialogContent>
+            <DialogContentText id="alert-dialog-description">
+              {errorDialog.message}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setErrorDialog({ ...errorDialog, open: false })} color="primary" autoFocus>
+              OK
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Paper>
   );
 };
