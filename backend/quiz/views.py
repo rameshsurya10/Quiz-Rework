@@ -8,6 +8,7 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .models import Quiz, Question
+from students.models import Student
 from .serializers import QuizSerializer, QuizCreateSerializer, QuizUpdateSerializer
 import os
 from datetime import datetime
@@ -18,6 +19,9 @@ import io
 from rest_framework.decorators import action
 import random
 import fitz  # PyMuPDF for PDF text extraction
+from django.core.mail import send_mail
+from django.contrib.sites.shortcuts import get_current_site
+from django.urls import reverse
 
 
 class QuizFileUploadView(APIView):
@@ -761,10 +765,9 @@ class QuizQuestionGenerateView(APIView):
             "questions": questions
         })
 
-
 class QuizPublishView(APIView):
     """
-    API endpoint to publish/unpublish a quiz and store generated questions
+    API endpoint to publish/unpublish a quiz, save URL, and notify students via email.
     """
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
     
@@ -772,151 +775,73 @@ class QuizPublishView(APIView):
         try:
             quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
             self.check_object_permissions(request, quiz)
-            
+
             # Toggle publish status
             quiz.is_published = not quiz.is_published
-            
+
             if quiz.is_published:
-                # Set published date if publishing
+                # Set published date
                 if not quiz.published_at:
                     quiz.published_at = timezone.now()
-                
-                # Generate questions if they don't exist
-                if not quiz.quiz_questions.exists():  # Check if questions already exist
-                    try:
-                        # Get settings from quiz object
-                        question_type = quiz.question_type.lower() if quiz.question_type else 'multiple_choice'
-                        num_questions = quiz.no_of_questions if quiz.no_of_questions else 5
-                        quiz_type = quiz.quiz_type.lower() if quiz.quiz_type else 'medium'
-                        
-                        # Initialize OpenAI client
-                        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-                        
-                        # Prepare the prompt based on quiz type and question type
-                        base_prompt = f"""Generate {num_questions} {question_type} questions for a {quiz_type} level quiz.
-                        Each question should be in the following format:
-                        
-                        Question: [Your question here]
-                        A: [Option A]
-                        B: [Option B]
-                        C: [Option C]
-                        D: [Option D]
-                        Answer: [Correct option letter]
-                        Explanation: [Brief explanation of the answer]
-                        
-                        """
-                        
-                        if quiz.description:
-                            base_prompt += f"Topic: {quiz.description}\n"
-                        
-                        # Generate questions using OpenAI
-                        response = client.chat.completions.create(
-                            model="gpt-4",
-                            messages=[
-                                {"role": "system", "content": "You are a professional quiz question generator. Generate clear, well-structured questions with exactly 4 options and a clear explanation."},
-                                {"role": "user", "content": base_prompt}
-                            ],
-                            temperature=0.7,
-                            max_tokens=2000
+
+                # ✅ Generate URL and save in model
+                domain = get_current_site(request).domain
+                print("domain:",domain)
+                full_url = f"http://{domain}/quiz/{quiz.quiz_id}/join/"
+                # test_path = reverse('quiz-join', kwargs={'quiz_id': quiz.quiz_id})
+                # full_url = f"http://{domain}{test_path}"
+                quiz.url_link = full_url
+
+                # ✅ Fetch department students
+                department = quiz.department_id
+                students = Student.objects.filter(department_id=department)
+
+                # Email content
+                subject = f"Quiz Assigned: {quiz.title}"
+                from_email = settings.DEFAULT_FROM_EMAIL
+
+                for student in students:
+                    if student.email:
+                        message = f"""
+Hello {student.name},
+
+A new quiz titled "{quiz.title}" has been assigned to you.
+
+Date Assigned: {quiz.published_at.strftime('%Y-%m-%d %I:%M %p')}
+
+👉 Click the link below to join your quiz:
+{quiz.url_link}
+
+Regards,
+Your Institute Team
+""".strip()
+                        send_mail(
+                            subject,
+                            message,
+                            from_email,
+                            [student.email],
+                            fail_silently=False
                         )
-                        
-                        # Process the generated questions
-                        generated_text = response.choices[0].message.content
-                        
-                        # Parse questions
-                        questions = []
-                        current_question = {}
-                        
-                        for line in generated_text.split('\n'):
-                            line = line.strip()
-                            if not line:
-                                if current_question and 'text' in current_question:
-                                    questions.append(current_question)
-                                    current_question = {}
-                                continue
-                            
-                            if line.startswith('Question:'):
-                                if current_question and 'text' in current_question:
-                                    questions.append(current_question)
-                                current_question = {
-                                    'text': line.replace('Question:', '').strip(),
-                                    'options': {},
-                                    'type': question_type
-                                }
-                            elif line.startswith(('A:', 'B:', 'C:', 'D:')):
-                                option = line[0]
-                                current_question['options'][option] = line[2:].strip()
-                            elif line.startswith('Answer:'):
-                                current_question['correct_answer'] = line.replace('Answer:', '').strip()
-                            elif line.startswith('Explanation:'):
-                                current_question['explanation'] = line.replace('Explanation:', '').strip()
-                        
-                        if current_question and 'text' in current_question:
-                            questions.append(current_question)
-                        
-                        # Validate questions
-                        valid_questions = []
-                        for question in questions:
-                            if all(key in question for key in ['text', 'options', 'correct_answer', 'explanation']):
-                                valid_questions.append(question)
-                        
-                        if not valid_questions:
-                            raise Exception("No valid questions were generated")
-                        
-                        # Store questions in the Question model
-                        stored_questions = []
-                        for question_data in valid_questions:
-                            # Create the question text with all details
-                            question_text = f"Question: {question_data['text']}\n"
-                            question_text += f"Options:\n"
-                            for option, text in question_data['options'].items():
-                                question_text += f"{option}: {text}\n"
-                            question_text += f"Correct Answer: {question_data['correct_answer']}\n"
-                            question_text += f"Explanation: {question_data['explanation']}"
-                            
-                            # Create and save the question
-                            question = Question.objects.create(
-                                quiz=quiz,
-                                question=question_text,
-                                created_by=request.user.email,
-                                last_modified_by=request.user.email
-                            )
-                            stored_questions.append({
-                                'question_id': question.question_id,
-                                'question': question.question
-                            })
-                            
-                    except Exception as e:
-                        # If question generation fails, unpublish the quiz
-                        quiz.is_published = False
-                        quiz.published_at = None
-                        quiz.save()
-                        return Response({
-                            'status': 'error',
-                            'message': f'Failed to generate questions: {str(e)}'
-                        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             else:
-                # Clear published date if unpublishing
+                # Unpublishing: clear fields
                 quiz.published_at = None
-            
+                quiz.url_link = None
+
             # Ensure quiz_date is timezone-aware
             if quiz.quiz_date and timezone.is_naive(quiz.quiz_date):
                 quiz.quiz_date = timezone.make_aware(quiz.quiz_date)
-            
+
             quiz.save()
-            
-            # Get all questions for the quiz
-            questions = quiz.quiz_questions.all().values('question_id', 'question')
-            
+
             return Response({
                 'status': 'success',
                 'quiz_id': quiz.quiz_id,
                 'is_published': quiz.is_published,
                 'published_at': quiz.published_at,
-                'questions_count': quiz.quiz_questions.count(),
-                'questions': list(questions)  # Include the questions in the response
+                'quiz_url': quiz.share_url
             })
-            
+
         except Exception as e:
             return Response({
                 'status': 'error',

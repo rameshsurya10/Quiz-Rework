@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 import pandas as pd
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from .utils import send_student_verification_email
 
 User = get_user_model()
 
@@ -18,7 +19,7 @@ class StudentSerializer(serializers.ModelSerializer):
         model = Student
         fields = [
             'student_id', 'uuid', 'name', 'email', 'phone', 
-            'department_id', 'department_name', 'is_deleted',
+            'department_id', 'department_name', 'is_deleted','is_verified',
             'created_at', 'last_modified_at', 'created_by', 'last_modified_by'
         ]
         read_only_fields = ['student_id', 'uuid', 'created_at', 'last_modified_at']
@@ -94,6 +95,7 @@ class StudentBulkUploadSerializer(serializers.Serializer):
                     
                     Student.objects.create(**student_data)
                     success_count += 1
+                    send_student_verification_email(student)
                     
                 except Exception as e:
                     errors.append(f"Row {index + 2}: {str(e)}")

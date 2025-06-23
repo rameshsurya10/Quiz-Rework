@@ -14,6 +14,9 @@ from rest_framework.response import Response
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from .views import InitiateLoginView, VerifyOTPView
+from .serializers import VerifyOTPSerializer
+
 
 app_name = 'accounts'
 
@@ -32,7 +35,9 @@ urlpatterns = [
     path('test/', test_api_view, name='test-api'),
     
     # Authentication endpoints
-    path('login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('login/', InitiateLoginView.as_view(), name='unified_login'),
+    path("verify_otp/", VerifyOTPView.as_view(), name="verify_otp"),
+    # path('login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('register/', UserRegistrationView.as_view(), name='register'),
     path('change-password/', ChangePasswordView.as_view(), name='change_password'),

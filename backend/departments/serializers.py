@@ -79,7 +79,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
         if not validated_data.get('last_modified_by'):
             validated_data['last_modified_by'] = user_email
         department = super().create(validated_data)
-        # Assign department to teacher if teacher_id is provided
+        # PUBLISH department to teacher if teacher_id is provided
         if teacher_id:
             try:
                 from teacher.models import Teacher

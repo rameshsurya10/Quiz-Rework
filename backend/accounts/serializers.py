@@ -3,6 +3,17 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import UserProfile
 from departments.models import Department
+from django.core.cache import cache
+from django.core.mail import send_mail
+import random
+from django.utils import timezone
+from students.models import Student
+from teacher.models import Teacher
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework import permissions
+from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
 
@@ -102,6 +113,164 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             role=validated_data.get('role', User.Role.STUDENT)
         )
         return user
+
+class UnifiedLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    role = serializers.ChoiceField(choices=[(r.name, r.name) for r in User.Role])
+    password = serializers.CharField(write_only=True, required=False)
+
+    OTP_CACHE_PREFIX = "login_otp_"
+    OTP_EXPIRY_SECONDS = 3000  # 50 minutes
+
+    def _generate_and_send_otp(self, email):
+        otp = f"{random.randint(0, 999999):06d}"
+        cache.set(f"{self.OTP_CACHE_PREFIX}{email}", otp, timeout=self.OTP_EXPIRY_SECONDS)
+
+        send_mail(
+            subject="Your Login OTP",
+            message=f"Your OTP is {otp}. It expires in 5 minutes.",
+            from_email=None,
+            recipient_list=[email],
+            fail_silently=True
+        )
+
+    def validate(self, attrs):
+        email = attrs.get("email")
+        role = attrs.get("role").upper()
+        password = attrs.get("password")
+
+        if role == "ADMIN":
+            try:
+                user = User.objects.get(email=email, role="ADMIN")
+            except User.DoesNotExist:
+                raise serializers.ValidationError({"email": ["Admin user not found"]})
+
+            if not password:
+                raise serializers.ValidationError({"password": ["Password is required"]})
+            if not user.check_password(password):
+                raise serializers.ValidationError({"password": ["Invalid password"]})
+
+            attrs["user"] = user
+            return attrs
+
+        # STUDENT / TEACHER
+        if role == "STUDENT":
+            if not Student.objects.filter(email=email).exists():
+                raise serializers.ValidationError({"email": ["No student found with this email"]})
+        elif role == "TEACHER":
+            if not Teacher.objects.filter(email=email).exists():
+                raise serializers.ValidationError({"email": ["No teacher found with this email"]})
+        
+        self._generate_and_send_otp(email)
+        otp = cache.get(f"{self.OTP_CACHE_PREFIX}{email}")
+        raise serializers.ValidationError({"otp": [f"OTP sent. OTP is {otp}. Please check your email."]})
+
+class VerifyOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    otp = serializers.CharField(required=True, max_length=6, min_length=6)
+    role = serializers.CharField(required=True)
+
+    OTP_CACHE_PREFIX = "login_otp_"
+
+    def validate(self, attrs):
+        email = attrs.get("email")
+        otp = attrs.get("otp")
+        role = attrs.get("role").upper()
+        cache_key = f"{self.OTP_CACHE_PREFIX}{email}"
+        cached_otp = cache.get(cache_key)
+
+        if not cached_otp:
+            raise serializers.ValidationError({"otp": ["OTP has expired or was not sent."]})
+        if otp != cached_otp:
+            raise serializers.ValidationError({"otp": ["Invalid OTP."]})
+
+        # Check the respective table for email
+        if role == "STUDENT":
+            if not Student.objects.filter(email=email).exists():
+                raise serializers.ValidationError({"email": ["No student found with this email."]})
+        elif role == "TEACHER":
+            if not Teacher.objects.filter(email=email).exists():
+                raise serializers.ValidationError({"email": ["No teacher found with this email."]})
+        else:
+            raise serializers.ValidationError({"role": ["Invalid role provided."]})
+
+        # Check User table (for token) — if not exist, create it
+        user, created = User.objects.get_or_create(email=email, defaults={"role": role})
+
+        cache.delete(cache_key)
+        attrs["user"] = user
+        return attrs
+
+
+# class UnifiedLoginSerializer(serializers.Serializer):
+#     """Serializer handling unified login for Admin (password based) and Student/Teacher (OTP based)"""
+
+#     email = serializers.EmailField(required=True)
+#     role = serializers.ChoiceField(choices=[(r.name, r.name) for r in User.Role])
+#     # Password required only for admin
+#     password = serializers.CharField(write_only=True, required=False)
+#     # OTP supplied by student/teacher in second step
+#     otp = serializers.CharField(write_only=True, required=False, max_length=6, min_length=6)
+
+#     OTP_CACHE_PREFIX = "login_otp_"
+#     OTP_EXPIRY_SECONDS = 300  # 5 minutes
+
+#     def _generate_and_send_otp(self, email):
+#         """Generate a 6-digit OTP, cache it and send via email."""
+#         otp = f"{random.randint(0, 999999):06d}"
+#         cache_key = f"{self.OTP_CACHE_PREFIX}{email}"
+#         cache.set(cache_key, otp, timeout=self.OTP_EXPIRY_SECONDS)
+
+#         send_mail(
+#             subject="Your Login OTP",
+#             message=f"Your one-time password (OTP) is {otp}. It expires in {self.OTP_EXPIRY_SECONDS // 60} minutes.",
+#             from_email=None,  # Use DEFAULT_FROM_EMAIL
+#             recipient_list=[email],
+#             fail_silently=True,  # Don't crash if email backend not configured
+#         )
+
+#     def validate(self, attrs):
+#         email = attrs.get("email")
+#         role = attrs.get("role").upper()
+#         attrs["role"] = role
+#         password = attrs.get("password")
+#         otp = attrs.get("otp")
+
+#         # try:
+#         #     user = User.objects.get(email=email)
+#         # except User.DoesNotExist:
+#         #     raise serializers.ValidationError({"email": ["User with provided email not found"]})
+
+#         # Extra role-specific check:
+#         if role == "STUDENT":
+#             if not Student.objects.filter(email=email).exists():
+#                 raise serializers.ValidationError({"email": ["No student found with this email"]})
+#         elif role == "TEACHER":
+#             if not Teacher.objects.filter(email=email).exists():
+#                 raise serializers.ValidationError({"email": ["No teacher found with this email"]})
+#         elif role == "ADMIN":
+#             user = User.objects.get(email=email)
+#             if not password:
+#                 raise serializers.ValidationError({"password": ["Password is required for admin login"]})
+#             if not user.check_password(password):
+#                 raise serializers.ValidationError({"password": ["Invalid password"]})
+#             attrs["user"] = user
+#             return attrs
+
+#         # OTP path (for student/teacher)
+#         cache_key = f"{self.OTP_CACHE_PREFIX}{email}"
+#         cached_otp = cache.get(cache_key)
+
+#         if not otp or cached_otp is None:
+#             self._generate_and_send_otp(email)
+#             raise serializers.ValidationError({"otp": ["OTP sent. Please check your email."]})
+
+#         if otp != cached_otp:
+#             raise serializers.ValidationError({"otp": ["Invalid OTP"]})
+
+#         cache.delete(cache_key)
+#         attrs["user"] = user
+#         return attrs
 
 
 class PasswordChangeSerializer(serializers.Serializer):
