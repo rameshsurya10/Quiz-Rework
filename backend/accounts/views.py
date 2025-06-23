@@ -14,8 +14,23 @@ from .serializers import (
     VerifyOTPSerializer
 )
 from .permissions import IsOwnerOrAdminOrReadOnly
+from students.models import Student
+from teacher.models import Teacher
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.core.cache import cache
+from django.core.mail import send_mail
+import random
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework import permissions
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.conf import settings
+from .serializers import VerifyOTPSerializer
 
+def generate_otp():
+    return random.randint(100000, 999999)
 
 User = get_user_model()
 
@@ -202,22 +217,39 @@ class InitiateLoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        serializer = UnifiedLoginSerializer(data=request.data)
-        try:
-            serializer.is_valid(raise_exception=True)
-        except serializers.ValidationError as e:
-            if 'otp' in e.detail:
-                return Response({"message": e.detail['otp'][0]}, status=status.HTTP_200_OK)
-            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        email = request.data.get("email")
+        role = request.data.get("role", "").lower().strip()
 
-        user = serializer.validated_data["user"]
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-            "user": UserSerializer(user, context={"request": request}).data
-        }, status=status.HTTP_200_OK)
+        if not email or not role:
+            return Response({"message": "Email and role are required."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Validate role & get user name from student/teacher
+        if role == "student":
+            student = Student.objects.filter(email=email, is_deleted=False).first()
+            if not student:
+                return Response({"message": "You are not entered in the student table."}, status=status.HTTP_404_NOT_FOUND)
+            name = student.name
+
+        elif role == "teacher":
+            teacher = Teacher.objects.filter(email=email, is_deleted=False).first()
+            if not teacher:
+                return Response({"message": "You are not entered in the teacher table."}, status=status.HTTP_404_NOT_FOUND)
+            name = teacher.name
+
+        else:
+            return Response({"message": "Invalid role."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # ✅ Generate and cache OTP
+        otp = generate_otp()
+        cache_key = f"login_otp_{email}"
+        cache.set(cache_key, otp, timeout=300)  # 5 minutes
+
+        # ✅ Send email
+        subject = "Your OTP for Login"
+        message = f"Hello {name},\n\nYour OTP for login is: {otp}\n\nThis OTP is valid for 5 minutes."
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+
+        return Response({"message": "OTP has been sent to your email.", "otp": otp}, status=status.HTTP_200_OK)
 
 class VerifyOTPView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -226,11 +258,24 @@ class VerifyOTPView(APIView):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = serializer.validated_data["user"]
-        refresh = RefreshToken.for_user(user)
+        user = serializer.validated_data["user"]  # ✅ now guaranteed to exist
+        # refresh = RefreshToken.for_user(user)
+        role = request.data.get("role", "").lower().strip()
+
+        if role == "student":
+            user_id = user.student_id
+        elif role == "teacher":
+            user_id = user.teacher_id
+        else:
+            user_id = None
 
         return Response({
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-            "user": UserSerializer(user, context={"request": request}).data
+            # "refresh": str(refresh),
+            # "access": str(refresh.access_token),
+            "user": {
+                "id": user_id,
+                "name": user.name,
+                "email": user.email,
+                "type": role
+            }
         }, status=status.HTTP_200_OK)

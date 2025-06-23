@@ -122,17 +122,12 @@ class UnifiedLoginSerializer(serializers.Serializer):
     OTP_CACHE_PREFIX = "login_otp_"
     OTP_EXPIRY_SECONDS = 3000  # 50 minutes
 
-    def _generate_and_send_otp(self, email):
-        otp = f"{random.randint(0, 999999):06d}"
-        cache.set(f"{self.OTP_CACHE_PREFIX}{email}", otp, timeout=self.OTP_EXPIRY_SECONDS)
-
-        send_mail(
-            subject="Your Login OTP",
-            message=f"Your OTP is {otp}. It expires in 5 minutes.",
-            from_email=None,
-            recipient_list=[email],
-            fail_silently=True
-        )
+    def generate_and_store_otp(email):
+        otp = f"{random.randint(100000, 999999)}"
+        cache_key = f"login_otp_{email}"
+        cache.set(cache_key, otp, timeout=300)  # 5 minutes
+        # send otp via email
+        return otp
 
     def validate(self, attrs):
         email = attrs.get("email")
@@ -166,44 +161,49 @@ class UnifiedLoginSerializer(serializers.Serializer):
         raise serializers.ValidationError({"otp": [f"OTP sent. OTP is {otp}. Please check your email."]})
 
 class VerifyOTPSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)
-    otp = serializers.CharField(required=True, max_length=6, min_length=6)
-    role = serializers.CharField(required=True)
+    email = serializers.EmailField()
+    role = serializers.CharField()
+    otp = serializers.CharField()
 
     OTP_CACHE_PREFIX = "login_otp_"
 
     def validate(self, attrs):
-        email = attrs.get("email")
-        otp = attrs.get("otp")
-        role = attrs.get("role").upper()
+        email = attrs["email"]
+        role = attrs["role"].lower().strip()
+        otp = attrs["otp"]
+
+        # ✅ Check if user exists in student/teacher (but don't create auth user)
+        if role == "student":
+            student = Student.objects.filter(email=email, is_deleted=False).first()
+            if not student:
+                raise serializers.ValidationError({"email": ["No student found with this email."]})
+            user = student
+
+        elif role == "teacher":
+            teacher = Teacher.objects.filter(email=email, is_deleted=False).first()
+            if not teacher:
+                raise serializers.ValidationError({"email": ["No teacher found with this email."]})
+            user = teacher
+
+        else:
+            raise serializers.ValidationError({"role": ["Invalid role. Only 'student' or 'teacher' allowed."]})
+
+        # ✅ OTP check
         cache_key = f"{self.OTP_CACHE_PREFIX}{email}"
         cached_otp = cache.get(cache_key)
 
         if not cached_otp:
-            raise serializers.ValidationError({"otp": ["OTP has expired or was not sent."]})
-        if otp != cached_otp:
+            raise serializers.ValidationError({"otp": ["OTP has expired. Please request a new one."]})
+
+        if str(cached_otp) != str(otp):
             raise serializers.ValidationError({"otp": ["Invalid OTP."]})
 
-        # Check the respective table for email
-        if role == "STUDENT":
-            if not Student.objects.filter(email=email).exists():
-                raise serializers.ValidationError({"email": ["No student found with this email."]})
-        elif role == "TEACHER":
-            if not Teacher.objects.filter(email=email).exists():
-                raise serializers.ValidationError({"email": ["No teacher found with this email."]})
-        else:
-            raise serializers.ValidationError({"role": ["Invalid role provided."]})
-
-        # Check User table (for token) — if not exist, create it
-        user, created = User.objects.get_or_create(email=email, defaults={"role": role})
-
+        # ✅ OTP is valid – delete from cache
         cache.delete(cache_key)
-        attrs["user"] = user
+
+        attrs["user"] = user  # Can be student or teacher object
         return attrs
 
-
-# class UnifiedLoginSerializer(serializers.Serializer):
-#     """Serializer handling unified login for Admin (password based) and Student/Teacher (OTP based)"""
 
 #     email = serializers.EmailField(required=True)
 #     role = serializers.ChoiceField(choices=[(r.name, r.name) for r in User.Role])
