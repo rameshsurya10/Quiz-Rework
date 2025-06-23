@@ -272,6 +272,8 @@ if SUPABASE_URL and SUPABASE_KEY:
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_DOCUMENT_TYPES = ['application/pdf']
 SITE_DOMAIN = "http://localhost:8000" 
+OTP_CACHE_PREFIX = "login_otp_"
+
 
 # Import local settings
 try:
