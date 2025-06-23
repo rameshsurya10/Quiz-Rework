@@ -1,7 +1,8 @@
-# dashboard/urls.py
 from django.urls import path
-from . import views
+from .views import dashboard_data
+
+app_name = 'dashboard'
 
 urlpatterns = [
-    path('', views.dashboard_data, name='dashboard_data'),
+    path('', dashboard_data, name='dashboard_data'),  # responds to /api/dashboard/
 ]
