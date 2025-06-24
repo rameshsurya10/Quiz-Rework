@@ -285,14 +285,10 @@ class StudentVerificationView(View):
            # ✅ 2. Get department and teacher
             department = Department.objects.filter(department_id=student.department_id, is_deleted=False).first()
             department_name = department.name if department else "Unknown"
-            print("Department Name:", department_name)
-
             teacher = Teacher.objects.filter(department_ids__contains=[student.department_id], is_deleted=False).first()
-            print("Teacher:", teacher)
             
             if teacher:
                 teacher_email = teacher.email
-                print("Teacher Email:", teacher_email)
                 subject = f"Student {student.name} Verified"
                 plain_message = (
                     f"Dear {teacher.name if teacher.name else 'Teacher'},\n\n"
