@@ -260,9 +260,6 @@ class QuizFileUploadView(APIView):
                 questions.append(current)
 
             if not questions:
-                # Fallback - create simple questions if parsing failed
-                print("Warning: Failed to parse questions from AI response. Using fallback questions.")
-                
                 # Create simple default questions based on file content
                 default_questions = []
                 
@@ -495,50 +492,54 @@ class QuizFileUploadView(APIView):
 
 class QuizListCreateView(generics.ListCreateAPIView):
     """API endpoint for listing and creating quizzes"""
-    permission_classes = [permissions.IsAuthenticated, IsTeacherOrAdmin]
+    # permission_classes = [permissions.IsAuthenticated, IsTeacherOrAdmin]
+    permission_classes = [permissions.IsAuthenticated]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
+    pagination_class = None 
 
     # Maximum number of questions allowed
     MAX_QUESTIONS = 35
 
     def get_queryset(self):
+        return Quiz.objects.filter(is_deleted=False)
+    
+    def list(self, request, *args, **kwargs):
         user = self.request.user
-        print("user:",user)
-        queryset = Quiz.objects.filter(is_deleted=False)
         now = timezone.now()
+        base_queryset = Quiz.objects.filter(is_deleted=False)
+        role = getattr(user, 'role', '').upper()
 
-        if hasattr(user, 'role') and user.role == 'ADMIN':
-            # Admin sees all quizzes
-            print("Admin")
-            return queryset.order_by('-created_at')
+        if role == 'ADMIN':
+            quiz_queryset = base_queryset
 
-        elif user.role == 'TEACHER':
-            print("Teacher")
+        elif role == 'TEACHER':
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
             if not teacher:
-                return Quiz.objects.none()
-            
+                return Response({"message": "Teacher record not found"}, status=404)
             department_ids = teacher.department_ids or []
-            return queryset.filter(
+            quiz_queryset = base_queryset.filter(
                 Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
-            ).order_by('-created_at')
+            )
 
-        elif user.role == 'student':
-            print("Student")
+        elif role == 'STUDENT':
             student = Student.objects.filter(email=user.email, is_deleted=False).first()
             if not student:
-                return Quiz.objects.none()
-
-            dept_id = student.department_id
-            quiz_queryset = queryset.filter(department_id=dept_id)
-
-            # Separate filtering logic if needed on the frontend
-            # Example: return all and let frontend sort by date
-            return quiz_queryset.order_by('start_time')
+                return Response({"message": "Student record not found"}, status=404)
+            quiz_queryset = base_queryset.filter(department_id=student.department_id,is_published=True)
 
         else:
-            # Unauthorized or unknown role
-            return Quiz.objects.none()
+            return Response({"message": "Unauthorized role"}, status=403)
+
+        # ✅ Replace start_time / end_time with quiz_date
+        current_quizzes = quiz_queryset.filter(quiz_date__date=now.date()).order_by('quiz_date')
+        upcoming_quizzes = quiz_queryset.filter(quiz_date__gt=now).order_by('quiz_date')
+        past_quizzes = quiz_queryset.filter(quiz_date__lt=now.date()).order_by('-quiz_date')
+
+        return Response({
+            "current_quizzes": QuizSerializer(current_quizzes, many=True).data,
+            "upcoming_quizzes": QuizSerializer(upcoming_quizzes, many=True).data,
+            "past_quizzes": QuizSerializer(past_quizzes, many=True).data,
+        })
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -606,37 +607,45 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     
     def get_queryset(self):
+        return Quiz.objects.filter(is_deleted=False)
+    
+    def list(self, request, *args, **kwargs):
         user = self.request.user
-        print("user:",user)
-        queryset = Quiz.objects.filter(is_deleted=False)
+        now = timezone.now()
+        base_queryset = Quiz.objects.filter(is_deleted=False)
+        role = getattr(user, 'role', '').upper()
 
-        if hasattr(user, 'role') and user.role == 'ADMIN':
-            print("Admin")
-            # Admins can access all quizzes
-            return queryset
+        if role == 'ADMIN':
+            quiz_queryset = base_queryset
 
-        elif user.role == 'TEACHER':
-            print("Teacher")
-            # Teachers can access their own quizzes or ones in their departments
+        elif role == 'TEACHER':
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
             if not teacher:
-                return Quiz.objects.none()
-
+                return Response({"message": "Teacher record not found"}, status=404)
             department_ids = teacher.department_ids or []
-            return queryset.filter(
+            quiz_queryset = base_queryset.filter(
                 Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
             )
 
-        elif user.role == 'student':
-            print("Student")
-            # Students can only access quizzes from their department
+        elif role == 'STUDENT':
             student = Student.objects.filter(email=user.email, is_deleted=False).first()
             if not student:
-                return Quiz.objects.none()
+                return Response({"message": "Student record not found"}, status=404)
+            quiz_queryset = base_queryset.filter(department_id=student.department_id,is_published=True)
 
-            return queryset.filter(department_id=student.department_id)
+        else:
+            return Response({"message": "Unauthorized role"}, status=403)
 
-        return Quiz.objects.none()
+        # ✅ Replace start_time / end_time with quiz_date
+        current_quizzes = quiz_queryset.filter(quiz_date__date=now.date()).order_by('quiz_date')
+        upcoming_quizzes = quiz_queryset.filter(quiz_date__gt=now).order_by('quiz_date')
+        past_quizzes = quiz_queryset.filter(quiz_date__lt=now.date()).order_by('-quiz_date')
+
+        return Response({
+            "current_quizzes": QuizSerializer(current_quizzes, many=True).data,
+            "upcoming_quizzes": QuizSerializer(upcoming_quizzes, many=True).data,
+            "past_quizzes": QuizSerializer(past_quizzes, many=True).data,
+        })
     
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
@@ -756,11 +765,9 @@ class QuizQuestionGenerateView(APIView):
 
         # Set OpenAI API key (for openai>=1.0.0, pass to client)
         api_key = os.environ.get('OPENAI_API_KEY')
-        print("API Key: ", api_key)
         if not api_key:
             return Response({"error": "OpenAI API key not set in environment."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         client = openai.OpenAI(api_key=api_key)
-        print("Client: ", client)
 
         quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
         if not quiz.uploadedfiles or len(quiz.uploadedfiles) == 0:
@@ -768,31 +775,24 @@ class QuizQuestionGenerateView(APIView):
 
         # For simplicity, use the first uploaded file
         file_info = quiz.uploadedfiles[0]
-        print("File Info: ", file_info)
         file_path = file_info.get('path')
-        print("File Path: ", file_path)
         if not file_path:
             return Response({"error": "File path not found in uploaded file info."}, status=status.HTTP_404_NOT_FOUND)
 
         # Try to read the file content (always look in backend/upload/)
         abs_file_path = os.path.join(settings.BASE_DIR, 'backend', file_path)
-        print("Absolute File Path: ", abs_file_path)
         if not os.path.exists(abs_file_path):
             return Response({"error": f"File does not exist on server: {abs_file_path}"}, status=status.HTTP_404_NOT_FOUND)
         import os
         file_ext = os.path.splitext(abs_file_path)[1].lower()
-        print("File Extension: ", file_ext)
         try:
             if file_ext == '.pdf':
                 from PyPDF2 import PdfReader
                 pdf = PdfReader(abs_file_path)
-                print("PDF: ", pdf)
                 file_content = "\n".join(page.extract_text() or '' for page in pdf.pages)
-                print("if File Content: ", file_content)
             elif file_ext == '.txt':
                 with open(abs_file_path, 'r', encoding='utf-8') as f:
                     file_content = f.read()
-                print("else File Content: ", file_content)
             else:
                 return Response({"error": f"Unsupported file type: {file_ext}"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -801,18 +801,13 @@ class QuizQuestionGenerateView(APIView):
         # Use OpenAI to generate questions
         try:
             prompt = f"Generate 5 quiz questions based on the following content:\n{file_content}"
-            print("Prompt: ", prompt)
             client = openai.OpenAI()
-            print("Client: ", client)
-            print("success")
             response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[{"role": "system", "content": "You are a quiz generator."},
                           {"role": "user", "content": prompt}]
             )
-            print("Response: ", response)
             questions = response.choices[0].message.content
-            print("Questions: ", questions)
         except Exception as e:
             return Response({"error": f"OpenAI API error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -842,7 +837,6 @@ class QuizPublishView(APIView):
 
                 # ✅ Generate URL and save in model
                 domain = get_current_site(request).domain
-                print("domain:",domain)
                 full_url = f"http://{domain}/quiz/{quiz.quiz_id}/join/"
                 # test_path = reverse('quiz-join', kwargs={'quiz_id': quiz.quiz_id})
                 # full_url = f"http://{domain}{test_path}"
@@ -1009,9 +1003,6 @@ class QuizQuestionGenerateFromPromptView(APIView):
                 "explanation": "Explanation of why this is the correct answer"
             }}
             """
-            print("System Prompt: ", system_prompt)
-            print("testinggg")
-            print("client_one: ", client)
             # Generate questions using OpenAI
             response = client.chat.completions.create(
                 model="gpt-4-turbo-preview",
@@ -1025,7 +1016,6 @@ class QuizQuestionGenerateFromPromptView(APIView):
             
             # Parse the generated questions
             generated_questions = json.loads(response.choices[0].message.content)
-            print("Generated Questions: ", generated_questions)
 
             return Response({
                 "message": "Questions generated successfully",
