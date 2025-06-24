@@ -167,18 +167,18 @@ class UnifiedLoginSerializer(serializers.Serializer):
             student = Student.objects.filter(email=email, is_deleted=False).first()
             if not student:
                 raise serializers.ValidationError({"email": ["No student found with this email."]})
-            self._generate_and_send_otp(email, student.name)
+            otp = self._generate_and_send_otp(email, role)
+            attrs["otp"] = otp
+            return attrs
         elif role == "teacher":
             teacher = Teacher.objects.filter(email=email, is_deleted=False).first()
             if not teacher:
                 raise serializers.ValidationError({"email": ["No teacher found with this email."]})
-            self._generate_and_send_otp(email, teacher.name)
-        else:
-            raise serializers.ValidationError({"role": ["Invalid role."]})
-        otp = self._generate_and_send_otp(email, role)
-        raise serializers.ValidationError({
-            "otp": [f"OTP sent. Please check your email.", f"otp: {otp}"]
-        })
+            otp = self._generate_and_send_otp(email, role)
+            attrs["otp"] = otp
+            return attrs
+        raise serializers.ValidationError({"role": ["Invalid role."]})
+        
 
 class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
