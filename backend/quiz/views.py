@@ -25,6 +25,10 @@ from django.urls import reverse
 from teacher.models import Teacher
 from students.models import Student
 from django.db.models import Q
+from documents.utils import extract_text_from_file
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class QuizFileUploadView(APIView):
@@ -44,16 +48,6 @@ class QuizFileUploadView(APIView):
         self.check_object_permissions(self.request, quiz)
         return quiz, questions
 
-    def extract_text_from_pdf(self, file_path):
-        try:
-            doc = fitz.open(file_path)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            return text.strip()
-        except Exception as e:
-            print(f"PDF extraction failed: {e}")
-            return ""
 
     def post(self, request, quiz_id, format=None):
         quiz, _ = self.get_quiz(quiz_id)
@@ -164,7 +158,9 @@ class QuizFileUploadView(APIView):
             question_type = quiz.question_type.lower()
             num_questions = quiz.no_of_questions
             quiz_type = quiz.quiz_type.lower()
-
+            
+            # For mixed types, we'll cycle through these
+            all_types = ['mcq', 'fill', 'truefalse', 'oneline']
             if question_type == "mixed":
                 mixed_note = """
                 Include a mix of these question types:
@@ -384,6 +380,30 @@ class QuizFileUploadView(APIView):
                         q['type'] = 'truefalse'
                     elif q_type in ['one_line', 'one-line', 'short_answer']:
                         q['type'] = 'oneline'
+
+            # Ensure you get only up to num_questions
+            questions = questions[:num_questions]
+
+            # Fallback logic to reach required number
+            if len(questions) < num_questions:
+                needed = num_questions - len(questions)
+                fallback_questions = []
+
+                content_lines = file_text.split('\n')
+                content_chunks = [line for line in content_lines if len(line.strip()) > 30]
+
+                for i in range(min(needed, len(content_chunks))):
+                    line = content_chunks[i]
+                    fallback_questions.append({
+                        "question": f"What is the meaning of: {line[:40]}...",
+                        "type": "oneline",
+                        "correct_answer": line[:30] + "...",
+                        "explanation": "Based on the line from the document.",
+                        "options": {}
+                    })
+
+                questions += fallback_questions
+
 
             # Save as grouped question with JSON body
             Question.objects.create(

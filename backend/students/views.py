@@ -227,8 +227,8 @@ class StudentDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
     lookup_field = 'student_id'
     
-    # def get_queryset(self):
-    #     return Student.objects.filter(is_deleted=False)
+    def get_queryset(self):
+        return Student.objects.filter(is_deleted=False)
     
     def perform_update(self, serializer):
         user_identifier = getattr(self.request.user, 'username', 
