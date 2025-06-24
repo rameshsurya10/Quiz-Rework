@@ -220,16 +220,24 @@ class InitiateLoginView(APIView):
         serializer = UnifiedLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Only reached for admin
+        data = serializer.validated_data
+
+        if "token_response" in data:  # Admin login
+            user = data["user"]
+            return Response({
+                "refresh": data["token_response"]["refresh"],
+                "access": data["token_response"]["access"],
+                "user": {
+                    "user_id": user.id,
+                    "email": user.email,
+                    "role" : user.role
+                }
+            }, status=status.HTTP_200_OK)
+
+        # Student or Teacher - OTP sent
         return Response({
-            "message": "Admin login successful.",
-            "user": {
-                "id": serializer.validated_data["user"].id,
-                "email": serializer.validated_data["user"].email,
-                "role": "admin"
-            },
-            "refresh": serializer.validated_data["token_response"]["refresh"],
-            "access": serializer.validated_data["token_response"]["access"],
+            "message": "OTP sent. Please check your email.",
+            "otp": data.get("otp")
         }, status=status.HTTP_200_OK)
 
 class VerifyOTPView(APIView):
