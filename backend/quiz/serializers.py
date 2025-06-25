@@ -80,12 +80,68 @@ class CustomDateTimeField(serializers.DateTimeField):
         # If all parsing attempts fail, raise an error
         raise serializers.ValidationError("Invalid date format. Please use YYYY-MM-DDTHH:MM or YYYY-MM-DDTHH:MMAM/PM format.")
 
+class SlimQuestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Question
+        fields = ['question_id', 'question', 'options', 'type']
+
+    def to_representation(self, instance):
+        try:
+            # If question is stored as JSON string, parse it
+            parsed = json.loads(instance.question)
+            if not isinstance(parsed, list):
+                parsed = [parsed]
+        except Exception:
+            # fallback to raw question text
+            parsed = [{
+                "question": instance.question,
+                "options": instance.options or {}
+            }]
+
+        result = []
+        for q in parsed:
+            result.append({
+                "question_id": instance.question_id,
+                "question": q.get("question", ""),
+                "options": q.get("options", {}),
+                "question_type": q.get("type", ""),
+            })
+
+        return result 
 
 class QuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
-        fields = ['question_id', 'question', 'question_type', 'options', 'correct_answer', 'explanation']
+        fields = [
+            'question_id',
+            'question',  # Still named "question" for compatibility
+            'question_type',
+            'options',
+            'correct_answer',
+            'explanation'
+        ]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        try:
+            parsed_questions = json.loads(instance.question)
+
+            # Ensure it is always a list
+            if not isinstance(parsed_questions, list):
+                parsed_questions = [parsed_questions]
+
+            # Add shared metadata to each parsed question
+            for item in parsed_questions:
+                item['question_type'] = data.get('question_type')
+                item['explanation'] = item.get('explanation') or data.get('explanation')
+
+            return parsed_questions  # 👈 Return the inner list (not dict)
+        except Exception:
+            return [{
+                "question": instance.question,
+                "question_type": data.get('question_type'),
+                "explanation": data.get('explanation')
+            }]
 
 class QuizSerializer(serializers.ModelSerializer):
     department_id = serializers.PrimaryKeyRelatedField(
