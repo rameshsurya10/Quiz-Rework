@@ -4,7 +4,8 @@ import {
   Paper, Button, Chip, IconButton, TextField, InputAdornment,
   Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem,
   ListItemAvatar, ListItemText, Divider, Stack, useTheme, alpha,
-  CircularProgress, Tab, Tabs, Badge, Tooltip
+  CircularProgress, Tab, Tabs, Badge, Tooltip, MenuItem, Select,
+  FormControl, InputLabel, useMediaQuery, Fab, Zoom, DialogContentText
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -18,15 +19,26 @@ import {
   Add as AddIcon,
   Download as DownloadIcon,
   VerifiedUser as VerifiedIcon,
-  PendingActions as PendingIcon
+  PendingActions as PendingIcon,
+  Clear as ClearIcon,
+  Sort as SortIcon,
+  ViewModule as GridViewIcon,
+  ViewList as ListViewIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { studentApi, departmentApi } from '../../services/api';
+import StudentForm from './StudentForm';
 
 const TeacherStudentSection = () => {
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
+  const isSmallMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isExtraSmall = useMediaQuery(theme.breakpoints.down(400));
   
   const [students, setStudents] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -36,6 +48,16 @@ const TeacherStudentSection = () => {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+  const [sortBy, setSortBy] = useState('name'); // 'name', 'email', 'department', 'status'
+
+  // Add state for edit/delete functionality
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [deletingStudent, setDeletingStudent] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -84,7 +106,101 @@ const TeacherStudentSection = () => {
     setSelectedStudent(null);
   };
 
-  const filteredStudents = students.filter(student => {
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setSelectedDepartment('');
+    setSortBy('name');
+  };
+
+  // Add handler functions for edit/delete
+  const handleEditClick = (student) => {
+    setEditingStudent(student);
+    setEditDialogOpen(true);
+  };
+
+  const handleDeleteClick = (student) => {
+    setDeletingStudent(student);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleEditClose = () => {
+    setEditDialogOpen(false);
+    setEditingStudent(null);
+  };
+
+  const handleDeleteClose = () => {
+    setDeleteDialogOpen(false);
+    setDeletingStudent(null);
+  };
+
+  const handleEditSuccess = () => {
+    setEditDialogOpen(false);
+    setEditingStudent(null);
+    showSnackbar('Student updated successfully!', 'success');
+    loadData(); // Reload the data
+  };
+
+  const handleEditError = (message) => {
+    showSnackbar(message, 'error');
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingStudent) return;
+    
+    setIsSubmitting(true);
+    try {
+      await studentApi.delete(deletingStudent.student_id);
+      showSnackbar('Student deleted successfully!', 'success');
+      setDeleteDialogOpen(false);
+      setDeletingStudent(null);
+      loadData(); // Reload the data
+    } catch (error) {
+      console.error('Error deleting student:', error);
+      showSnackbar('Failed to delete student', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Add handlers for adding new students
+  const handleAddClick = () => {
+    setAddDialogOpen(true);
+  };
+
+  const handleAddClose = () => {
+    setAddDialogOpen(false);
+  };
+
+  const handleAddSuccess = () => {
+    setAddDialogOpen(false);
+    showSnackbar('Student added successfully!', 'success');
+    loadData(); // Reload the data
+  };
+
+  const handleAddError = (message) => {
+    showSnackbar(message, 'error');
+  };
+
+  const sortStudents = (studentsToSort) => {
+    return [...studentsToSort].sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return (a.name || '').localeCompare(b.name || '');
+        case 'email':
+          return (a.email || '').localeCompare(b.email || '');
+        case 'department':
+          const deptA = getDepartmentName(a.department_id);
+          const deptB = getDepartmentName(b.department_id);
+          return deptA.localeCompare(deptB);
+        case 'status':
+          return (b.is_verified ? 1 : 0) - (a.is_verified ? 1 : 0);
+        default:
+          return 0;
+      }
+    });
+  };
+
+  const filteredStudents = sortStudents(students.filter(student => {
     const matchesSearch = student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          student.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          student.roll_number?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -93,7 +209,7 @@ const TeacherStudentSection = () => {
                              student.department_id === parseInt(selectedDepartment);
     
     return matchesSearch && matchesDepartment;
-  });
+  }));
 
   const verifiedStudents = filteredStudents.filter(s => s.is_verified);
   const pendingStudents = filteredStudents.filter(s => !s.is_verified);
@@ -117,7 +233,7 @@ const TeacherStudentSection = () => {
   };
 
   const renderStudentCard = (student, index) => (
-    <Grid item xs={12} sm={6} md={4} key={student.student_id}>
+    <Grid item xs={12} sm={6} md={viewMode === 'grid' ? 4 : 12} lg={viewMode === 'grid' ? 3 : 12} key={student.student_id}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -127,7 +243,7 @@ const TeacherStudentSection = () => {
         <Card 
           sx={{
             height: '100%',
-            borderRadius: 3,
+            borderRadius: { xs: 2, sm: 3 },
             background: alpha(theme.palette.background.paper, 0.9),
             backdropFilter: 'blur(20px)',
             border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
@@ -141,271 +257,574 @@ const TeacherStudentSection = () => {
           }}
           onClick={() => handleStudentClick(student)}
         >
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Avatar
-                sx={{
-                  width: 56,
-                  height: 56,
-                  background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.main, 0.8)} 100%)`,
-                  mr: 2,
-                  fontSize: '1.5rem',
-                  fontWeight: 700
-                }}
-              >
-                {getStudentInitials(student.name)}
-              </Avatar>
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-                  {student.name}
-                </Typography>
+          <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+            {viewMode === 'grid' ? (
+              <>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Avatar
+                    sx={{
+                      width: { xs: 48, sm: 56 },
+                      height: { xs: 48, sm: 56 },
+                      background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.main, 0.8)} 100%)`,
+                      mr: 2,
+                      fontSize: { xs: '1.2rem', sm: '1.5rem' },
+                      fontWeight: 700
+                    }}
+                  >
+                    {getStudentInitials(student.name)}
+                  </Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography 
+                      variant="h6" 
+                      sx={{ 
+                        fontWeight: 600, 
+                        mb: 0.5,
+                        fontSize: { xs: '1rem', sm: '1.25rem' },
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {student.name}
+                    </Typography>
+                    <Chip
+                      icon={getStatusIcon(student.is_verified)}
+                      label={student.is_verified ? 'Verified' : 'Pending'}
+                      color={getStatusColor(student.is_verified)}
+                      size="small"
+                      sx={{ 
+                        fontWeight: 600,
+                        fontSize: { xs: '0.7rem', sm: '0.75rem' }
+                      }}
+                    />
+                  </Box>
+                </Box>
+
+                <Stack spacing={1}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <SchoolIcon sx={{ fontSize: { xs: 14, sm: 16 }, color: 'text.secondary' }} />
+                    <Typography 
+                      variant="body2" 
+                      color="text.secondary"
+                      sx={{ 
+                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {getDepartmentName(student.department_id)}
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <EmailIcon sx={{ fontSize: { xs: 14, sm: 16 }, color: 'text.secondary' }} />
+                    <Typography 
+                      variant="body2" 
+                      color="text.secondary"
+                      sx={{ 
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                      }}
+                    >
+                      {student.email}
+                    </Typography>
+                  </Box>
+
+                  {student.roll_number && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <PersonIcon sx={{ fontSize: { xs: 14, sm: 16 }, color: 'text.secondary' }} />
+                      <Typography 
+                        variant="body2" 
+                        color="text.secondary"
+                        sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                      >
+                        Roll: {student.roll_number}
+                      </Typography>
+                    </Box>
+                  )}
+                </Stack>
+
+                {/* Action Buttons */}
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  gap: 1, 
+                  mt: 2,
+                  pt: 2,
+                  borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+                }}>
+                  <Tooltip title="View Details">
+                    <IconButton 
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStudentClick(student);
+                      }}
+                      sx={{
+                        color: theme.palette.primary.main,
+                        '&:hover': {
+                          backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                        }
+                      }}
+                    >
+                      <VisibilityIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Edit Student">
+                    <IconButton 
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditClick(student);
+                      }}
+                      sx={{
+                        color: theme.palette.success.main,
+                        '&:hover': {
+                          backgroundColor: alpha(theme.palette.success.main, 0.1),
+                        }
+                      }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete Student">
+                    <IconButton 
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick(student);
+                      }}
+                      sx={{
+                        color: theme.palette.error.main,
+                        '&:hover': {
+                          backgroundColor: alpha(theme.palette.error.main, 0.1),
+                        }
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </>
+            ) : (
+              // List view layout
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 } }}>
+                <Avatar
+                  sx={{
+                    width: { xs: 40, sm: 48 },
+                    height: { xs: 40, sm: 48 },
+                    background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.main, 0.8)} 100%)`,
+                    fontSize: { xs: '1rem', sm: '1.2rem' },
+                    fontWeight: 700
+                  }}
+                >
+                  {getStudentInitials(student.name)}
+                </Avatar>
+                
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography 
+                    variant="h6" 
+                    sx={{ 
+                      fontWeight: 600, 
+                      mb: 0.5,
+                      fontSize: { xs: '0.9rem', sm: '1.1rem' },
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {student.name}
+                  </Typography>
+                  
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography 
+                      variant="body2" 
+                      color="text.secondary"
+                      sx={{ 
+                        fontSize: { xs: '0.7rem', sm: '0.8rem' },
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: { xs: 120, sm: 200 }
+                      }}
+                    >
+                      {student.email}
+                    </Typography>
+                    
+                    {!isSmallMobile && (
+                      <Typography 
+                        variant="body2" 
+                        color="text.secondary"
+                        sx={{ fontSize: '0.8rem' }}
+                      >
+                        • {getDepartmentName(student.department_id)}
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+                
                 <Chip
                   icon={getStatusIcon(student.is_verified)}
                   label={student.is_verified ? 'Verified' : 'Pending'}
                   color={getStatusColor(student.is_verified)}
                   size="small"
-                  sx={{ fontWeight: 600 }}
-                />
-              </Box>
-            </Box>
-
-            <Stack spacing={1}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <SchoolIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                <Typography variant="body2" color="text.secondary">
-                  {getDepartmentName(student.department_id)}
-                </Typography>
-              </Box>
-              
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <EmailIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                <Typography 
-                  variant="body2" 
-                  color="text.secondary"
                   sx={{ 
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
+                    fontWeight: 600,
+                    fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                    minWidth: { xs: 80, sm: 100 }
                   }}
-                >
-                  {student.email}
-                </Typography>
+                />
+
+                {/* Action Buttons for List View */}
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Tooltip title="View Details">
+                    <IconButton 
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStudentClick(student);
+                      }}
+                      sx={{
+                        color: theme.palette.primary.main,
+                        '&:hover': {
+                          backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                        }
+                      }}
+                    >
+                      <VisibilityIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Edit Student">
+                    <IconButton 
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditClick(student);
+                      }}
+                      sx={{
+                        color: theme.palette.success.main,
+                        '&:hover': {
+                          backgroundColor: alpha(theme.palette.success.main, 0.1),
+                        }
+                      }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete Student">
+                    <IconButton 
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick(student);
+                      }}
+                      sx={{
+                        color: theme.palette.error.main,
+                        '&:hover': {
+                          backgroundColor: alpha(theme.palette.error.main, 0.1),
+                        }
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
               </Box>
-
-              {student.roll_number && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <PersonIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary">
-                    Roll: {student.roll_number}
-                  </Typography>
-                </Box>
-              )}
-
-              {student.phone && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <PhoneIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary">
-                    {student.phone}
-                  </Typography>
-                </Box>
-              )}
-            </Stack>
-
-            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="caption" color="text.secondary">
-                Joined: {new Date(student.created_at || student.date_joined).toLocaleDateString()}
-              </Typography>
-              <IconButton size="small" sx={{ color: 'primary.main' }}>
-                <VisibilityIcon />
-              </IconButton>
-            </Box>
+            )}
           </CardContent>
         </Card>
       </motion.div>
     </Grid>
   );
 
+  const renderStudentList = (studentList, title, emptyMessage) => (
+    <Box sx={{ mb: 4 }}>
+      <Typography 
+        variant="h6" 
+        sx={{ 
+          mb: 2, 
+          fontWeight: 600,
+          fontSize: { xs: '1.1rem', sm: '1.25rem' }
+        }}
+      >
+        {title} ({studentList.length})
+      </Typography>
+      
+      {studentList.length > 0 ? (
+        <Grid container spacing={{ xs: 2, sm: 3 }}>
+          {studentList.map((student, index) => renderStudentCard(student, index))}
+        </Grid>
+      ) : (
+        <Paper 
+          sx={{ 
+            p: { xs: 3, sm: 4 }, 
+            textAlign: 'center',
+            background: alpha(theme.palette.background.paper, 0.6),
+            borderRadius: { xs: 2, sm: 3 }
+          }}
+        >
+          <PersonIcon sx={{ fontSize: { xs: 48, sm: 60 }, color: 'text.disabled', mb: 2 }} />
+          <Typography 
+            variant="h6" 
+            color="text.secondary" 
+            sx={{ 
+              mb: 1,
+              fontSize: { xs: '1rem', sm: '1.25rem' }
+            }}
+          >
+            {emptyMessage}
+          </Typography>
+          <Typography 
+            variant="body2" 
+            color="text.secondary"
+            sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+          >
+            {searchTerm || selectedDepartment ? 'Try adjusting your filters' : 'No students found in your assigned departments'}
+          </Typography>
+        </Paper>
+      )}
+    </Box>
+  );
+
   const getTabContent = () => {
     switch (activeTab) {
-      case 0: return filteredStudents;
-      case 1: return verifiedStudents;
-      case 2: return pendingStudents;
-      default: return filteredStudents;
+      case 0:
+        return renderStudentList(filteredStudents, 'All Students', 'No students found');
+      case 1:
+        return renderStudentList(verifiedStudents, 'Verified Students', 'No verified students found');
+      case 2:
+        return renderStudentList(pendingStudents, 'Pending Students', 'No pending students found');
+      default:
+        return renderStudentList(filteredStudents, 'All Students', 'No students found');
     }
   };
 
-  return (
-    <Container maxWidth="lg" sx={{ py: 3 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #4ecdc4, #44a08d)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}
-          >
-            Students Management
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 600
-              }}
-            >
-              Export
-            </Button>
-          </Box>
+  if (isLoading) {
+    return (
+      <Container maxWidth={false} sx={{ py: { xs: 2, sm: 3 } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+          <CircularProgress size={60} />
         </Box>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
-          View and manage student information and progress
-        </Typography>
+      </Container>
+    );
+  }
+
+  return (
+    <Container maxWidth={false} sx={{ py: { xs: 2, sm: 3 } }}>
+      {/* Header */}
+      <Box sx={{ mb: { xs: 3, sm: 4 } }}>
         <Typography 
-          variant="body2" 
+          variant={isSmallMobile ? "h5" : isMobile ? "h4" : "h3"} 
           sx={{ 
-            color: 'text.secondary',
-            fontStyle: 'italic',
-            background: alpha(theme.palette.info.main, 0.1),
-            p: 1,
-            borderRadius: 1,
-            border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`
+            fontWeight: 'bold', 
+            mb: 1,
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
           }}
         >
-          🔒 Showing only students from your assigned departments
+          Student Management
+        </Typography>
+        <Typography 
+          variant="body1" 
+          color="text.secondary"
+          sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+        >
+          Manage students in your assigned departments
         </Typography>
       </Box>
 
-      {/* Filters */}
-      <Paper sx={{ p: 3, mb: 3, borderRadius: 3 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={6}>
+      {/* Controls */}
+      <Paper 
+        sx={{ 
+          p: { xs: 2, sm: 3 }, 
+          mb: { xs: 3, sm: 4 },
+          background: alpha(theme.palette.background.paper, 0.9),
+          backdropFilter: 'blur(20px)',
+          borderRadius: { xs: 2, sm: 3 },
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+        }}
+      >
+        <Grid container spacing={{ xs: 2, sm: 3 }} alignItems="center">
+          {/* Search */}
+          <Grid item xs={12} sm={6} md={4}>
             <TextField
               fullWidth
-              placeholder="Search students..."
+              size={isSmallMobile ? "small" : "medium"}
+              placeholder="Search by name, email, or roll number..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon />
+                    <SearchIcon sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }} />
                   </InputAdornment>
                 ),
+                endAdornment: searchTerm && (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearchTerm('')}>
+                      <ClearIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+                sx: {
+                  fontSize: { xs: '0.875rem', sm: '1rem' }
+                }
               }}
-              sx={{ borderRadius: 2 }}
             />
           </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField
-              fullWidth
-              select
-              label="Filter by Department"
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              SelectProps={{ native: true }}
-              sx={{ borderRadius: 2 }}
-            >
-              <option value="">All Departments</option>
-              {departments.map((dept) => (
-                <option key={dept.department_id} value={dept.department_id}>
-                  {dept.name}
-                </option>
-              ))}
-            </TextField>
+
+          {/* Department Filter */}
+          <Grid item xs={12} sm={6} md={3}>
+            <FormControl fullWidth size={isSmallMobile ? "small" : "medium"}>
+              <InputLabel>Department</InputLabel>
+              <Select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                label="Department"
+                sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+              >
+                <MenuItem value="">All Departments</MenuItem>
+                {departments.map((dept) => (
+                  <MenuItem key={dept.department_id} value={dept.department_id}>
+                    {dept.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Grid>
-          <Grid item xs={12} md={2}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                {filteredStudents.length}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Students
-              </Typography>
+
+          {/* Sort */}
+          <Grid item xs={6} sm={6} md={2}>
+            <FormControl fullWidth size={isSmallMobile ? "small" : "medium"}>
+              <InputLabel>Sort by</InputLabel>
+              <Select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                label="Sort by"
+                sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+              >
+                <MenuItem value="name">Name</MenuItem>
+                <MenuItem value="email">Email</MenuItem>
+                <MenuItem value="department">Department</MenuItem>
+                <MenuItem value="status">Status</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* View Mode & Actions */}
+          <Grid item xs={6} sm={6} md={3}>
+            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+              {!isSmallMobile && (
+                <Tooltip title={viewMode === 'grid' ? 'List View' : 'Grid View'}>
+                  <IconButton 
+                    onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                    sx={{
+                      color: theme.palette.primary.main,
+                      '&:hover': {
+                        background: alpha(theme.palette.primary.main, 0.08),
+                      }
+                    }}
+                  >
+                    {viewMode === 'grid' ? <ListViewIcon /> : <GridViewIcon />}
+                  </IconButton>
+                </Tooltip>
+              )}
+              
+              <Tooltip title="Clear Filters">
+                <IconButton 
+                  onClick={handleClearFilters}
+                  disabled={!searchTerm && !selectedDepartment && sortBy === 'name'}
+                  sx={{
+                    color: theme.palette.secondary.main,
+                    '&:hover': {
+                      background: alpha(theme.palette.secondary.main, 0.08),
+                    }
+                  }}
+                >
+                  <ClearIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Download Report">
+                <IconButton
+                  sx={{
+                    color: theme.palette.success.main,
+                    '&:hover': {
+                      background: alpha(theme.palette.success.main, 0.08),
+                    }
+                  }}
+                >
+                  <DownloadIcon />
+                </IconButton>
+              </Tooltip>
             </Box>
           </Grid>
         </Grid>
       </Paper>
 
       {/* Tabs */}
-      <Paper sx={{ mb: 3, borderRadius: 3, overflow: 'hidden' }}>
+      <Paper 
+        sx={{ 
+          mb: { xs: 3, sm: 4 },
+          background: alpha(theme.palette.background.paper, 0.9),
+          backdropFilter: 'blur(20px)',
+          borderRadius: { xs: 2, sm: 3 },
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+        }}
+      >
         <Tabs
           value={activeTab}
           onChange={(e, newValue) => setActiveTab(newValue)}
-          variant="fullWidth"
+          variant={isMobile ? "scrollable" : "fullWidth"}
+          scrollButtons="auto"
           sx={{
             '& .MuiTab-root': {
+              minHeight: { xs: 56, sm: 72 },
               textTransform: 'none',
-              fontWeight: 600,
-              fontSize: '1rem',
-              minHeight: 64,
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              fontWeight: 500,
+              px: { xs: 1, sm: 2 }
             },
           }}
         >
-          <Tab 
-            label={
-              <Badge badgeContent={filteredStudents.length} color="primary">
-                All Students
-              </Badge>
-            } 
+          <Tab
+            icon={<Badge badgeContent={filteredStudents.length} color="primary" max={999} />}
+            label="All Students"
+            iconPosition="start"
+            sx={{ gap: 1 }}
           />
-          <Tab 
-            label={
-              <Badge badgeContent={verifiedStudents.length} color="success">
-                Verified
-              </Badge>
-            } 
+          <Tab
+            icon={<Badge badgeContent={verifiedStudents.length} color="success" max={999} />}
+            label="Verified"
+            iconPosition="start"
+            sx={{ gap: 1 }}
           />
-          <Tab 
-            label={
-              <Badge badgeContent={pendingStudents.length} color="warning">
-                Pending
-              </Badge>
-            } 
+          <Tab
+            icon={<Badge badgeContent={pendingStudents.length} color="warning" max={999} />}
+            label="Pending"
+            iconPosition="start"
+            sx={{ gap: 1 }}
           />
         </Tabs>
       </Paper>
 
-      {/* Students Grid */}
-      {isLoading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress size={60} />
-        </Box>
-      ) : (
-        <AnimatePresence mode="wait">
-          {getTabContent().length > 0 ? (
-            <Grid container spacing={3}>
-              {getTabContent().map((student, index) => renderStudentCard(student, index))}
-            </Grid>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              <Paper sx={{ p: 6, textAlign: 'center', borderRadius: 3 }}>
-                <PersonIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
-                <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
-                  No Students Found
-                </Typography>
-                <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-                  {activeTab === 0 
-                    ? "No students match your search criteria"
-                    : activeTab === 1
-                    ? "No verified students found"
-                    : "No pending students found"
-                  }
-                </Typography>
-              </Paper>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      )}
+      {/* Content */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.3 }}
+        >
+          {getTabContent()}
+        </motion.div>
+      </AnimatePresence>
 
       {/* Student Details Dialog */}
       <Dialog
@@ -413,113 +832,269 @@ const TeacherStudentSection = () => {
         onClose={handleCloseDetails}
         maxWidth="sm"
         fullWidth
+        fullScreen={isSmallMobile}
         PaperProps={{
           sx: {
-            borderRadius: 3,
+            background: alpha(theme.palette.background.paper, 0.95),
+            backdropFilter: 'blur(20px)',
+            borderRadius: isSmallMobile ? 0 : 3,
+            border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
           }
         }}
       >
-        <DialogTitle sx={{ 
-          background: 'linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%)',
-          color: 'white',
-          fontWeight: 700
-        }}>
-          Student Details
-        </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          {selectedStudent && (
-            <Box sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+        {selectedStudent && (
+          <>
+            <DialogTitle sx={{ 
+              pb: 1,
+              fontSize: { xs: '1.1rem', sm: '1.25rem' }
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Avatar
                   sx={{
-                    width: 80,
-                    height: 80,
-                    background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.main, 0.8)} 100%)`,
-                    mr: 3,
-                    fontSize: '2rem',
+                    width: { xs: 48, sm: 56 },
+                    height: { xs: 48, sm: 56 },
+                    background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                    fontSize: { xs: '1.2rem', sm: '1.5rem' },
                     fontWeight: 700
                   }}
                 >
                   {getStudentInitials(selectedStudent.name)}
                 </Avatar>
                 <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 600, mb: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     {selectedStudent.name}
                   </Typography>
                   <Chip
                     icon={getStatusIcon(selectedStudent.is_verified)}
-                    label={selectedStudent.is_verified ? 'Verified Student' : 'Pending Verification'}
+                    label={selectedStudent.is_verified ? 'Verified' : 'Pending'}
                     color={getStatusColor(selectedStudent.is_verified)}
+                    size="small"
                     sx={{ fontWeight: 600 }}
                   />
                 </Box>
               </Box>
-
-              <Divider sx={{ mb: 3 }} />
-
-              <Stack spacing={2}>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Email Address
-                  </Typography>
-                  <Typography variant="body1">{selectedStudent.email}</Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Department
-                  </Typography>
-                  <Typography variant="body1">
-                    {getDepartmentName(selectedStudent.department_id)}
-                  </Typography>
-                </Box>
-
+            </DialogTitle>
+            
+            <DialogContent sx={{ pt: 2 }}>
+              <List disablePadding>
+                <ListItem disablePadding sx={{ mb: 1 }}>
+                  <ListItemAvatar>
+                    <Avatar sx={{ background: alpha(theme.palette.primary.main, 0.1) }}>
+                      <EmailIcon sx={{ color: 'primary.main' }} />
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary="Email"
+                    secondary={selectedStudent.email}
+                    primaryTypographyProps={{ fontWeight: 600, fontSize: '0.875rem' }}
+                    secondaryTypographyProps={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                  />
+                </ListItem>
+                
+                <Divider sx={{ my: 1 }} />
+                
+                <ListItem disablePadding sx={{ mb: 1 }}>
+                  <ListItemAvatar>
+                    <Avatar sx={{ background: alpha(theme.palette.secondary.main, 0.1) }}>
+                      <SchoolIcon sx={{ color: 'secondary.main' }} />
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary="Department"
+                    secondary={getDepartmentName(selectedStudent.department_id)}
+                    primaryTypographyProps={{ fontWeight: 600, fontSize: '0.875rem' }}
+                    secondaryTypographyProps={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                  />
+                </ListItem>
+                
                 {selectedStudent.roll_number && (
-                  <Box>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      Roll Number
-                    </Typography>
-                    <Typography variant="body1">{selectedStudent.roll_number}</Typography>
-                  </Box>
+                  <>
+                    <Divider sx={{ my: 1 }} />
+                    <ListItem disablePadding sx={{ mb: 1 }}>
+                      <ListItemAvatar>
+                        <Avatar sx={{ background: alpha(theme.palette.info.main, 0.1) }}>
+                          <PersonIcon sx={{ color: 'info.main' }} />
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary="Roll Number"
+                        secondary={selectedStudent.roll_number}
+                        primaryTypographyProps={{ fontWeight: 600, fontSize: '0.875rem' }}
+                        secondaryTypographyProps={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                      />
+                    </ListItem>
+                  </>
                 )}
-
+                
                 {selectedStudent.phone && (
-                  <Box>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      Phone Number
-                    </Typography>
-                    <Typography variant="body1">{selectedStudent.phone}</Typography>
-                  </Box>
+                  <>
+                    <Divider sx={{ my: 1 }} />
+                    <ListItem disablePadding sx={{ mb: 1 }}>
+                      <ListItemAvatar>
+                        <Avatar sx={{ background: alpha(theme.palette.success.main, 0.1) }}>
+                          <PhoneIcon sx={{ color: 'success.main' }} />
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary="Phone"
+                        secondary={selectedStudent.phone}
+                        primaryTypographyProps={{ fontWeight: 600, fontSize: '0.875rem' }}
+                        secondaryTypographyProps={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                      />
+                    </ListItem>
+                  </>
                 )}
+              </List>
+            </DialogContent>
+            
+            <DialogActions sx={{ p: { xs: 2, sm: 3 }, gap: 1 }}>
+              <Button
+                onClick={handleCloseDetails}
+                sx={{ 
+                  minWidth: { xs: 80, sm: 100 },
+                  fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                }}
+              >
+                Close
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AssessmentIcon />}
+                sx={{ 
+                  minWidth: { xs: 100, sm: 120 },
+                  fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                }}
+              >
+                View Reports
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
 
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Registration Date
-                  </Typography>
-                  <Typography variant="body1">
-                    {new Date(selectedStudent.created_at || selectedStudent.date_joined).toLocaleDateString()}
-                  </Typography>
-                </Box>
-              </Stack>
-            </Box>
-          )}
+      {/* Edit Student Dialog */}
+      <Dialog 
+        open={editDialogOpen} 
+        onClose={handleEditClose} 
+        maxWidth="sm" 
+        fullWidth
+        fullScreen={isSmallMobile}
+        PaperProps={{
+          sx: {
+            background: alpha(theme.palette.background.paper, 0.95),
+            backdropFilter: 'blur(20px)',
+            borderRadius: isSmallMobile ? 0 : 3,
+            border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
+          Edit Student
+        </DialogTitle>
+        <DialogContent>
+          <StudentForm
+            student={editingStudent}
+            departments={departments}
+            onSuccess={handleEditSuccess}
+            onError={handleEditError}
+          />
         </DialogContent>
-        <DialogActions sx={{ p: 3 }}>
-          <Button onClick={handleCloseDetails} sx={{ textTransform: 'none' }}>
-            Close
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteClose}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            background: alpha(theme.palette.background.paper, 0.95),
+            backdropFilter: 'blur(20px)',
+            borderRadius: 3,
+            border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`,
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: 'error.main', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
+          Confirm Deletion
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
+            Are you sure you want to delete student "{deletingStudent?.name}"? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ p: { xs: 2, sm: 3 }, gap: 1 }}>
+          <Button 
+            onClick={handleDeleteClose} 
+            disabled={isSubmitting}
+            sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+          >
+            Cancel
           </Button>
           <Button 
-            variant="contained" 
-            startIcon={<AssessmentIcon />}
-            sx={{ 
-              textTransform: 'none',
-              background: 'linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%)',
-            }}
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={isSubmitting}
+            startIcon={isSubmitting ? <CircularProgress size={16} /> : <DeleteIcon />}
+            sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
           >
-            View Results
+            {isSubmitting ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Add Student Dialog */}
+      <Dialog 
+        open={addDialogOpen} 
+        onClose={handleAddClose} 
+        maxWidth="sm" 
+        fullWidth
+        fullScreen={isSmallMobile}
+        PaperProps={{
+          sx: {
+            background: alpha(theme.palette.background.paper, 0.95),
+            backdropFilter: 'blur(20px)',
+            borderRadius: isSmallMobile ? 0 : 3,
+            border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
+          Add New Student
+        </DialogTitle>
+        <DialogContent>
+          <StudentForm
+            student={null}
+            departments={departments}
+            onSuccess={handleAddSuccess}
+            onError={handleAddError}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Floating Action Button for Quick Add (Mobile) */}
+      <Zoom in={isMobile}>
+        <Fab
+          color="primary"
+          onClick={handleAddClick}
+          sx={{
+            position: 'fixed',
+            bottom: { xs: 16, sm: 24 },
+            right: { xs: 16, sm: 24 },
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+            '&:hover': {
+              transform: 'scale(1.1)',
+              boxShadow: `0 8px 32px ${alpha(theme.palette.primary.main, 0.4)}`,
+            },
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            zIndex: 1000,
+          }}
+        >
+          <AddIcon />
+        </Fab>
+      </Zoom>
     </Container>
   );
 };

@@ -50,7 +50,7 @@ const StudentForm = ({ student = null, departments = [], onSuccess, onError }) =
     if (!formData.name.trim()) newErrors.name = 'Full name is required';
     if (!formData.email.trim()) newErrors.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Invalid email format';
-    if (!formData.department) newErrors.department = 'Department is required';
+    if (!formData.department) newErrors.department = 'Subject is required';
     if (formData.phone && !/^[0-9]{10}$/.test(formData.phone)) {
       newErrors.phone = 'Phone number must be 10 digits';
     }
@@ -119,15 +119,15 @@ const StudentForm = ({ student = null, departments = [], onSuccess, onError }) =
       />
 
       <FormControl fullWidth margin="normal" required error={!!errors.department}>
-        <InputLabel id="department-select-label">Department</InputLabel>
+        <InputLabel id="department-select-label">Subject</InputLabel>
         <Select
           labelId="department-select-label"
           name="department"
-          label="Department"
+          label="Subject"
           value={formData.department}
           onChange={handleInputChange}
         >
-          <MenuItem value=""><em>Select a department</em></MenuItem>
+          <MenuItem value=""><em>Select a subject</em></MenuItem>
           {departments.map((dept) => (
             <MenuItem key={dept.department_id} value={dept.department_id}>
               {dept.name}

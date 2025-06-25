@@ -300,14 +300,28 @@ const DepartmentSection = () => {
 
       {/* Dialogs remain here */}
       <Dialog open={openFormDialog} onClose={() => { if (!isSubmitting) { setOpenFormDialog(false); setSelectedDept(null); } }} maxWidth="md" fullWidth>
-        <DialogTitle>{selectedDept ? 'Edit Department' : 'Add New Department'}</DialogTitle>
-        <DialogContent><DepartmentForm onSubmit={handleSaveDepartment} initialData={selectedDept} isSubmitting={isSubmitting} /></DialogContent>
+        <DialogTitle>{selectedDept ? 'Edit Subject' : 'Add New Subject'}</DialogTitle>
+        <DialogContent>
+          <DepartmentForm 
+            department={selectedDept} 
+            onSubmit={handleSaveDepartment} 
+            onCancel={() => { setOpenFormDialog(false); setSelectedDept(null); }}
+            isSubmitting={isSubmitting} 
+          />
+        </DialogContent>
       </Dialog>
 
       <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
         <DialogTitle>Confirm Deletion</DialogTitle>
-        <DialogContent><DialogContentText>Are you sure you want to delete the subject "{selectedDept?.name}" (ID: {selectedDept?.id})? This action cannot be undone.</DialogContentText></DialogContent>
-        <DialogActions><Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button><Button onClick={handleDelete} color="error">Delete</Button></DialogActions>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the subject "{selectedDept?.name}" (Code: {selectedDept?.code})? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={handleDelete} color="error">Delete</Button>
+        </DialogActions>
       </Dialog>
     </Container>
   );

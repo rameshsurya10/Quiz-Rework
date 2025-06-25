@@ -1,14 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container, Box, Typography, Paper, Grid, Switch, FormControlLabel, FormGroup, Button, useTheme, Tabs, Tab, Select, MenuItem, InputLabel, FormControl, Card, CardContent, useMediaQuery, Alert, CircularProgress, alpha
+  Container, Box, Typography, Paper, Grid, Switch, FormControlLabel, FormGroup, Button, useTheme, Tabs, Tab, Select, MenuItem, InputLabel, FormControl, Card, CardContent, useMediaQuery, Alert, CircularProgress, alpha, Slider, Divider, List, ListItem, ListItemIcon, ListItemText, ListItemSecondaryAction, TextField, Chip, Stack, Tooltip, IconButton, Avatar
 } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import PaletteIcon from '@mui/icons-material/Palette';
 import SaveIcon from '@mui/icons-material/Save';
 import LanguageIcon from '@mui/icons-material/Language';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import LightModeIcon from '@mui/icons-material/LightMode';
-import ContrastIcon from '@mui/icons-material/Contrast';
 import EmailIcon from '@mui/icons-material/Email';
 import PersonIcon from '@mui/icons-material/Person';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
@@ -16,16 +12,28 @@ import QuizIcon from '@mui/icons-material/Quiz';
 import GradingIcon from '@mui/icons-material/Grading';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import TodayIcon from '@mui/icons-material/Today';
+import SecurityIcon from '@mui/icons-material/Security';
+import DevicesIcon from '@mui/icons-material/Devices';
+import StorageIcon from '@mui/icons-material/Storage';
+import BackupIcon from '@mui/icons-material/Backup';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import SchoolIcon from '@mui/icons-material/School';
 import { useSnackbar } from '../../contexts/SnackbarContext';
-import { useTheme as useCustomTheme } from '../../contexts/ThemeContext';
 import { getTimezoneOptions } from '../../utils/localeUtils';
 import { useLocation } from 'react-router-dom';
 
+// Tab Panel Component
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
   return (
-    <div role="tabpanel" hidden={value !== index} id={`settings-tabpanel-${index}`} aria-labelledby={`settings-tab-${index}`} {...other}>
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`settings-tabpanel-${index}`}
+      aria-labelledby={`settings-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ p: { xs: 2, sm: 3 } }}>{children}</Box>}
     </div>
   );
 };
@@ -37,20 +45,30 @@ const defaultSettings = {
   pushNotifications: false,
   quizReminders: true,
   gradeNotifications: true,
+  studentSubmissions: true,
+  systemUpdates: false,
+  marketingEmails: false,
   notificationFrequency: 'instant',
+  soundEnabled: true,
+  desktopNotifications: true,
+  language: 'en',
+  dateFormat: 'MM/dd/yyyy',
+  autoSave: true,
+  compactView: false,
+  animationsEnabled: true,
 };
 
 const TeacherSettingsPage = () => {
   const theme = useTheme();
   const location = useLocation();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isSmallMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { showSnackbar } = useSnackbar();
-  const { mode, toggleMode, appearance, changeAppearance, highContrast, toggleHighContrast } = useCustomTheme();
 
-  // Parse tab from URL query params
+  // Parse tab from URL query params - only notifications and general now
   const urlParams = new URLSearchParams(location.search);
   const tabFromUrl = urlParams.get('tab');
-  const teacherTabs = ['appearance', 'notifications', 'general'];
+  const teacherTabs = ['notifications', 'general'];
   const getTabIndex = (tabName) => Math.max(0, teacherTabs.indexOf(tabName));
 
   const [tabValue, setTabValue] = useState(getTabIndex(tabFromUrl));
@@ -94,16 +112,6 @@ const TeacherSettingsPage = () => {
     try {
       // Save settings to localStorage
       localStorage.setItem('appSettings', JSON.stringify(settings));
-      
-      // Apply theme changes immediately
-      if (settings.darkMode !== undefined) {
-        // Update theme if changed
-        const currentMode = mode === 'dark';
-        if (settings.darkMode !== currentMode) {
-          toggleMode();
-        }
-      }
-      
       showSnackbar('Settings saved successfully!', 'success');
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -114,9 +122,9 @@ const TeacherSettingsPage = () => {
   };
 
   const getCardStyles = () => ({
-    background: alpha(theme.palette.background.paper, 0.8),
+    background: alpha(theme.palette.background.paper, 0.9),
     backdropFilter: 'blur(20px)',
-    borderRadius: 3,
+    borderRadius: { xs: 2, sm: 3 },
     border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
     transition: 'all 0.3s ease',
     '&:hover': {
@@ -127,25 +135,38 @@ const TeacherSettingsPage = () => {
   });
 
   const tabs = [
-    { label: 'Appearance', icon: <PaletteIcon />, value: 'appearance' },
     { label: 'Notifications', icon: <NotificationsIcon />, value: 'notifications' },
     { label: 'General', icon: <LanguageIcon />, value: 'general' }
   ];
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 } }}>
       {/* Page Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-          Settings (Teacher)
+      <Box sx={{ mb: { xs: 3, sm: 4 } }}>
+        <Typography 
+          variant={isSmallMobile ? "h5" : isMobile ? "h4" : "h3"} 
+          sx={{ 
+            fontWeight: 'bold', 
+            mb: 1,
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
+          Settings
         </Typography>
-        <Typography variant="body1" color="text.secondary">
+        <Typography 
+          variant="body1" 
+          color="text.secondary"
+          sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+        >
           Manage your teaching preferences and application settings
         </Typography>
       </Box>
 
       {/* Settings Tabs */}
-      <Paper sx={{ ...getCardStyles(), mb: 3 }}>
+      <Paper sx={{ ...getCardStyles(), mb: { xs: 3, sm: 4 } }}>
         <Tabs
           value={tabValue}
           onChange={handleTabChange}
@@ -154,10 +175,11 @@ const TeacherSettingsPage = () => {
           sx={{
             borderBottom: `1px solid ${theme.palette.divider}`,
             '& .MuiTab-root': {
-              minHeight: 72,
+              minHeight: { xs: 56, sm: 72 },
               textTransform: 'none',
-              fontSize: '1rem',
+              fontSize: { xs: '0.875rem', sm: '1rem' },
               fontWeight: 500,
+              px: { xs: 2, sm: 3 }
             },
           }}
         >
@@ -172,102 +194,97 @@ const TeacherSettingsPage = () => {
           ))}
         </Tabs>
 
-        {/* Appearance Tab */}
+        {/* Notifications Tab */}
         <TabPanel value={tabValue} index={0}>
-          <Grid container spacing={3}>
+          <Grid container spacing={{ xs: 2, sm: 3 }}>
+            {/* Email Notifications */}
             <Grid item xs={12} md={6}>
               <Card sx={getCardStyles()}>
                 <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <PaletteIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6">Theme Settings</Typography>
-                  </Box>
-
-                  <FormControl fullWidth sx={{ mb: 3 }}>
-                    <InputLabel>Appearance</InputLabel>
-                    <Select value={appearance} onChange={(e) => changeAppearance(e.target.value)} label="Appearance">
-                      <MenuItem value="modern">Modern</MenuItem>
-                      <MenuItem value="classic">Classic</MenuItem>
-                      <MenuItem value="royal">Royal</MenuItem>
-                    </Select>
-                  </FormControl>
-
-                  <FormGroup>
-                    <FormControlLabel
-                      control={<Switch checked={mode === 'dark'} onChange={toggleMode} />}
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {mode === 'dark' ? <DarkModeIcon /> : <LightModeIcon />}
-                          {mode === 'dark' ? 'Dark Mode' : 'Light Mode'}
-                        </Box>
-                      }
-                    />
-                    <FormControlLabel
-                      control={<Switch checked={highContrast} onChange={toggleHighContrast} />}
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <ContrastIcon />
-                          High Contrast
-                        </Box>
-                      }
-                    />
-                  </FormGroup>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <Card sx={getCardStyles()}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <PaletteIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6">Display Preview</Typography>
-                  </Box>
-
-                  <Box sx={{
-                    p: 2,
-                    background: alpha(theme.palette.primary.main, 0.1),
-                    borderRadius: 2,
-                    textAlign: 'center'
-                  }}>
-                    <Typography variant="h6" sx={{ mb: 1 }}>Sample Content</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      This is how your content will appear with the current theme settings.
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <EmailIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      Email Notifications
                     </Typography>
                   </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </TabPanel>
 
-        {/* Notifications Tab */}
-        <TabPanel value={tabValue} index={1}>
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <Card sx={getCardStyles()}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <NotificationsActiveIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6">Notification Preferences</Typography>
-                  </Box>
-
-                  <FormGroup>
+                  <Stack spacing={2}>
                     <FormControlLabel
                       control={
                         <Switch
                           checked={settings.emailNotifications}
                           onChange={handleChange}
                           name="emailNotifications"
+                          color="primary"
                         />
                       }
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <EmailIcon />
-                          Email Notifications
-                        </Box>
-                      }
+                      label="Enable email notifications"
                     />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={settings.quizReminders}
+                          onChange={handleChange}
+                          name="quizReminders"
+                          disabled={!settings.emailNotifications}
+                        />
+                      }
+                      label="Quiz deadline reminders"
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={settings.gradeNotifications}
+                          onChange={handleChange}
+                          name="gradeNotifications"
+                          disabled={!settings.emailNotifications}
+                        />
+                      }
+                      label="Grade submission notifications"
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={settings.studentSubmissions}
+                          onChange={handleChange}
+                          name="studentSubmissions"
+                          disabled={!settings.emailNotifications}
+                        />
+                      }
+                      label="Student submission alerts"
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={settings.systemUpdates}
+                          onChange={handleChange}
+                          name="systemUpdates"
+                          disabled={!settings.emailNotifications}
+                        />
+                      }
+                      label="System updates"
+                    />
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+
+            {/* Push & Desktop Notifications */}
+            <Grid item xs={12} md={6}>
+              <Card sx={getCardStyles()}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <NotificationsActiveIcon sx={{ mr: 1, color: 'secondary.main' }} />
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      Push & Desktop
+                    </Typography>
+                  </Box>
+
+                  <Stack spacing={2}>
                     <FormControlLabel
                       control={
                         <Switch
@@ -276,167 +293,212 @@ const TeacherSettingsPage = () => {
                           name="pushNotifications"
                         />
                       }
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <NotificationsIcon />
-                          Push Notifications
-                        </Box>
-                      }
+                      label="Browser push notifications"
                     />
+
                     <FormControlLabel
                       control={
                         <Switch
-                          checked={settings.quizReminders}
+                          checked={settings.desktopNotifications}
                           onChange={handleChange}
-                          name="quizReminders"
+                          name="desktopNotifications"
                         />
                       }
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <QuizIcon />
-                          Quiz Reminders
-                        </Box>
-                      }
+                      label="Desktop notifications"
                     />
+
                     <FormControlLabel
                       control={
                         <Switch
-                          checked={settings.gradeNotifications}
+                          checked={settings.soundEnabled}
                           onChange={handleChange}
-                          name="gradeNotifications"
+                          name="soundEnabled"
                         />
                       }
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <GradingIcon />
-                          Grade Notifications
-                        </Box>
-                      }
+                      label="Notification sounds"
                     />
-                  </FormGroup>
-                </CardContent>
-              </Card>
-            </Grid>
 
-            <Grid item xs={12} md={6}>
-              <Card sx={getCardStyles()}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <AccessTimeIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6">Notification Timing</Typography>
-                  </Box>
-
-                  <FormControl fullWidth sx={{ mb: 2 }}>
-                    <InputLabel>Notification Frequency</InputLabel>
-                    <Select
-                      value={settings.notificationFrequency}
-                      onChange={handleChange}
-                      name="notificationFrequency"
-                      label="Notification Frequency"
-                    >
-                      <MenuItem value="instant">Instant</MenuItem>
-                      <MenuItem value="hourly">Hourly Digest</MenuItem>
-                      <MenuItem value="daily">Daily Summary</MenuItem>
-                      <MenuItem value="weekly">Weekly Summary</MenuItem>
-                    </Select>
-                  </FormControl>
-
-                  <Typography variant="body2" color="text.secondary">
-                    Choose how often you want to receive notifications about your classes and students.
-                  </Typography>
+                    <FormControl fullWidth sx={{ mt: 2 }}>
+                      <InputLabel>Notification Frequency</InputLabel>
+                      <Select
+                        value={settings.notificationFrequency}
+                        onChange={handleChange}
+                        name="notificationFrequency"
+                        label="Notification Frequency"
+                      >
+                        <MenuItem value="instant">Instant</MenuItem>
+                        <MenuItem value="hourly">Hourly digest</MenuItem>
+                        <MenuItem value="daily">Daily digest</MenuItem>
+                        <MenuItem value="weekly">Weekly digest</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Stack>
                 </CardContent>
               </Card>
             </Grid>
           </Grid>
         </TabPanel>
 
-        {/* General Tab */}
-        <TabPanel value={tabValue} index={2}>
-          <Grid container spacing={3}>
+        {/* General Settings Tab */}
+        <TabPanel value={tabValue} index={1}>
+          <Grid container spacing={{ xs: 2, sm: 3 }}>
+            {/* Language & Region */}
             <Grid item xs={12} md={6}>
               <Card sx={getCardStyles()}>
                 <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                     <LanguageIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6">Regional Settings</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      Language & Region
+                    </Typography>
                   </Box>
 
-                  <FormControl fullWidth sx={{ mb: 2 }}>
-                    <InputLabel>Timezone</InputLabel>
-                    <Select
-                      value={settings.timezone}
-                      onChange={handleChange}
-                      name="timezone"
-                      label="Timezone"
-                    >
-                      {timezoneOptions.map((option) => (
-                        <MenuItem key={option.value} value={option.value}>
-                          {option.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+                  <Stack spacing={3}>
+                    <FormControl fullWidth>
+                      <InputLabel>Language</InputLabel>
+                      <Select
+                        value={settings.language}
+                        onChange={handleChange}
+                        name="language"
+                        label="Language"
+                      >
+                        <MenuItem value="en">English</MenuItem>
+                        <MenuItem value="ur">Urdu</MenuItem>
+                        <MenuItem value="ar">Arabic</MenuItem>
+                      </Select>
+                    </FormControl>
 
-                  <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <TodayIcon fontSize="small" />
-                    Current time: {currentTime.toLocaleString()}
-                  </Typography>
+                    <FormControl fullWidth>
+                      <InputLabel>Timezone</InputLabel>
+                      <Select
+                        value={settings.timezone}
+                        onChange={handleChange}
+                        name="timezone"
+                        label="Timezone"
+                        MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+                      >
+                        {timezoneOptions.map((tz) => (
+                          <MenuItem key={tz.value} value={tz.value}>
+                            {tz.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+
+                    <FormControl fullWidth>
+                      <InputLabel>Date Format</InputLabel>
+                      <Select
+                        value={settings.dateFormat}
+                        onChange={handleChange}
+                        name="dateFormat"
+                        label="Date Format"
+                      >
+                        <MenuItem value="MM/dd/yyyy">MM/DD/YYYY</MenuItem>
+                        <MenuItem value="dd/MM/yyyy">DD/MM/YYYY</MenuItem>
+                        <MenuItem value="yyyy-MM-dd">YYYY-MM-DD</MenuItem>
+                      </Select>
+                    </FormControl>
+
+                    <Box sx={{ p: 2, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1 }}>
+                      <Typography variant="body2" color="info.main" sx={{ fontWeight: 500 }}>
+                        Current time: {currentTime.toLocaleString()}
+                      </Typography>
+                    </Box>
+                  </Stack>
                 </CardContent>
               </Card>
             </Grid>
 
+            {/* Application Preferences */}
             <Grid item xs={12} md={6}>
               <Card sx={getCardStyles()}>
                 <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <PersonIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6">Default Landing Page</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <TodayIcon sx={{ mr: 1, color: 'secondary.main' }} />
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      Application Preferences
+                    </Typography>
                   </Box>
 
-                  <FormControl fullWidth>
-                    <InputLabel>Landing Page</InputLabel>
-                    <Select
-                      value={settings.landingPage}
-                      onChange={handleChange}
-                      name="landingPage"
-                      label="Landing Page"
-                    >
-                      <MenuItem value="/teacher-dashboard">Dashboard</MenuItem>
-                      <MenuItem value="/teacher/quiz">Manage Quiz</MenuItem>
-                      <MenuItem value="/teacher/students">Students</MenuItem>
-                      <MenuItem value="/teacher/departments">Departments</MenuItem>
-                    </Select>
-                  </FormControl>
+                  <Stack spacing={3}>
+                    <FormControl fullWidth>
+                      <InputLabel>Default Landing Page</InputLabel>
+                      <Select
+                        value={settings.landingPage}
+                        onChange={handleChange}
+                        name="landingPage"
+                        label="Default Landing Page"
+                      >
+                        <MenuItem value="/teacher-dashboard">Dashboard</MenuItem>
+                        <MenuItem value="/teacher/quiz">Quiz Management</MenuItem>
+                        <MenuItem value="/teacher/students">Student Management</MenuItem>
+                      </Select>
+                    </FormControl>
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={settings.autoSave}
+                          onChange={handleChange}
+                          name="autoSave"
+                        />
+                      }
+                      label="Auto-save changes"
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={settings.compactView}
+                          onChange={handleChange}
+                          name="compactView"
+                        />
+                      }
+                      label="Compact view mode"
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={settings.animationsEnabled}
+                          onChange={handleChange}
+                          name="animationsEnabled"
+                        />
+                      }
+                      label="Enable animations"
+                    />
+                  </Stack>
                 </CardContent>
               </Card>
             </Grid>
           </Grid>
         </TabPanel>
-
-        {/* Save Button */}
-        <Box sx={{ p: 3, borderTop: `1px solid ${theme.palette.divider}` }}>
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-            onClick={handleSaveSettings}
-            disabled={isSaving}
-            sx={{
-              minWidth: 140,
-              background: theme.palette.mode === 'dark'
-                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-              '&:hover': {
-                background: theme.palette.mode === 'dark'
-                  ? 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)'
-                  : 'linear-gradient(135deg, #3d8bfd 0%, #00d4ff 100%)',
-              }
-            }}
-          >
-            {isSaving ? 'Saving...' : 'Save Settings'}
-          </Button>
-        </Box>
       </Paper>
+
+      {/* Save Button */}
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+        <Button
+          variant="contained"
+          size="large"
+          startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+          onClick={handleSaveSettings}
+          disabled={isSaving}
+          sx={{
+            px: { xs: 3, sm: 6 },
+            py: { xs: 1.5, sm: 2 },
+            fontSize: { xs: '1rem', sm: '1.1rem' },
+            borderRadius: 3,
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+            '&:hover': {
+              background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`,
+              transform: 'translateY(-2px)',
+              boxShadow: `0 8px 32px ${alpha(theme.palette.primary.main, 0.3)}`,
+            },
+          }}
+        >
+          {isSaving ? 'Saving...' : 'Save Settings'}
+        </Button>
+      </Box>
     </Container>
   );
 };

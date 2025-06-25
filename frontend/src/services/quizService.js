@@ -19,29 +19,89 @@ const getAuthHeaders = () => {
 // Quiz API services
 // Helper function to normalize question data structure for display
 const normalizeQuestions = (questions) => {
-  return questions.map((question) => {
-    const processedQuestion = {
-      ...question,
-      question_text: question.question_text || question.question,
-      type: question.type || question.question_type || 'mcq'
-    };
-
-    // Convert options object to array format for display
-    if (question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
-      processedQuestion.options = Object.entries(question.options).map(([key, text]) => ({
-        option_text: text,
-        is_correct: key === question.correct_answer,
-        id: key
-      }));
-    } else if (Array.isArray(question.options)) {
-      // Already in correct format
-      processedQuestion.options = question.options;
-    } else {
-      processedQuestion.options = [];
+  if (!Array.isArray(questions)) {
+    return [];
+  }
+  
+  return questions.flatMap(questionData => {
+    // If questionData is already in the correct format
+    if (questionData.question_text && typeof questionData.question_text === 'string') {
+      return [questionData];
     }
-
-    return processedQuestion;
+    
+    // If questionData.question is a string (simple question)
+    if (typeof questionData.question === 'string') {
+      return [{
+        ...questionData,
+        question_text: questionData.question
+      }];
+    }
+    
+    // If questionData.question is an array or object (complex structure from backend)
+    let questionsArray;
+    try {
+      questionsArray = typeof questionData.question === 'string' 
+        ? JSON.parse(questionData.question) 
+        : questionData.question;
+    } catch (e) {
+      // If parsing fails, treat as simple question
+      return [{
+        ...questionData,
+        question_text: String(questionData.question)
+      }];
+    }
+    
+    // Ensure questionsArray is an array
+    if (!Array.isArray(questionsArray)) {
+      questionsArray = [questionsArray];
+    }
+    
+    // Process each question in the array
+    return questionsArray.map((q, index) => ({
+      ...questionData,
+      question_id: questionData.question_id || `${questionData.id || 'unknown'}-${index}`,
+      question_text: q.question || q.question_text || 'No question text available',
+      type: q.type || questionData.question_type || questionData.type || 'mcq',
+      options: q.options || questionData.options || {},
+      correct_answer: q.correct_answer || questionData.correct_answer || '',
+      explanation: q.explanation || questionData.explanation || ''
+    }));
   });
+};
+
+// Helper function to format questions for display in modals/dialogs
+const formatQuestionsForDisplay = (questions) => {
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return 'No questions available';
+  }
+  
+  return questions.map((question, index) => {
+    // Extract the actual question text
+    let questionText = '';
+    
+    if (typeof question === 'string') {
+      questionText = question;
+    } else if (question.question_text) {
+      questionText = question.question_text;
+    } else if (question.question) {
+      // Handle case where question.question might be an object or string
+      if (typeof question.question === 'string') {
+        questionText = question.question;
+      } else if (Array.isArray(question.question)) {
+        // If question.question is an array, extract the first question text
+        const firstQ = question.question[0];
+        questionText = firstQ?.question || firstQ?.question_text || '[Question not available]';
+      } else if (typeof question.question === 'object') {
+        questionText = question.question.question || question.question.question_text || '[Question not available]';
+      } else {
+        questionText = '[Question format not recognized]';
+      }
+    } else {
+      questionText = '[Question text not available]';
+    }
+    
+    return `${index + 1}. ${questionText}`;
+  }).join('\n');
 };
 
 export const quizService = {
@@ -289,7 +349,7 @@ export const quizService = {
         department_name: quiz.department_name || (quiz.department && quiz.department.name) || 'Not assigned',
         quiz_type: quiz.quiz_type || 'Normal',
         question_type: quiz.question_type || 'Mixed',
-        questions: Array.isArray(quiz.questions) ? quiz.questions : []
+        questions: Array.isArray(quiz.questions) ? normalizeQuestions(quiz.questions) : []
       }));
     } catch (error) {
       console.error('Error fetching user quiz:', error);
@@ -334,24 +394,7 @@ export const quizService = {
         department_name: quiz.department_name || (quiz.department && quiz.department.name) || 'Not assigned',
         quiz_type: quiz.quiz_type || 'Normal',
         question_type: quiz.question_type || 'Mixed',
-        questions: Array.isArray(quiz.questions) ? quiz.questions.map(q => {
-          console.log('Processing question in quizService:', {
-            question: q.question,
-            type: q.type,
-            options: q.options,
-            correct_answer: q.correct_answer
-          });
-          
-          return {
-            ...q,
-            question_text: q.question_text || q.question || '',
-            // Keep options as-is - don't convert to array here, let the components handle it
-            options: q.options || {},
-            correct_answer: q.correct_answer || '',
-            explanation: q.explanation || '',
-            type: q.type || 'mcq'
-          };
-        }) : []
+        questions: Array.isArray(quiz.questions) ? normalizeQuestions(quiz.questions) : []
       };
     } catch (error) {
       console.error('Error fetching quiz details:', error);
@@ -455,7 +498,10 @@ export const quizService = {
   },
 
   // Helper function to normalize questions data
-  normalizeQuestions: normalizeQuestions
+  normalizeQuestions: normalizeQuestions,
+
+  // Helper function to format questions for display in modals/dialogs
+  formatQuestionsForDisplay: formatQuestionsForDisplay
 };
 
 export default quizService;
