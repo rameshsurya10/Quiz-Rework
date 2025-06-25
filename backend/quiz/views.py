@@ -235,6 +235,10 @@ class QuizFileUploadView(APIView):
 
             questions = questions[:total_questions]
 
+            # Add question_number to each
+            for idx, q in enumerate(questions, start=1):
+                q['question_number'] = idx
+
             # Save as grouped JSON
             Question.objects.create(
                 quiz=quiz,

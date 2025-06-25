@@ -17,6 +17,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from departments.models import Department
 from .utils import send_student_verification_email
+from quiz.models import QuizAttempt,Quiz,Question
+
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -345,4 +347,193 @@ class StudentVerificationView(View):
 
         except Student.DoesNotExist:
             return HttpResponse("Invalid or expired verification link.")
+
+class SubmitQuizAttemptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        data = request.data
+        quiz_id = data.get("quiz_id")
+        question_entries = data.get("questions")
+
+        if not quiz_id or not isinstance(question_entries, list):
+            return Response({"error": "Invalid payload"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        student = Student.objects.filter(email=user.email, is_deleted=False).first()
+        quiz = Quiz.objects.filter(quiz_id=quiz_id, is_deleted=False).first()
+
+        if not student or not quiz:
+            return Response({"error": "Invalid student or quiz"}, status=status.HTTP_400_BAD_REQUEST)
+
+        score = 0
+        total = 0
+        stored_answers = []
+
+        for q in question_entries:
+            question_id = q.get("question_id")
+            question_number = q.get("question_number")
+            answer = q.get("answer")
+
+            if not question_id or answer is None or question_number is None:
+                continue
+
+            try:
+                # Fetch the base Question object (with all sub-questions inside JSON)
+                question_obj = Question.objects.get(question_id=question_id)
+                all_subquestions = question_obj.question  # Assuming this is a JSONField list
+
+                # Find the matching sub-question by question_number
+                matched = next(
+                    (subq for subq in all_subquestions if subq.get("question_number") == question_number),
+                    None
+                )
+
+                if not matched:
+                    continue
+
+                correct_answer = str(matched.get("correct_answer", "")).strip().lower()
+                print("correct_answer:",correct_answer)
+                submitted_answer = str(answer).strip().lower()
+                print("submitted_answer:",submitted_answer)
+
+                is_correct = (correct_answer == submitted_answer)
+                if is_correct:
+                    score += 1
+                total += 1
+
+                stored_answers.append({
+                    "question_id": question_id,
+                    "question_number": question_number,
+                    "answer": answer,
+                    "is_correct": is_correct
+                })
+
+            except Question.DoesNotExist:
+                continue
+
+        passing_score = quiz.passing_score or (quiz.no_of_questions * 0.5)
+        result = "pass" if score >= passing_score else "fail"
+
+        QuizAttempt.objects.create(
+            student=student,
+            quiz=quiz,
+            question_answer=stored_answers,
+            score=score,
+            result=result,
+            created_by=student.email,
+            last_modified_by=student.email
+        )
+
+        return Response({
+            "message": "Quiz submitted successfully",
+            "quiz_id": quiz.quiz_id,
+            "student_id": student.student_id,
+            "score": score,
+            "total_questions": total,
+            "result": result
+        }, status=status.HTTP_201_CREATED)
+
+class RetrieveQuizAttemptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, quiz_id):
+        user = request.user
+        student = Student.objects.filter(email=user.email, is_deleted=False).first()
+
+        if not student:
+            return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        attempt = (
+            QuizAttempt.objects.filter(student_id=student.student_id, quiz__quiz_id=quiz_id)
+            .order_by("-created_at")
+            .first()
+        )
+
+        if not attempt:
+            return Response({"error": "No attempt found for this quiz"}, status=status.HTTP_404_NOT_FOUND)
+
+        detailed_answers = []
+
+        for item in attempt.question_answer:
+            question_id = item.get("question_id")
+            question_number = item.get("question_number")
+            student_answer = item.get("answer")
+            is_correct = item.get("is_correct", False)
+
+            try:
+                question_obj = Question.objects.get(question_id=question_id)
+                sub_questions = question_obj.question  # JSONField: list of questions
+
+                matched = next(
+                    (q for q in sub_questions if q.get("question_number") == question_number),
+                    None
+                )
+
+                if matched:
+                    detailed_answers.append({
+                        "question_number": question_number,
+                        "question": matched.get("question"),
+                        "type": matched.get("type"),
+                        "options": matched.get("options"),
+                        "correct_answer": matched.get("correct_answer"),
+                        "student_answer": student_answer,
+                        "explanation": matched.get("explanation", ""),
+                        "is_correct": is_correct
+                    })
+
+            except Question.DoesNotExist:
+                continue
+
+        return Response({
+            "attempt_id": attempt.attempt_id,
+            "quiz_id": attempt.quiz.quiz_id,
+            "score": attempt.score,
+            "result": attempt.result,
+            "detailed_answers": detailed_answers  # includes both correct & wrong
+        }, status=status.HTTP_200_OK)
+
+class ListStudentQuizResultsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        role = getattr(user, "role", None)  # Assumes user object has a 'role' field
+
+        if role == "ADMIN":
+            # Admin can view all quiz attempts
+            attempts = QuizAttempt.objects.select_related('quiz', 'student').order_by('-created_at')
+
+        elif role == "TEACHER":
+            teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+            if not teacher:
+                return Response({"error": "Teacher not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            # Get quiz attempts only for quizzes created by this teacher
+            attempts = QuizAttempt.objects.filter(quiz__teacher=teacher).select_related('quiz', 'student').order_by('-created_at')
+
+        elif role == "STUDENT":
+            student = Student.objects.filter(email=user.email, is_deleted=False).first()
+            if not student:
+                return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            # Only that student's attempts
+            attempts = QuizAttempt.objects.filter(student=student).select_related('quiz').order_by('-created_at')
+
+        else:
+            return Response({"error": "Invalid role"}, status=status.HTTP_403_FORBIDDEN)
+
+        result_data = [
+            {
+                "quiz_id": attempt.quiz.quiz_id,
+                "quiz_title": attempt.quiz.title,
+                "student_name": f"{attempt.student.first_name} {attempt.student.last_name}" if role in ["admin", "teacher"] else None,
+                "score": attempt.score,
+                "result": attempt.result,
+                "attempted_at": attempt.created_at
+            }
+            for attempt in attempts
+        ]
+
+        return Response(result_data, status=status.HTTP_200_OK)
 

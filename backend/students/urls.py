@@ -1,7 +1,7 @@
 from django.urls import path, re_path
 from rest_framework.routers import DefaultRouter
 from . import views
-from .views import StudentVerificationView
+from .views import *
 
 app_name = 'students'
 
@@ -17,6 +17,9 @@ urlpatterns = [
     # Additional endpoints - handle both with and without trailing slash
     path('create_student/', views.StudentCreateView.as_view(), name='create-student'),
     re_path(r'^create_student$', views.StudentCreateView.as_view(), name='create-student-no-slash'),
+    path('quiz_submit/', SubmitQuizAttemptView.as_view(), name='quiz-submit'),
+    path('quiz_attempt/<int:quiz_id>/', RetrieveQuizAttemptView.as_view(), name='quiz-attempt-detail'),
+    path('quiz_attempts/', ListStudentQuizResultsView.as_view(), name='quiz-attempts-list'),
     
     # Include router URLs
 ] + router.urls

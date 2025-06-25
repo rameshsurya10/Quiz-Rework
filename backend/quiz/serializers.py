@@ -83,7 +83,7 @@ class CustomDateTimeField(serializers.DateTimeField):
 class SlimQuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
-        fields = ['question_id', 'question', 'options', 'type']
+        fields = ['question_id', 'question', 'options', 'type', 'question_number']
 
     def to_representation(self, instance):
         try:
@@ -105,6 +105,7 @@ class SlimQuestionSerializer(serializers.ModelSerializer):
                 "question": q.get("question", ""),
                 "options": q.get("options", {}),
                 "question_type": q.get("type", ""),
+                "question_number": q.get("question_number", "")
             })
 
         return result 

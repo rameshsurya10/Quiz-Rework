@@ -83,7 +83,8 @@ class Question(models.Model):
         related_name='questions',
         db_column='quiz_id'
     )
-    question = models.TextField()
+    # question = models.TextField()
+    question = models.JSONField()
     question_type = models.CharField(max_length=50)
     difficulty = models.CharField(max_length=50)
     options = models.JSONField(null=True, blank=True)
