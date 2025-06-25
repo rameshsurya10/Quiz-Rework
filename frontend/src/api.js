@@ -2,8 +2,8 @@ import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
 // API configuration
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const API_TIMEOUT = parseInt(process.env.REACT_APP_API_TIMEOUT || '80000');
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+const API_TIMEOUT = parseInt(process.env.REACT_APP_API_TIMEOUT || '30000');
 
 // Create axios instance
 const api = axios.create({
