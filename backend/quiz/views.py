@@ -27,66 +27,58 @@ from students.models import Student
 from django.db.models import Q
 from documents.utils import extract_text_from_file
 import logging
+from .serializers import QuizSerializer, QuestionSerializer,SlimQuestionSerializer
 
 logger = logging.getLogger(__name__)
 
 
 class QuizFileUploadView(APIView):
     """
-    API endpoint for managing files related to a quiz:
-    - POST: Upload a new file for a quiz and generate questions from its content
+    Upload a document for a quiz, store it in vector DB, and generate questions.
     """
     parser_classes = (MultiPartParser, FormParser, JSONParser)
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
-
-    # Maximum file size (60MB)
-    MAX_FILE_SIZE = 60 * 1024 * 1024  # 60MB in bytes
+    MAX_FILE_SIZE = 60 * 1024 * 1024  # 60 MB
 
     def get_quiz(self, quiz_id):
         quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
-        questions = Question.objects.filter(quiz_id=quiz.quiz_id)
         self.check_object_permissions(self.request, quiz)
-        return quiz, questions
-
+        return quiz
 
     def post(self, request, quiz_id, format=None):
-        quiz, _ = self.get_quiz(quiz_id)
+        quiz = self.get_quiz(quiz_id)
 
-        if 'file' not in request.FILES:
-            return Response({"error": "No file was provided"}, status=status.HTTP_400_BAD_REQUEST)
-
-        uploaded_file = request.FILES['file']
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
+            return Response({"error": "No file provided."}, status=400)
         if uploaded_file.size > self.MAX_FILE_SIZE:
-            return Response({
-                "error": f"File size exceeds {self.MAX_FILE_SIZE // (1024*1024)}MB",
-                "message": f"The uploaded file is too large. Maximum file size allowed is {self.MAX_FILE_SIZE // (1024*1024)}MB.",
-                "title": "File Size Limit Exceeded"
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "File size exceeds 60MB."}, status=400)
 
-        # Generate a unique ID for the file
-        import uuid
+        import uuid, pickle, os, json
         from django.utils.text import slugify
-        
-        doc_uuid = str(uuid.uuid4())
-        filename = uploaded_file.name
-        ext = os.path.splitext(filename)[1].lower()
-        new_filename = f"{slugify(doc_uuid)}{ext}"
-        
-        # Create a virtual file path (not saved to disk)
-        db_file_path = f"vector_documents/{new_filename}"
-        
-        # Import document models and utils
-        from documents.models import Document, DocumentVector  
-        from documents.utils import extract_text_from_file
+        from documents.models import Document, DocumentVector
         from config.vector_db import VectorDB
-        import pickle
-        
-        # Extract text from the file using our centralized utility
+        from openai import OpenAI
+
+        doc_uuid = str(uuid.uuid4())
+        ext = os.path.splitext(uploaded_file.name)[1].lower()
+        new_filename = f"{slugify(doc_uuid)}{ext}"
+        db_file_path = f"vector_documents/{new_filename}"
+
         extracted_text = extract_text_from_file(uploaded_file)
-        
-        # Create document in the database
-        document = Document(
-            title=filename,
+        if not extracted_text:
+            return Response({"error": "Failed to extract text from file."}, status=500)
+
+        # Clean junk lines
+        cleaned_lines = [
+            line for line in extracted_text.splitlines()
+            if len(line.strip()) > 30 and not any(word in line.lower() for word in ["page", "preparedby", "end of page", "http", "gobustudy"])
+        ]
+        file_text = "\n".join(cleaned_lines[:50])
+
+        # Save document
+        document = Document.objects.create(
+            title=uploaded_file.name,
             description=f"Uploaded for quiz {quiz_id}",
             extracted_text=extracted_text,
             user=request.user,
@@ -95,103 +87,68 @@ class QuizFileUploadView(APIView):
             storage_type='vector_db',
             storage_path=db_file_path,
             file_type=uploaded_file.content_type,
-            quiz=quiz  # Associate with the quiz directly
+            quiz=quiz
         )
-        document.save()
-        
-        # Store in vector database
+
+        # Vector embedding
         try:
             metadata = {
-                'title': filename,
-                'description': f"Uploaded for quiz {quiz_id}",
-                'original_filename': filename,
-                'file_size': uploaded_file.size,
-                'content_type': uploaded_file.content_type,
-                'user_id': str(request.user.id),
-                'quiz_id': quiz_id,
+                'title': uploaded_file.name,
+                'quiz_id': quiz.quiz_id,
+                'user_id': str(request.user.id)
             }
-            
-            # Initialize vector database
             vector_db = VectorDB()
-            
-            # Generate embedding
             embedding = vector_db.generate_embedding(extracted_text)
-            
+
             if embedding:
-                # Store in vector database
                 vector_db.upsert_file(doc_uuid, db_file_path, extracted_text, metadata)
-                
-                # Create DocumentVector record
-                binary_embedding = pickle.dumps(embedding)
-                document_vector = DocumentVector(
+                DocumentVector.objects.create(
                     document=document,
                     vector_uuid=uuid.UUID(doc_uuid),
-                    embedding=binary_embedding,
+                    embedding=pickle.dumps(embedding),
                     is_indexed=True,
                     metadata=metadata
                 )
-                document_vector.save()
         except Exception as e:
-            logger.error(f"Error storing in vector database: {e}")
-        
-        # Update quiz uploadedfiles field for backward compatibility
-        if not isinstance(quiz.uploadedfiles, list):
-            quiz.uploadedfiles = []
+            logger.error(f"VectorDB error: {e}")
 
-        file_info = {
-            'name': filename,
+        # Add file reference to quiz
+        quiz.uploadedfiles = quiz.uploadedfiles or []
+        quiz.uploadedfiles.append({
+            'name': uploaded_file.name,
             'path': db_file_path,
             'document_id': document.id,
             'vector_uuid': doc_uuid,
             'file_size': uploaded_file.size,
             'file_type': uploaded_file.content_type
-        }
-        quiz.uploadedfiles.append(file_info)
+        })
         quiz.save()
 
-        # Text extraction is already done, use extracted_text variable
-        file_text = extracted_text
-        if not file_text:
-            return Response({"error": "Failed to read file content for question generation."}, status=500)
-
+        # === Question Generation ===
         try:
             question_type = quiz.question_type.lower()
-            num_questions = quiz.no_of_questions
             quiz_type = quiz.quiz_type.lower()
-            
-            # For mixed types, we'll cycle through these
-            all_types = ['mcq', 'fill', 'truefalse', 'oneline']
-            if question_type == "mixed":
-                mixed_note = """
-                Include a mix of these question types:
-                - Multiple Choice (type: mcq) - with options A, B, C, D
-                - Fill-in-the-blank (type: fill) - include [BLANK] in the question
-                - True/False (type: truefalse) - with answer True or False
-                - One-line answer (type: oneline) - short answer questions
-                
-                Try to include at least one of each type if possible.
-                """
-            else:
-                mixed_note = f"Use question type: {question_type}."
+            total_questions = quiz.no_of_questions + 5
+            rotation = ["mcq", "fill", "truefalse", "oneline"] if question_type == "mixed" else [question_type] * total_questions
 
             base_prompt = f"""
-                You are a professional quiz generator. Based on the content below, generate {num_questions} questions for a {quiz_type}-level quiz.
+                You are a quiz generator. Read the content below and generate {total_questions} {quiz_type}-level questions.
+
+                Use this exact sequence of question types: {', '.join(rotation)} repeated in order.
 
                 Content:
                 {file_text[:3000]}
 
-                Instructions:
-                {mixed_note}
-                Format each question like:
+                Each question must follow this format:
                 Question: ...
                 Type: [mcq|fill|truefalse|oneline]
-                A: ... (include options A through D only for mcq type)
+                A: ... (only for mcq)
                 B: ...
                 C: ...
                 D: ...
-                Answer: ... (for mcq: A, B, C, or D; for truefalse: True or False; for others: the correct answer)
-                Explanation: ... (brief explanation of why this is the correct answer)
-            """
+                Answer: ...
+                Explanation: ...
+                """
 
             client = OpenAI(api_key=settings.OPENAI_API_KEY)
             response = client.chat.completions.create(
@@ -203,209 +160,82 @@ class QuizFileUploadView(APIView):
                 temperature=0.7,
                 max_tokens=2000
             )
+            content = response.choices[0].message.content.strip()
 
-            generated_text = response.choices[0].message.content
-            if not generated_text.strip():
-                raise Exception("Empty response from OpenAI")
-
-            # === JSON Parsing Section ===
-            questions = []
-            current = {}
-
-            for line in generated_text.split('\n'):
+            # === Parse output ===
+            questions, current = [], {}
+            for line in content.splitlines():
                 line = line.strip()
                 if not line:
-                    if current.get("question"):
+                    if 'question' in current:
                         questions.append(current)
                         current = {}
                     continue
-
-                if line.startswith("Q") and ":" in line:
-                    current['question'] = line.split(":", 1)[1].strip()
-                    current['options'] = {}
-                elif line.startswith("Question:"):
-                    current['question'] = line.replace("Question:", "").strip()
-                    current['options'] = {}
+                if line.startswith("Question:"):
+                    current = {'question': line[9:].strip(), 'options': {}}
                 elif line.startswith("Type:"):
-                    # Normalize the type when parsing
-                    type_value = line.replace("Type:", "").strip().lower()
-                    
-                    # Map to standard types
-                    if type_value in ['multiple_choice', 'multiple-choice', 'multiplechoice', 'multiple choice']:
-                        current['type'] = 'mcq'
-                    elif type_value in ['fill_in_blank', 'fill-in-blank', 'fillinblank', 'fill_in_the_blank', 'fill in the blank']:
-                        current['type'] = 'fill'
-                    elif type_value in ['true_false', 'true-false', 'trueorfalse', 'true or false']:
-                        current['type'] = 'truefalse'
-                    elif type_value in ['one_line', 'one-line', 'short_answer', 'short-answer', 'one line']:
-                        current['type'] = 'oneline'
-                    else:
-                        current['type'] = type_value  # Keep as is if not recognized
-                elif line.startswith(("A:", "B:", "C:", "D:")):
-                    key = line[0]
-                    value = line[2:].strip()
+                    current['type'] = line[5:].strip().lower()
+                elif line[:2] in ("A:", "B:", "C:", "D:"):
                     if 'options' not in current:
                         current['options'] = {}
-                    current['options'][key] = value
+                    current['options'][line[:1]] = line[2:].strip()
                 elif line.startswith("Answer:"):
-                    current['correct_answer'] = line.replace("Answer:", "").strip()
+                    current['correct_answer'] = line[7:].strip()
                 elif line.startswith("Explanation:"):
-                    current['explanation'] = line.replace("Explanation:", "").strip()
-
-            if current.get("question"):
+                    current['explanation'] = line[12:].strip()
+            if 'question' in current:
                 questions.append(current)
 
-            if not questions:
-                # Create simple default questions based on file content
-                default_questions = []
-                
-                # Extract some text to use for questions
-                content_lines = file_text.split('\n')
-                content_chunks = [line for line in content_lines if len(line.strip()) > 30][:10]  # Get first 10 substantial lines
-                
-                # Create a mix of question types
-                if question_type == 'mixed':
-                    # Create one of each type
-                    if len(content_chunks) >= 1:
-                        default_questions.append({
-                            "question": f"What is the main topic discussed in this document?",
-                            "type": "oneline",
-                            "correct_answer": content_chunks[0][:30] + "...",
-                            "explanation": "This is based on the first paragraph of the document.",
-                            "options": {}
-                        })
-                    
-                    if len(content_chunks) >= 2:
-                        default_questions.append({
-                            "question": f"The document discusses {content_chunks[1][:20]}...",
-                            "type": "truefalse",
-                            "correct_answer": "True",
-                            "explanation": "This statement is taken directly from the document.",
-                            "options": {}
-                        })
-                    
-                    if len(content_chunks) >= 3:
-                        default_questions.append({
-                            "question": f"The document mentions [BLANK] as an important concept.",
-                            "type": "fill",
-                            "correct_answer": content_chunks[2].split()[0] if content_chunks[2].split() else "concept",
-                            "explanation": "This term appears in the document.",
-                            "options": {}
-                        })
-                    
-                    if len(content_chunks) >= 4:
-                        default_questions.append({
-                            "question": "Which of the following is mentioned in the document?",
+            # === Fallback if needed ===
+            if len(questions) < total_questions:
+                fallback = []
+                chunks = cleaned_lines[:total_questions]
+                for i in range(total_questions - len(questions)):
+                    line = chunks[i % len(chunks)]
+                    q_type = rotation[i % len(rotation)]
+
+                    if q_type == "mcq":
+                        fallback.append({
+                            "question": f"What is mentioned in the document?",
                             "type": "mcq",
                             "options": {
-                                "A": content_chunks[3][:20] + "...",
-                                "B": "Unrelated topic 1",
-                                "C": "Unrelated topic 2",
-                                "D": "Unrelated topic 3"
+                                "A": line[:30] + "...",
+                                "B": "Option B",
+                                "C": "Option C",
+                                "D": "Option D"
                             },
                             "correct_answer": "A",
-                            "explanation": "Option A is directly mentioned in the document."
+                            "explanation": "Option A is based on document text."
                         })
-                else:
-                    # Create questions of the specified type
-                    for i in range(min(4, len(content_chunks))):
-                        if question_type == 'mcq':
-                            default_questions.append({
-                                "question": f"Which of the following is mentioned in part {i+1} of the document?",
-                                "type": "mcq",
-                                "options": {
-                                    "A": content_chunks[i][:20] + "...",
-                                    "B": "Unrelated topic 1",
-                                    "C": "Unrelated topic 2",
-                                    "D": "Unrelated topic 3"
-                                },
-                                "correct_answer": "A",
-                                "explanation": "Option A is directly mentioned in the document."
-                            })
-                        elif question_type == 'fill':
-                            default_questions.append({
-                                "question": f"According to the document, [BLANK] is mentioned in part {i+1}.",
-                                "type": "fill",
-                                "correct_answer": content_chunks[i].split()[0] if content_chunks[i].split() else "concept",
-                                "explanation": "This term appears in the document.",
-                                "options": {}
-                            })
-                        elif question_type == 'truefalse':
-                            default_questions.append({
-                                "question": f"The document mentions: {content_chunks[i][:30]}...",
-                                "type": "truefalse",
-                                "correct_answer": "True",
-                                "explanation": "This statement is taken directly from the document.",
-                                "options": {}
-                            })
-                        else:  # oneline or default
-                            default_questions.append({
-                                "question": f"What is mentioned in part {i+1} of the document?",
-                                "type": "oneline",
-                                "correct_answer": content_chunks[i][:30] + "...",
-                                "explanation": "This is based on the content of the document.",
-                                "options": {}
-                            })
-                
-                # Use the fallback questions
-                if default_questions:
-                    questions = default_questions
-                else:
-                    raise Exception("Failed to parse any valid questions and couldn't create fallback questions.")
+                    elif q_type == "fill":
+                        fallback.append({
+                            "question": f"The document states that [BLANK] is important.",
+                            "type": "fill",
+                            "correct_answer": line.split()[0] if line.split() else "concept",
+                            "explanation": "Word taken from the line.",
+                            "options": {}
+                        })
+                    elif q_type == "truefalse":
+                        fallback.append({
+                            "question": f"The following statement is from the document: {line[:40]}...",
+                            "type": "truefalse",
+                            "correct_answer": "True",
+                            "explanation": "Taken directly from document.",
+                            "options": {}
+                        })
+                    else:  # oneline
+                        fallback.append({
+                            "question": f"What is meant by: {line[:40]}?",
+                            "type": "oneline",
+                            "correct_answer": line[:30],
+                            "explanation": "Interpreted from document text.",
+                            "options": {}
+                        })
+                questions.extend(fallback)
 
-            # Make question type validation optional
-            # Only check for required types if question_type is 'mixed'
-            if question_type == 'mixed':
-                included_types = {q['type'].lower() for q in questions if 'type' in q}
-                # Make the check more flexible by not requiring all types
-                if not included_types:
-                    raise Exception("No question types specified in generated questions")
-                
-                # Just log missing types instead of raising an error
-                required_types = {'oneline', 'fill', 'truefalse', 'mcq'}
-                missing_types = required_types - included_types
-                if missing_types:
-                    print(f"Note: Some question types are missing: {', '.join(missing_types)}")
-            
-            # Normalize question types if needed
-            for q in questions:
-                if 'type' in q:
-                    q_type = q['type'].lower()
-                    # Map variations to standard types
-                    if q_type in ['multiple_choice', 'multiple-choice', 'multiplechoice']:
-                        q['type'] = 'mcq'
-                    elif q_type in ['fill_in_blank', 'fill-in-blank', 'fillinblank', 'fill_in_the_blank']:
-                        q['type'] = 'fill'
-                    elif q_type in ['true_false', 'true-false', 'trueorfalse']:
-                        q['type'] = 'truefalse'
-                    elif q_type in ['one_line', 'one-line', 'short_answer']:
-                        q['type'] = 'oneline'
+            questions = questions[:total_questions]
 
-            # Ensure you get only up to num_questions
-            questions = questions[:num_questions]
-
-            # Fallback logic to reach required number
-            if len(questions) < num_questions:
-                needed = num_questions - len(questions)
-                fallback_questions = []
-
-                content_lines = file_text.split('\n')
-                content_chunks = [line for line in content_lines if len(line.strip()) > 30]
-
-                for i in range(min(needed, len(content_chunks))):
-                    line = content_chunks[i]
-                    fallback_questions.append({
-                        "question": f"What is the meaning of: {line[:40]}...",
-                        "type": "oneline",
-                        "correct_answer": line[:30] + "...",
-                        "explanation": "Based on the line from the document.",
-                        "options": {}
-                    })
-
-                questions += fallback_questions
-
-
-            # Save as grouped question with JSON body
+            # Save as grouped JSON
             Question.objects.create(
                 quiz=quiz,
                 question=json.dumps(questions, indent=2),
@@ -420,15 +250,15 @@ class QuizFileUploadView(APIView):
 
             return Response({
                 "message": "File uploaded and questions generated successfully.",
-                "file": file_info,
-                "file_size": uploaded_file.size,
-                "file_type": uploaded_file.content_type,
-                "quiz_id": quiz.quiz_id
-            }, status=status.HTTP_201_CREATED)
+                "quiz_id": quiz.quiz_id,
+                "question_count": len(questions),
+                "file": uploaded_file.name
+            }, status=201)
 
         except Exception as e:
             return Response({"error": f"Question generation failed: {str(e)}"}, status=500)
-        
+
+
     def get(self, request, quiz_id, file_id=None, format=None):
         """
         List all files for a quiz or get a specific file
@@ -619,6 +449,48 @@ class QuizListCreateView(generics.ListCreateAPIView):
         else:
             serializer.save()
 
+class StudentQuestionView(generics.RetrieveUpdateDestroyAPIView):
+    """API endpoint for retrieving, updating, and deleting a quiz"""
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+    lookup_field = 'quiz_id'
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
+
+    def get_queryset(self):
+        return Quiz.objects.filter(is_deleted=False)
+
+    def retrieve(self, request, *args, **kwargs):
+        quiz = get_object_or_404(Quiz, quiz_id=kwargs['quiz_id'], is_deleted=False)
+
+        user = request.user
+        role = getattr(user, 'role', '').upper()
+
+        # ✅ Only allow published quizzes for students
+        if role == 'STUDENT':
+            student = Student.objects.filter(email=user.email, is_deleted=False).first()
+            if not student:
+                return Response({"message": "Student record not found"}, status=404)
+            if not quiz.is_published or quiz.department_id != student.department_id:
+                return Response({"message": "Unauthorized or quiz not available"}, status=403)
+
+        # ✅ Serialize quiz
+        quiz_data = QuizSerializer(quiz).data
+
+        # ✅ Fetch and shuffle questions
+        questions = list(quiz.questions.all())
+        random.shuffle(questions)
+
+        serialized_blocks = SlimQuestionSerializer(questions, many=True).data
+
+        # Flatten nested question lists
+        flattened_questions = []
+        for block in serialized_blocks:
+            flattened_questions.extend(block)  # Each block is a list of questions
+
+        random.shuffle(flattened_questions)
+
+        quiz_data['questions'] = flattened_questions
+
+        return Response(quiz_data)
 
 class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     """API endpoint for retrieving, updating, and deleting a quiz"""
@@ -1994,3 +1866,69 @@ class QuizShareView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+# class TamilImageUploadView(APIView):
+#     parser_classes = (MultiPartParser, FormParser, JSONParser)
+#     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+#     # parser_classes = [MultiPartParser]
+#     # permission_classes = [IsAuthenticated]
+
+#     def post(self, request, format=None):
+#         image_file = request.FILES.get("file")
+#         if not image_file:
+#             return Response({"error": "No image file uploaded."}, status=400)
+
+#         # Step 1: OCR
+#         try:
+#             image = Image.open(image_file)
+#             extracted_text = pytesseract.image_to_string(image, lang="tam")
+#         except Exception as e:
+#             return Response({"error": f"Text extraction failed: {str(e)}"}, status=500)
+
+#         if not extracted_text.strip():
+#             return Response({"error": "No text found in image."}, status=400)
+
+#         # Step 2: Detect language (optional validation)
+#         try:
+#             language = detect(extracted_text)
+#             if language != "ta":
+#                 return Response({"error": "Uploaded image does not contain Tamil text."}, status=400)
+#         except:
+#             pass  # proceed anyway
+
+#         # Step 3: Generate questions
+#         prompt = f"""
+#         நீங்கள் ஒரு வினாத்தாள் உருவாக்கும் நிபுணர். கீழே உள்ள தமிழ் உரையைப் பார்த்து 5 வினாக்கள் உருவாக்கவும்.
+#         வினாக்கள் கலந்தவையாக (MCQ, பூர்த்தி, உண்மை/தவறு, ஒரு வரி பதில்) இருக்க வேண்டும்.
+
+#         உரை:
+#         {extracted_text[:1000]}
+
+#         ஒவ்வொரு வினாவையும் இவ்வாறு வடிவமைக்கவும்:
+#         Question: ...
+#         Type: [mcq|fill|truefalse|oneline]
+#         A: ...
+#         B: ...
+#         C: ...
+#         D: ...
+#         Answer: ...
+#         Explanation: ...
+#         """
+
+#         try:
+#             client = OpenAI(api_key=settings.OPENAI_API_KEY)
+#             response = client.chat.completions.create(
+#                 model="gpt-4",
+#                 messages=[
+#                     {"role": "system", "content": "You are a Tamil quiz generator."},
+#                     {"role": "user", "content": prompt}
+#                 ],
+#                 temperature=0.5,
+#                 max_tokens=1500
+#             )
+#             output = response.choices[0].message.content
+#         except Exception as e:
+#             return Response({"error": f"AI request failed: {str(e)}"}, status=500)
+
+#         return Response({
+#             "message": "Questions generated successfully from image.",
