@@ -27,6 +27,7 @@ from students.models import Student
 from django.db.models import Q
 from documents.utils import extract_text_from_file
 import logging
+from .serializers import QuizSerializer, QuestionSerializer,SlimQuestionSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -448,6 +449,48 @@ class QuizListCreateView(generics.ListCreateAPIView):
         else:
             serializer.save()
 
+class StudentQuestionView(generics.RetrieveUpdateDestroyAPIView):
+    """API endpoint for retrieving, updating, and deleting a quiz"""
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+    lookup_field = 'quiz_id'
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
+
+    def get_queryset(self):
+        return Quiz.objects.filter(is_deleted=False)
+
+    def retrieve(self, request, *args, **kwargs):
+        quiz = get_object_or_404(Quiz, quiz_id=kwargs['quiz_id'], is_deleted=False)
+
+        user = request.user
+        role = getattr(user, 'role', '').upper()
+
+        # ✅ Only allow published quizzes for students
+        if role == 'STUDENT':
+            student = Student.objects.filter(email=user.email, is_deleted=False).first()
+            if not student:
+                return Response({"message": "Student record not found"}, status=404)
+            if not quiz.is_published or quiz.department_id != student.department_id:
+                return Response({"message": "Unauthorized or quiz not available"}, status=403)
+
+        # ✅ Serialize quiz
+        quiz_data = QuizSerializer(quiz).data
+
+        # ✅ Fetch and shuffle questions
+        questions = list(quiz.questions.all())
+        random.shuffle(questions)
+
+        serialized_blocks = SlimQuestionSerializer(questions, many=True).data
+
+        # Flatten nested question lists
+        flattened_questions = []
+        for block in serialized_blocks:
+            flattened_questions.extend(block)  # Each block is a list of questions
+
+        random.shuffle(flattened_questions)
+
+        quiz_data['questions'] = flattened_questions
+
+        return Response(quiz_data)
 
 class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     """API endpoint for retrieving, updating, and deleting a quiz"""
@@ -1823,3 +1866,69 @@ class QuizShareView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+# class TamilImageUploadView(APIView):
+#     parser_classes = (MultiPartParser, FormParser, JSONParser)
+#     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+#     # parser_classes = [MultiPartParser]
+#     # permission_classes = [IsAuthenticated]
+
+#     def post(self, request, format=None):
+#         image_file = request.FILES.get("file")
+#         if not image_file:
+#             return Response({"error": "No image file uploaded."}, status=400)
+
+#         # Step 1: OCR
+#         try:
+#             image = Image.open(image_file)
+#             extracted_text = pytesseract.image_to_string(image, lang="tam")
+#         except Exception as e:
+#             return Response({"error": f"Text extraction failed: {str(e)}"}, status=500)
+
+#         if not extracted_text.strip():
+#             return Response({"error": "No text found in image."}, status=400)
+
+#         # Step 2: Detect language (optional validation)
+#         try:
+#             language = detect(extracted_text)
+#             if language != "ta":
+#                 return Response({"error": "Uploaded image does not contain Tamil text."}, status=400)
+#         except:
+#             pass  # proceed anyway
+
+#         # Step 3: Generate questions
+#         prompt = f"""
+#         நீங்கள் ஒரு வினாத்தாள் உருவாக்கும் நிபுணர். கீழே உள்ள தமிழ் உரையைப் பார்த்து 5 வினாக்கள் உருவாக்கவும்.
+#         வினாக்கள் கலந்தவையாக (MCQ, பூர்த்தி, உண்மை/தவறு, ஒரு வரி பதில்) இருக்க வேண்டும்.
+
+#         உரை:
+#         {extracted_text[:1000]}
+
+#         ஒவ்வொரு வினாவையும் இவ்வாறு வடிவமைக்கவும்:
+#         Question: ...
+#         Type: [mcq|fill|truefalse|oneline]
+#         A: ...
+#         B: ...
+#         C: ...
+#         D: ...
+#         Answer: ...
+#         Explanation: ...
+#         """
+
+#         try:
+#             client = OpenAI(api_key=settings.OPENAI_API_KEY)
+#             response = client.chat.completions.create(
+#                 model="gpt-4",
+#                 messages=[
+#                     {"role": "system", "content": "You are a Tamil quiz generator."},
+#                     {"role": "user", "content": prompt}
+#                 ],
+#                 temperature=0.5,
+#                 max_tokens=1500
+#             )
+#             output = response.choices[0].message.content
+#         except Exception as e:
+#             return Response({"error": f"AI request failed: {str(e)}"}, status=500)
+
+#         return Response({
+#             "message": "Questions generated successfully from image.",
