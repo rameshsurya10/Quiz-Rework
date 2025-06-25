@@ -600,4 +600,3 @@ class ListStudentQuizResultsView(APIView):
             result_data.append(data)
 
         return Response(result_data, status=status.HTTP_200_OK)
-
