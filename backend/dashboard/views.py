@@ -19,23 +19,49 @@ logger = logging.getLogger(__name__)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_data(request):
-    """
-    Dashboard data for logged-in user (global stats)
-    """
     try:
         user = request.user
-        logger.info(f"Dashboard request for user: {user.email}")
+        role = getattr(user, "role", None)
+        logger.info(f"Dashboard request for user: {user.email} with role: {role}")
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")  # Check DB connection
+            cursor.execute("SELECT 1")
 
-        students_count = Student.objects.filter(is_deleted=False).count()
-        teachers_count = Teacher.objects.filter(is_deleted=False).count()
-        departments_count = Department.objects.filter().count()
-        quizzes_count = Quiz.objects.filter(is_deleted=False).count()
-        questions_count = Question.objects.count()
+        quiz_attempts = QuizAttempt.objects.none()
+        students_count = 0
+        teachers_count = 0
+        departments_count = 0
+        quizzes_count = 0
+        questions_count = 0
 
-        quiz_attempts = QuizAttempt.objects.select_related("quiz", "student").all()
+        if role == "TEACHER":
+            teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+            if not teacher:
+                return Response({"error": "Teacher not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            department_ids = teacher.department_ids if isinstance(teacher.department_ids, list) else [teacher.department_ids]
+
+            quizzes = Quiz.objects.filter(department_id__in=department_ids, is_deleted=False)
+            quiz_attempts = QuizAttempt.objects.select_related("quiz", "student").filter(quiz__in=quizzes)
+
+            # ✅ FIXED: Count all students in these departments, not just who attempted
+            students_count = Student.objects.filter(department_id__in=department_ids, is_deleted=False).count()
+
+            questions_count = Question.objects.filter(quiz__in=quizzes).count()
+            departments_count = Department.objects.filter(department_id__in=department_ids).count()
+            quizzes_count = quizzes.count()
+            teachers_count = 1  # Only current teacher
+
+        elif role == "ADMIN":
+            students_count = Student.objects.filter(is_deleted=False).count()
+            teachers_count = Teacher.objects.filter(is_deleted=False).count()
+            departments_count = Department.objects.count()
+            quizzes_count = Quiz.objects.filter(is_deleted=False).count()
+            questions_count = Question.objects.count()
+            quiz_attempts = QuizAttempt.objects.select_related("quiz", "student").all()
+
+        else:
+            return Response({"error": "Unauthorized role"}, status=status.HTTP_403_FORBIDDEN)
 
         total_percentage = 0
         valid_attempts = 0
@@ -64,8 +90,7 @@ def dashboard_data(request):
             try:
                 first_qid = attempt.question_answer[0]["question_id"]
                 question_obj = Question.objects.get(question_id=first_qid)
-                all_qs = question_obj.question
-                total_qs = len(all_qs)
+                total_qs = len(question_obj.question)
             except Exception:
                 continue
 
@@ -84,7 +109,6 @@ def dashboard_data(request):
             total_percentage += percentage
             valid_attempts += 1
 
-            # Rank high/low scores
             if high_score is None or percentage > high_score["percentage"]:
                 high_score = {
                     "student_id": student.student_id,
@@ -101,7 +125,6 @@ def dashboard_data(request):
                     "percentage": round(percentage, 2)
                 }
 
-            # Categorize performance
             if percentage >= 90:
                 performance_distribution["excellent"] += 1
             elif percentage >= 70:
@@ -111,7 +134,6 @@ def dashboard_data(request):
             else:
                 performance_distribution["poor"] += 1
 
-            # Department-wise percentage
             dept_id = getattr(student, "department_id", None)
             try:
                 dept_name = Department.objects.get(department_id=dept_id).name if dept_id else "Unknown"
@@ -121,14 +143,12 @@ def dashboard_data(request):
             department_scores[dept_name]["score_sum"] += attempt.score
             department_scores[dept_name]["total_questions"] += total_qs
 
-        # Calculate averages
         average_percentage = round(total_percentage / valid_attempts, 2) if valid_attempts > 0 else 0
 
-        # Format department-wise % scores
-        department_percentages = {}
-        for dept, stats in department_scores.items():
-            if stats["total_questions"] > 0:
-                department_percentages[dept] = round((stats["score_sum"] / stats["total_questions"]) * 100, 2)
+        department_percentages = {
+            dept: round((stats["score_sum"] / stats["total_questions"]) * 100, 2)
+            for dept, stats in department_scores.items() if stats["total_questions"] > 0
+        }
 
         dashboard_data = {
             "students": students_count,
@@ -148,7 +168,6 @@ def dashboard_data(request):
             "department_wise_performance": department_percentages,
         }
 
-        logger.info("Dashboard data sent successfully")
         return Response(dashboard_data)
 
     except Exception as e:
