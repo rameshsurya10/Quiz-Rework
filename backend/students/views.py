@@ -454,6 +454,9 @@ class RetrieveQuizAttemptView(APIView):
             return Response({"error": "No attempt found for this quiz"}, status=status.HTTP_404_NOT_FOUND)
 
         detailed_answers = []
+        answered_question_numbers = set()
+        correct_answer_count = 0
+        wrong_answer_count = 0
 
         for item in attempt.question_answer:
             question_id = item.get("question_id")
@@ -461,9 +464,17 @@ class RetrieveQuizAttemptView(APIView):
             student_answer = item.get("answer")
             is_correct = item.get("is_correct", False)
 
+            if question_number is not None:
+                answered_question_numbers.add(question_number)
+
+            if is_correct:
+                correct_answer_count += 1
+            else:
+                wrong_answer_count += 1
+
             try:
                 question_obj = Question.objects.get(question_id=question_id)
-                sub_questions = question_obj.question  # JSONField: list of questions
+                sub_questions = question_obj.question
 
                 matched = next(
                     (q for q in sub_questions if q.get("question_number") == question_number),
@@ -485,12 +496,44 @@ class RetrieveQuizAttemptView(APIView):
             except Question.DoesNotExist:
                 continue
 
+        try:
+            question_obj = Question.objects.get(question_id=attempt.question_answer[0]["question_id"])
+            all_questions = question_obj.question
+            all_question_numbers = {q.get("question_number") for q in all_questions}
+        except:
+            all_question_numbers = set()
+
+        total_questions = len(all_question_numbers)
+        attended_questions = len(answered_question_numbers)
+        not_answered_questions = total_questions - attended_questions
+
+        percentage = (attempt.score / total_questions) * 100 if total_questions > 0 else 0
+
+        # 🟡 Only calculate rank if passed
+        rank = None
+        if attempt.result.lower() == "pass":
+            all_attempts = QuizAttempt.objects.filter(
+                quiz__quiz_id=quiz_id, result__iexact="pass"
+            ).order_by("-score", "created_at")
+
+            for idx, a in enumerate(all_attempts, start=1):
+                if a.student_id == student.student_id:
+                    rank = idx
+                    break
+
         return Response({
             "attempt_id": attempt.attempt_id,
             "quiz_id": attempt.quiz.quiz_id,
             "score": attempt.score,
             "result": attempt.result,
-            "detailed_answers": detailed_answers  # includes both correct & wrong
+            "total_questions": total_questions,
+            "attended_questions": attended_questions,
+            "not_answered_questions": not_answered_questions,
+            "correct_answer_count": correct_answer_count,
+            "wrong_answer_count": wrong_answer_count,
+            "percentage": round(percentage, 2),
+            "rank": rank,
+            "detailed_answers": detailed_answers
         }, status=status.HTTP_200_OK)
 
 class ListStudentQuizResultsView(APIView):
@@ -498,42 +541,63 @@ class ListStudentQuizResultsView(APIView):
 
     def get(self, request):
         user = request.user
-        role = getattr(user, "role", None)  # Assumes user object has a 'role' field
+        role = getattr(user, "role", None)
 
         if role == "ADMIN":
-            # Admin can view all quiz attempts
             attempts = QuizAttempt.objects.select_related('quiz', 'student').order_by('-created_at')
 
         elif role == "TEACHER":
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
             if not teacher:
                 return Response({"error": "Teacher not found"}, status=status.HTTP_404_NOT_FOUND)
-
-            # Get quiz attempts only for quizzes created by this teacher
             attempts = QuizAttempt.objects.filter(quiz__teacher=teacher).select_related('quiz', 'student').order_by('-created_at')
 
         elif role == "STUDENT":
             student = Student.objects.filter(email=user.email, is_deleted=False).first()
             if not student:
                 return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
-
-            # Only that student's attempts
             attempts = QuizAttempt.objects.filter(student=student).select_related('quiz').order_by('-created_at')
 
         else:
             return Response({"error": "Invalid role"}, status=status.HTTP_403_FORBIDDEN)
 
-        result_data = [
-            {
-                "quiz_id": attempt.quiz.quiz_id,
+        result_data = []
+
+        for attempt in attempts:
+            quiz_id = attempt.quiz.quiz_id
+
+            # Calculate rank only if result is "pass"
+            rank = None
+            if attempt.result.lower() == "pass":
+                all_quiz_attempts = QuizAttempt.objects.filter(quiz__quiz_id=quiz_id, result__iexact="pass").order_by('-score', 'created_at')
+                for idx, a in enumerate(all_quiz_attempts, start=1):
+                    if a.student_id == attempt.student_id:
+                        rank = idx
+                        break
+
+            # Total questions for percentage
+            try:
+                question_obj = Question.objects.get(question_id=attempt.question_answer[0]["question_id"])
+                total_questions = len(question_obj.question)
+            except:
+                total_questions = 0
+
+            percentage = (attempt.score / total_questions) * 100 if total_questions else 0
+
+            data = {
+                "quiz_id": quiz_id,
                 "quiz_title": attempt.quiz.title,
-                "student_name": f"{attempt.student.first_name} {attempt.student.last_name}" if role in ["admin", "teacher"] else None,
                 "score": attempt.score,
+                "percentage": round(percentage, 2),
+                "rank": rank,
                 "result": attempt.result,
                 "attempted_at": attempt.created_at
             }
-            for attempt in attempts
-        ]
+
+            if role in ["ADMIN", "TEACHER"]:
+                data["student_name"] = f"{attempt.student.first_name} {attempt.student.last_name}"
+
+            result_data.append(data)
 
         return Response(result_data, status=status.HTTP_200_OK)
 
