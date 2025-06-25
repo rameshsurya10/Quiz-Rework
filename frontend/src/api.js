@@ -2,7 +2,7 @@ import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
 // API configuration
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 const API_TIMEOUT = parseInt(process.env.REACT_APP_API_TIMEOUT || '30000');
 
 // Create axios instance
@@ -26,11 +26,23 @@ api.interceptors.request.use(
   error => Promise.reject(error)
 );
 
-// Handle auth errors
+// Handle auth errors and network issues
 api.interceptors.response.use(
   response => response,
   async error => {
     const originalRequest = error.config;
+    
+    // Handle network errors
+    if (!error.response) {
+      console.error('Network Error:', error);
+      return Promise.reject({
+        response: {
+          data: {
+            message: 'Network error. Please check your connection and try again.'
+          }
+        }
+      });
+    }
     
     // Handle 401 errors
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -103,7 +115,185 @@ const getUserFromToken = (token) => {
   }
 };
 
-// Authentication functions
+// Separate Admin Authentication Service - Completely Independent
+const adminAuthService = {
+  login: async (email, password) => {
+    console.log('[Admin Auth] Login attempt for:', email);
+    
+    try {
+      // Admin-specific endpoint with isolated error handling
+      const response = await axios.post(`${API_URL}/api/accounts/login/`, {
+        email: email,
+        password: password,
+        role: 'admin'
+      }, {
+        timeout: 15000, // Separate timeout for admin
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Request': 'true' // Mark as admin request
+        }
+      });
+
+      console.log('[Admin Auth] Response received:', response.status);
+
+      if (response.data && (response.data.access || response.data.token)) {
+        const token = response.data.access || response.data.token;
+        
+        // Store admin-specific data
+        localStorage.setItem('token', token);
+        if (response.data.refresh) {
+          localStorage.setItem('refreshToken', response.data.refresh);
+        }
+        
+        localStorage.setItem('userRole', 'admin');
+        localStorage.setItem('user_email', email);
+        
+        const userObj = {
+          email: email,
+          role: 'admin',
+          loginTime: new Date().toISOString(),
+          ...response.data.user
+        };
+        localStorage.setItem('user', JSON.stringify(userObj));
+        
+        console.log('[Admin Auth] Login successful');
+        return {
+          success: true,
+          data: response.data,
+          redirectUrl: '/admin/dashboard'
+        };
+      }
+      
+      console.log('[Admin Auth] Invalid response format');
+      return {
+        success: false,
+        error: 'Invalid admin credentials'
+      };
+    } catch (error) {
+      console.error('[Admin Auth] Login failed:', error);
+      
+      let errorMessage = 'Admin login failed';
+      if (error.response?.status === 401) {
+        errorMessage = 'Invalid admin credentials';
+      } else if (error.response?.status === 400) {
+        errorMessage = error.response.data?.detail || 'Please check your credentials';
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Admin service temporarily unavailable';
+      } else if (!error.response) {
+        errorMessage = 'Network error. Please check your connection';
+      }
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  },
+
+  logout: () => {
+    console.log('[Admin Auth] Logout initiated');
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('user_email');
+    window.location.href = '/login';
+  }
+};
+
+// Separate OTP Authentication Service for Teachers/Students - Completely Independent
+const otpAuthService = {
+  sendOTP: async (email, role) => {
+    console.log('[OTP Auth] Sending OTP for:', role, email);
+    
+    try {
+      // OTP-specific endpoint with isolated error handling
+      const response = await axios.post(`${API_URL}/api/accounts/login/`, {
+        email: email,
+        role: role.toLowerCase()
+      }, {
+        timeout: 20000, // Separate timeout for OTP
+        headers: {
+          'Content-Type': 'application/json',
+          'X-OTP-Request': 'true' // Mark as OTP request
+        }
+      });
+
+      console.log('[OTP Auth] Response received:', response.status);
+
+      // Store OTP session data
+      localStorage.setItem('otp_email', email);
+      localStorage.setItem('otp_role', role.toLowerCase());
+      localStorage.setItem('otp_timestamp', new Date().toISOString());
+
+      // Check various response formats for OTP success
+      const isOTPSent = (
+        (response.data?.message && response.data.message.includes('OTP sent')) ||
+        (response.data?.otp && Array.isArray(response.data.otp) && 
+         response.data.otp.some(msg => typeof msg === 'string' && msg.includes('OTP sent'))) ||
+        (response.data?.detail && response.data.detail.includes('OTP')) ||
+        response.status === 200 // Fallback
+      );
+
+      if (isOTPSent) {
+        console.log('[OTP Auth] OTP sent successfully');
+        return {
+          success: true,
+          data: response.data,
+          redirectUrl: `/verify-otp/${role.toLowerCase()}?email=${encodeURIComponent(email)}`
+        };
+      }
+      
+      // Handle validation errors in OTP array
+      if (response.data?.otp && Array.isArray(response.data.otp)) {
+        const errorMessage = response.data.otp[0] || 'Failed to send OTP';
+        return {
+          success: false,
+          error: errorMessage
+        };
+      }
+      
+      console.log('[OTP Auth] Unexpected response format');
+      return {
+        success: false,
+        error: 'Failed to send OTP. Please try again.'
+      };
+    } catch (error) {
+      console.error('[OTP Auth] Failed for', role, ':', error);
+      
+      let errorMessage = `${role} login failed`;
+      if (error.response?.status === 400) {
+        if (error.response.data?.email) {
+          errorMessage = error.response.data.email[0];
+        } else if (error.response.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else {
+          errorMessage = 'Please check your email address';
+        }
+      } else if (error.response?.status === 404) {
+        errorMessage = `${role} not found. Please contact your administrator`;
+      } else if (error.response?.status === 500) {
+        errorMessage = `${role} service temporarily unavailable`;
+      } else if (!error.response) {
+        errorMessage = 'Network error. Please check your connection';
+      }
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  },
+
+  clearOTPSession: () => {
+    console.log('[OTP Auth] Clearing OTP session');
+    localStorage.removeItem('otp_email');
+    localStorage.removeItem('otp_role');
+    localStorage.removeItem('otp_timestamp');
+  }
+};
+
+// Legacy Authentication functions (kept for backward compatibility)
 const loginUser = async (credentials) => {
   try {
     // Try standard JWT endpoint
@@ -237,8 +427,20 @@ const getCurrentUser = () => {
 };
 
 const getUserRole = () => {
+  // First check if userRole is explicitly stored
+  const storedRole = localStorage.getItem('userRole');
+  if (storedRole) {
+    return storedRole;
+  }
+  
+  // Fallback to getting role from user object or token
   const user = getCurrentUser();
-  return user?.role || '';
+  if (user?.role) {
+    return user.role;
+  }
+  
+  // If no role found, return empty string
+  return '';
 };
 
 // CRUD operations with hooks
@@ -368,11 +570,93 @@ const userApi = {
   }
 };
 
+// OTP Authentication API methods
+const otpApi = {
+  // Initiate OTP login for teacher/student
+  initiateLogin: async (email, role) => {
+    try {
+      const response = await api.post('/api/accounts/login/', {
+        email,
+        role
+      });
+      return { data: response.data };
+    } catch (error) {
+      console.error('Error initiating OTP login:', error);
+      throw error;
+    }
+  },
+
+  // Verify OTP
+  verifyOTP: async (email, role, otp) => {
+    try {
+      const response = await api.post('/api/accounts/verify_otp/', {
+        email,
+        role,
+        otp
+      });
+      
+      if (response.data.access) {
+        // Store tokens
+        localStorage.setItem('token', response.data.access);
+        localStorage.setItem('refreshToken', response.data.refresh);
+        localStorage.setItem('userRole', role);
+        localStorage.setItem('userEmail', email);
+        
+        // Store user data if available
+        if (response.data.user) {
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+        }
+      }
+      
+      return { data: response.data };
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      throw error;
+    }
+  },
+
+  // Admin login with password
+  adminLogin: async (email, password) => {
+    try {
+      const response = await api.post('/api/accounts/login/', {
+        email,
+        password,
+        role: 'admin'
+      });
+      
+      if (response.data.access) {
+        // Store tokens
+        localStorage.setItem('token', response.data.access);
+        localStorage.setItem('refreshToken', response.data.refresh);
+        localStorage.setItem('userRole', 'admin');
+        localStorage.setItem('userEmail', email);
+        
+        // Store user data if available
+        if (response.data.user) {
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+        }
+      }
+      
+      return { data: response.data };
+    } catch (error) {
+      console.error('Error with admin login:', error);
+      throw error;
+    }
+  }
+};
+
 // Export the API service object
 const apiService = {
   api,
   getBaseUrl,
   userApi,
+  otpApi,
+  
+  // New separate authentication services
+  adminAuth: adminAuthService,
+  otpAuth: otpAuthService,
+  
+  // Legacy functions
   parseToken,
   isTokenValid,
   getUserFromToken,
@@ -381,7 +665,14 @@ const apiService = {
   isAuthenticated,
   getCurrentUser,
   getUserRole,
-  useCRUD
+  useCRUD,
+  
+  // Add shortcuts for convenience
+  get: (url, config) => api.get(url, config),
+  post: (url, data, config) => api.post(url, data, config),
+  put: (url, data, config) => api.put(url, data, config),
+  patch: (url, data, config) => api.patch(url, data, config),
+  delete: (url, config) => api.delete(url, config)
 };
 
 export default apiService;

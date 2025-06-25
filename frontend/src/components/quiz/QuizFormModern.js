@@ -42,11 +42,10 @@ const initialFormState = {
   time_limit_minutes: '',
   complexity: '',
   quiz_type: '',
-  department: [],
+  department: '',
   passing_score: '',
   quiz_date: '',
-  page_ranges: '',
-  metadata: {}
+  page_ranges: ''
 };
 
 const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) => {
@@ -68,9 +67,6 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
   const [departmentSelectOpen, setDepartmentSelectOpen] = useState(false);
   const [isFetchingDepartments, setIsFetchingDepartments] = useState(false);
   
-  // Alias form as formData for consistency in the component
-  const formData = form;
-
   useEffect(() => {
     setDepartments(initialDepartments || []);
     if (initialDepartments) {
@@ -106,11 +102,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
     if (form.page_ranges !== pageRanges) {
       setForm(prev => ({
         ...prev,
-        page_ranges: pageRanges,
-        metadata: {
-          ...prev.metadata,
-          page_ranges_str: pageRanges
-        }
+        page_ranges: pageRanges
       }));
       
       // Clear any existing page range errors when the value changes
@@ -129,8 +121,25 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
     ['title', 'complexity', 'quiz_type'].forEach(field => {
       if (!form[field]) errs[field] = 'Required';
     });
-    if (!form.department.length) errs.department = 'Select at least one';
+    if (!form.department) errs.department = 'Please select a subject';
     if (!form.quiz_date) errs.quiz_date = 'Quiz date is required';
+    
+    // Validate files - make sure they exist and are not empty
+    if (!form.files || form.files.length === 0) {
+      errs.files = 'At least one file must be uploaded to generate quiz questions';
+    } else {
+      // Check if any files are empty (0 bytes)
+      const emptyFiles = form.files.filter(file => file.size === 0);
+      if (emptyFiles.length > 0) {
+        errs.files = `The following files are empty: ${emptyFiles.map(f => f.name).join(', ')}`;
+      }
+      
+      // Check if any files are too large
+      const oversizedFiles = form.files.filter(file => file.size > MAX_FILE_SIZE * 1024 * 1024);
+      if (oversizedFiles.length > 0) {
+        errs.files = `The following files exceed the size limit: ${oversizedFiles.map(f => f.name).join(', ')}`;
+      }
+    }
     
     // Check number of questions limit
     if (form.no_of_questions && parseInt(form.no_of_questions) > MAX_QUESTIONS) {
@@ -184,34 +193,86 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       'Mixed': 'mixed'
     };
 
-    // Create a copy of the form data
-    const payload = {
-      ...form,
-      quiz_type: form.complexity,
-      question_type: questionTypeMapping[form.quiz_type] || form.quiz_type,
-    };
-    delete payload.complexity;
-    
-    // Ensure page_ranges are included in both the payload and metadata
-    if (form.page_ranges) {
-      if (!payload.metadata) {
-        payload.metadata = {};
-      }
-      payload.metadata.page_ranges_str = form.page_ranges;
-      payload.page_ranges = form.page_ranges;
-    }
-
     try {
-      // Use onUploadProgress to show real progress, capped at 95%
-      await onSave(payload, (event) => {
-        if (event.lengthComputable) {
-          const progress = Math.min(95, Math.round((100 * event.loaded) / event.total));
-          setUploadProgress(progress);
+      // Simulate initial preparation
+      setUploadProgress(5);
+
+      // Create a clean payload with proper field mapping
+      const payload = {
+        title: form.title,
+        description: form.description,
+        no_of_questions: form.no_of_questions ? parseInt(form.no_of_questions, 10) : undefined,
+        time_limit_minutes: form.time_limit_minutes ? parseInt(form.time_limit_minutes, 10) : undefined,
+        quiz_date: form.quiz_date,
+        question_type: questionTypeMapping[form.quiz_type] || form.quiz_type,
+        quiz_type: form.complexity, // Complexity maps to quiz_type
+        files: form.files
+      };
+
+      // Add department if selected
+      if (form.department) {
+        payload.department_id = form.department;
+      }
+      
+      // Add page ranges if provided
+      if (form.page_ranges) {
+        payload.page_ranges = form.page_ranges;
+      }
+
+      // Add passing score if provided
+      if (form.passing_score) {
+        payload.passing_score = parseInt(form.passing_score, 10);
+      }
+
+      console.log('Submitting quiz payload:', payload);
+
+      // Simulate progress stages with actual progress tracking
+      const simulateProgress = (currentProgress, targetProgress, duration) => {
+        return new Promise((resolve) => {
+          const increment = (targetProgress - currentProgress) / (duration / 100);
+          let progress = currentProgress;
+          
+          const interval = setInterval(() => {
+            progress += increment;
+            if (progress >= targetProgress) {
+              progress = targetProgress;
+              setUploadProgress(progress);
+              clearInterval(interval);
+              resolve();
+            } else {
+              setUploadProgress(Math.round(progress));
+            }
+          }, 100);
+        });
+      };
+
+      // Stage 1: Preparing (0-10%)
+      await simulateProgress(5, 10, 1000);
+
+      // Call the actual onSave function with custom progress handler
+      await onSave(payload, (progressData) => {
+        // Handle different progress data formats
+        let progress = 0;
+        
+        if (progressData.lengthComputable) {
+          // XMLHttpRequest format
+          progress = Math.round((100 * progressData.loaded) / progressData.total);
+        } else if (progressData.loaded !== undefined && progressData.total !== undefined) {
+          // Custom format from quizService
+          progress = Math.round((progressData.loaded * 90) / 100); // Map to 0-90% range
+        } else if (typeof progressData === 'number') {
+          // Direct number
+          progress = Math.round(progressData * 0.9); // Map to 0-90% range
         }
+        
+        // Map upload progress to 10-90% range (leaving 10% for prep and 10% for completion)
+        const mappedProgress = 10 + Math.min(80, progress * 0.8);
+        setUploadProgress(Math.round(mappedProgress));
+        console.log(`Progress update: ${progress}% (raw) -> ${mappedProgress}% (mapped)`);
       });
 
-      // When upload is complete, jump to 100%
-      setUploadProgress(100);
+      // Stage 3: Finalizing (90-100%)
+      await simulateProgress(90, 100, 1000);
 
       // Hold at 100% for 0.5s, then fade out
       setTimeout(() => {
@@ -243,22 +304,35 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       setErrorDialog({
         open: true,
         title: 'Error',
-        message: 'Failed to create quiz. Please try again.'
+        message: err.message || 'Failed to create quiz. Please try again.'
       });
     }
   };
 
   return (
-    <Paper sx={{ p: 4, maxWidth: 1200, mx: 'auto' }} className="glass-effect">
+    <Paper sx={{ 
+      p: { xs: 2, sm: 3, md: 4 }, 
+      maxWidth: 1200, 
+      mx: 'auto',
+      m: { xs: 1, sm: 2 }
+    }} className="glass-effect">
       <form onSubmit={handleSubmit} noValidate>
-        <Grid container spacing={4}>
+        <Grid container spacing={{ xs: 2, sm: 3, md: 4 }}>
           {/* Left Column */}
           <Grid item xs={12} md={6}>
-            <Typography variant="h5" fontWeight={600} mb={3}>
+            <Typography 
+              variant="h5" 
+              fontWeight={600} 
+              mb={3}
+              sx={{ 
+                fontSize: { xs: '1.2rem', sm: '1.4rem', md: '1.5rem' },
+                textAlign: { xs: 'center', md: 'left' }
+              }}
+            >
               Create a New Quiz
             </Typography>
 
-            <Grid container spacing={3}>
+            <Grid container spacing={{ xs: 2, sm: 3 }}>
               {/* Quiz Title */}
               <Grid item xs={12}>
                 <TextField
@@ -269,6 +343,11 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   onChange={e => handleField('title', e.target.value)}
                   error={!!errors.title}
                   helperText={errors.title}
+                  sx={{
+                    '& .MuiInputBase-input': {
+                      fontSize: { xs: '0.9rem', sm: '1rem' }
+                    }
+                  }}
                 />
               </Grid>
 
@@ -278,6 +357,14 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   onFilesSelect={handleFilesSelect} 
                   onPageRangesChange={handlePageRangesChange}
                 />
+                
+                {errors.files && (
+                  <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(244, 67, 54, 0.08)', borderRadius: 1 }}>
+                    <Typography variant="caption" color="error">
+                      {errors.files}
+                    </Typography>
+                  </Box>
+                )}
                 
                 {form.page_ranges && (
                   <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(25, 118, 210, 0.08)', borderRadius: 1 }}>
@@ -341,6 +428,11 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                     min: 1,
                     max: MAX_QUESTIONS
                   }}
+                  sx={{
+                    '& .MuiInputBase-input': {
+                      fontSize: { xs: '0.9rem', sm: '1rem' }
+                    }
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -350,6 +442,11 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   label="Time Limit (min)"
                   value={form.time_limit_minutes}
                   onChange={e => handleField('time_limit_minutes', e.target.value)}
+                  sx={{
+                    '& .MuiInputBase-input': {
+                      fontSize: { xs: '0.9rem', sm: '1rem' }
+                    }
+                  }}
                 />
               </Grid>
 
@@ -366,6 +463,11 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   InputLabelProps={{ shrink: true }}
                   error={!!errors.quiz_date}
                   helperText={errors.quiz_date}
+                  sx={{
+                    '& .MuiInputBase-input': {
+                      fontSize: { xs: '0.9rem', sm: '1rem' }
+                    }
+                  }}
                 />
               </Grid>
 
@@ -373,6 +475,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
               {/* Quiz Type & Complexity */}
               <Grid item xs={12} sm={6}>
                 <Autocomplete
+                  disableClearable
                   options={['MCQ','Fill ups','Mixed','True/False','One Line']}
                   value={form.quiz_type}
                   onChange={(e, v) => handleField('quiz_type', v)}
@@ -384,6 +487,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Autocomplete
+                  disableClearable
                   options={['Easy','Medium','Hard','Mixed']}
                   value={form.complexity}
                   onChange={(e, v) => handleField('complexity', v)}
@@ -394,58 +498,28 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                 />
               </Grid>
 
-              {/* Department Multi-select */}
+              {/* Department Single Select */}
               <Grid item xs={12}>
                 <FormControl fullWidth error={!!errors.department} required>
-                  <InputLabel id="department-select-label">Subjects *</InputLabel>
+                  <InputLabel id="department-select-label">Subject *</InputLabel>
                   <Select
                     labelId="department-select-label"
                     id="department-select"
-                    multiple
-                    open={departmentSelectOpen}
-                    onOpen={() => setDepartmentSelectOpen(true)}
-                    onClose={() => setDepartmentSelectOpen(false)}
-                    value={form.department || []}
-                    onChange={(e) => {
-                      const { target: { value } } = e;
-                      handleField(
-                        'department',
-                        // On autofill we get a stringified value.
-                        typeof value === 'string' ? value.split(',') : value,
-                      );
-                    }}
-                    input={<OutlinedInput label="Subjects *" />}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {(Array.isArray(selected) ? selected : []).map((name) => (
-                          <Chip key={name} label={name} />
-                        ))}
-                      </Box>
-                    )}
-                    MenuProps={{
-                      PaperProps: {
-                        style: {
-                          maxHeight: 300,
-                          width: 250,
-                        },
-                      },
-                    }}
+                    value={form.department || ''}
+                    onChange={(e) => handleField('department', e.target.value)}
+                    label="Subject *"
                   >
                     {deptLoading ? (
-                      <MenuItem disabled>Loading departments...</MenuItem>
+                      <MenuItem disabled>Loading subjects...</MenuItem>
                     ) : departments.length === 0 ? (
-                      <MenuItem disabled>No departments available or failed to load.</MenuItem>
+                      <MenuItem disabled>No subjects available.</MenuItem>
                     ) : (
                       departments.map((dept) => (
-                        <MenuItem key={dept.uuid} value={dept.name}>
-                          <Checkbox checked={(form.department || []).includes(dept.name)} />
-                          <ListItemText primary={dept.name} />
+                        <MenuItem key={dept.uuid} value={dept.department_id}>
+                          {dept.name}
                         </MenuItem>
                       ))
                     )}
-                    <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button size="small" onClick={() => setDepartmentSelectOpen(false)}>Done</Button>
-                    </Box>
                   </Select>
                   {errors.department && <FormHelperText>{errors.department}</FormHelperText>}
                 </FormControl>
@@ -466,14 +540,57 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
             <Divider sx={{ my: 3 }} />
             {loading && (
               <Box width="100%" mb={2}>
-                <LinearProgress variant="determinate" value={uploadProgress} />
-                <Typography variant="caption" textAlign="right" display="block">{uploadProgress}% Uploaded</Typography>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={uploadProgress} 
+                  sx={{
+                    height: 10,
+                    borderRadius: 5,
+                    '& .MuiLinearProgress-bar': {
+                      borderRadius: 5,
+                      backgroundColor: theme => uploadProgress >= 100 ? theme.palette.success.main : theme.palette.primary.main,
+                    }
+                  }}
+                />
+                <Box display="flex" justifyContent="space-between" mt={1}>
+                  <Typography variant="caption" color="textSecondary">
+                    {uploadProgress < 100 ? 'Uploading...' : 'Upload complete!'}
+                  </Typography>
+                  <Typography variant="caption" fontWeight="bold">
+                    {uploadProgress}% {uploadProgress < 100 ? 'Uploaded' : 'Complete'}
+                  </Typography>
+                </Box>
               </Box>
             )}
 
-            <Box display="flex" justifyContent="flex-end" gap={2} mt={3}>
-              <Button variant="outlined" onClick={onCancel} disabled={loading}>Cancel</Button>
-              <Button type="submit" variant="contained" disabled={loading} startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}>
+            <Box 
+              display="flex" 
+              justifyContent={{ xs: 'center', sm: 'flex-end' }} 
+              gap={2} 
+              mt={3}
+              flexDirection={{ xs: 'column', sm: 'row' }}
+            >
+              <Button 
+                variant="outlined" 
+                onClick={onCancel} 
+                disabled={loading}
+                sx={{ 
+                  minHeight: { xs: 48, sm: 40 },
+                  fontSize: { xs: '0.9rem', sm: '0.875rem' }
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                variant="contained" 
+                disabled={loading} 
+                startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
+                sx={{ 
+                  minHeight: { xs: 48, sm: 40 },
+                  fontSize: { xs: '0.9rem', sm: '0.875rem' }
+                }}
+              >
                 {loading ? 'Creating...' : 'Create Quiz'}
               </Button>
             </Box>
@@ -481,7 +598,15 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
 
           {/* Right Column: Illustration */}
           <Grid item xs={12} md={6} display={{ xs: 'none', md: 'block' }}>
-            <QuizImage />
+            <Box sx={{ 
+              height: '100%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              minHeight: { md: 400, lg: 500 }
+            }}>
+              <QuizImage />
+            </Box>
           </Grid>
         </Grid>
       </form>

@@ -6,6 +6,7 @@
 
 html {
   height: 100%;
+  font-size: 16px;
 }
 
 body {
@@ -17,6 +18,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: #f5f7fa;
   height: 100%; /* Changed from min-height: 100vh */
+  overflow-x: hidden;
+  min-height: 100vh;
+  line-height: 1.5;
 }
 
 #root {
@@ -65,4 +69,320 @@ code {
 @keyframes slideUp {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+/* Global responsive styles */
+* {
+  box-sizing: border-box;
+}
+
+/* Responsive font scaling */
+@media (max-width: 600px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  html {
+    font-size: 12px;
+  }
+}
+
+/* Prevent horizontal scrolling */
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* Responsive container */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 8px;
+  }
+}
+
+/* Responsive images */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Responsive tables */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive table {
+  min-width: 600px;
+}
+
+/* Responsive text */
+.text-responsive {
+  font-size: clamp(0.8rem, 2vw, 1rem);
+}
+
+.heading-responsive {
+  font-size: clamp(1.2rem, 4vw, 2rem);
+}
+
+/* Responsive spacing */
+.spacing-responsive {
+  padding: clamp(8px, 2vw, 16px);
+  margin: clamp(4px, 1vw, 8px);
+}
+
+/* Hide scrollbars but keep functionality */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 155, 155, 0.5) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(155, 155, 155, 0.5);
+  border-radius: 20px;
+  border: transparent;
+}
+
+/* Responsive utilities */
+@media (max-width: 600px) {
+  .hide-mobile {
+    display: none !important;
+  }
+  
+  .mobile-only {
+    display: block !important;
+  }
+  
+  .mobile-flex {
+    display: flex !important;
+  }
+}
+
+@media (min-width: 601px) {
+  .mobile-only {
+    display: none !important;
+  }
+  
+  .desktop-only {
+    display: block !important;
+  }
+}
+
+/* Responsive grid */
+.responsive-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+@media (max-width: 600px) {
+  .responsive-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* Responsive flex */
+.responsive-flex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .responsive-flex {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* Touch-friendly buttons */
+@media (max-width: 600px) {
+  button, .button {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 16px;
+  }
+}
+
+/* Responsive form elements */
+@media (max-width: 600px) {
+  input, textarea, select {
+    font-size: 16px; /* Prevents zoom on iOS */
+    padding: 12px;
+  }
+}
+
+/* Additional responsive utilities for quiz app */
+.quiz-form-container {
+  padding: clamp(8px, 2vw, 24px);
+  margin: clamp(4px, 1vw, 16px);
+}
+
+/* Responsive Modal/Dialog */
+@media (max-width: 600px) {
+  .MuiDialog-paper {
+    margin: 16px !important;
+    width: calc(100% - 32px) !important;
+    max-width: none !important;
+  }
+  
+  .MuiDialog-paperScrollPaper {
+    max-height: calc(100% - 32px) !important;
+  }
+}
+
+/* Responsive Cards */
+@media (max-width: 600px) {
+  .MuiCard-root {
+    margin: 8px !important;
+  }
+  
+  .MuiCardContent-root {
+    padding: 12px !important;
+  }
+}
+
+/* Responsive Typography */
+@media (max-width: 480px) {
+  .MuiTypography-h1 {
+    font-size: 1.8rem !important;
+  }
+  
+  .MuiTypography-h2 {
+    font-size: 1.6rem !important;
+  }
+  
+  .MuiTypography-h3 {
+    font-size: 1.4rem !important;
+  }
+  
+  .MuiTypography-h4 {
+    font-size: 1.2rem !important;
+  }
+  
+  .MuiTypography-h5 {
+    font-size: 1.1rem !important;
+  }
+  
+  .MuiTypography-h6 {
+    font-size: 1rem !important;
+  }
+}
+
+/* Responsive Autocomplete */
+@media (max-width: 600px) {
+  .MuiAutocomplete-popper {
+    width: calc(100vw - 32px) !important;
+    left: 16px !important;
+    right: 16px !important;
+  }
+}
+
+/* Responsive Progress Bar */
+.responsive-progress {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+@media (max-width: 600px) {
+  .responsive-progress {
+    max-width: 280px;
+  }
+}
+
+@media (max-width: 400px) {
+  .responsive-progress {
+    max-width: 240px;
+  }
+}
+
+/* Responsive File Upload */
+.file-upload-area {
+  min-height: clamp(120px, 20vw, 200px);
+  padding: clamp(12px, 3vw, 24px);
+}
+
+/* Responsive Sidebar adjustments */
+@media (max-width: 900px) {
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+}
+
+/* Ultra-wide screen adjustments */
+@media (min-width: 1920px) {
+  .container {
+    max-width: 1400px;
+  }
+  
+  .quiz-form-container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+}
+
+/* Print styles */
+@media print {
+  .hide-print {
+    display: none !important;
+  }
+  
+  .MuiDrawer-root {
+    display: none !important;
+  }
+  
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+}
+
+/* High contrast mode improvements */
+@media (prefers-contrast: high) {
+  .glass-effect {
+    background: white !important;
+    border: 2px solid black !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

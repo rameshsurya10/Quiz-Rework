@@ -18,6 +18,7 @@ import QuizFormModern from './QuizFormModern';
 import ConfirmationDialog from '../ConfirmationDialog';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { quizApi, departmentApi } from '../../services/api';
+import { quizService } from '../../services/quizService';
 
 const QuizStyledCard = styled(Card)(({ theme }) => ({
   height: '100%',
@@ -40,7 +41,7 @@ const QuizSection = () => {
   const [quizzes, setQuizzes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState('all');
   const [isCreating, setIsCreating] = useState(false);
   const [quizToDeleteId, setQuizToDeleteId] = useState(null);
   const [isConfirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -55,22 +56,29 @@ const QuizSection = () => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await quizApi.getAll();
-      const quizzesData = response.data.results || response.data || [];
+      const quizzesData = await quizService.getUserquiz(activeTab);
+      console.log('Fetched quizzes:', quizzesData);
+      
+      if (!Array.isArray(quizzesData)) {
+        console.error('Invalid quiz data format:', quizzesData);
+        throw new Error('Invalid response format from server');
+      }
+      
       setQuizzes(quizzesData);
-    } catch (err) {
-      console.error('Failed to fetch quizzes:', err);
-      setError('Failed to load quizzes. Please try again later.');
-      showSnackbar('Failed to fetch quizzes', 'error');
+    } catch (error) {
+      console.error('Error fetching quizzes:', error);
+      setError(error.message || 'Failed to fetch quizzes');
+      setQuizzes([]);
     } finally {
       setIsLoading(false);
     }
-  }, [showSnackbar]);
+  }, [activeTab]);
 
   const fetchDepartments = useCallback(async () => {
     try {
       const { data } = await departmentApi.getAll();
-      setDepartments(data.results || data || []);
+      const departmentsData = data.results || data || [];
+      setDepartments(departmentsData);
     } catch (error) {
       console.error('Failed to fetch departments:', error);
       showSnackbar('Failed to load departments', 'error');
@@ -78,11 +86,23 @@ const QuizSection = () => {
   }, [showSnackbar]);
 
   useEffect(() => {
-    if (!isCreating) {
-      fetchQuizzes();
-      fetchDepartments();
-    }
-  }, [isCreating, fetchQuizzes, fetchDepartments]);
+    const loadData = async () => {
+      if (!isCreating) {
+        try {
+          // Fetch departments first
+          await fetchDepartments();
+          // Then fetch quizzes
+          await fetchQuizzes();
+        } catch (error) {
+          console.error("Error loading data:", error);
+          setError("Failed to load data");
+        }
+      }
+    };
+    
+    loadData();
+    // Only re-run when isCreating changes, not on function reference changes
+  }, [isCreating]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -100,42 +120,17 @@ const QuizSection = () => {
     try {
       setIsCreating(true);
       
-      // Extract files from formData for separate upload
-      const files = formData.files || [];
-      
-      // Remove files from the JSON payload but keep page_ranges in both places
-      const { files: removedFiles, ...quizData } = formData;
-      
-      // Add page_ranges to the quiz metadata if it exists
-      if (formData.page_ranges) {
-        if (!quizData.metadata) {
-          quizData.metadata = {};
-        }
-        quizData.metadata.page_ranges_str = formData.page_ranges;
+      // Validate that required fields are present
+      if (!formData.title || !formData.quiz_type) {
+        showSnackbar('Missing required fields', 'error');
+        setIsCreating(false);
+        return;
       }
       
-      // Create the quiz first
-      const response = await quizApi.create(quizData);
-      const quizId = response.data.quiz_id;
+      // Use the quizService method for creating quiz with files
+      const result = await quizService.createQuizWithFiles(formData, onUploadProgress);
       
-      // If we have files, upload them
-      if (files.length > 0) {
-        const uploadPromises = files.map(async (file) => {
-          const fileFormData = new FormData();
-          fileFormData.append('file', file);
-          
-          // Add page_ranges to the form data if it exists
-          if (formData.page_ranges) {
-            fileFormData.append('page_ranges', formData.page_ranges);
-          }
-          
-          return quizApi.uploadFile(quizId, fileFormData, { onUploadProgress });
-        });
-        
-        await Promise.all(uploadPromises);
-      }
-      
-      // Refresh the quiz list
+      // Refresh quiz list and reset state
       fetchQuizzes();
       setIsCreating(false);
       
@@ -145,7 +140,25 @@ const QuizSection = () => {
     } catch (error) {
       console.error('Error creating quiz:', error);
       setIsCreating(false);
-      showSnackbar(error.response?.data?.error || 'Failed to create quiz', 'error');
+      
+      // Show detailed error message from response if available
+      let errorMsg = 'Failed to create quiz';
+      
+      if (error.response) {
+        if (error.response.data?.detail) {
+          errorMsg = error.response.data.detail;
+        } else if (error.response.data?.message) {
+          errorMsg = error.response.data.message;
+        } else if (error.response.data?.error) {
+          errorMsg = error.response.data.error;
+        } else if (error.response.status === 413) {
+          errorMsg = 'File is too large. Maximum size is 60MB.';
+        } else if (error.response.status === 400) {
+          errorMsg = 'Invalid data. Please check your inputs.';
+        }
+      }
+      
+      showSnackbar(errorMsg, 'error');
     }
   };
 
@@ -187,52 +200,75 @@ const QuizSection = () => {
       setQuestionsLoading(true);
       setSelectedQuiz(null);
       setViewModalOpen(true);
-      const response = await quizApi.getById(quizId);
-      const quizData = response.data;
+      
+      // Use getQuizDetails to get complete quiz data with questions
+      const quizData = await quizService.getQuizDetails(quizId);
+      
+      console.log('Raw quiz data from backend:', quizData);
       
       // Normalize questions structure if needed
       if (quizData.questions) {
         try {
-          // Check if questions is a string that needs parsing
-          if (quizData.questions.length === 1 && typeof quizData.questions[0].question === 'string') {
-            try {
-              const raw = quizData.questions[0].question;
-              const parsed = JSON.parse(raw);
-              quizData.questions = parsed.map((q) => ({
-                question_text: q.question,
-                options: q.options && typeof q.options === 'object' ? 
-                  Object.entries(q.options).map(([key, text], idx) => ({
-                    option_text: text,
-                    is_correct: key === q.correct_answer,
-                    id: idx
-                  })) : [],
-                explanation: q.explanation || '',
-                type: q.type || 'mcq'
-              }));
-            } catch (e) {
-              console.error('Failed to parse embedded questions JSON', e);
-            }
-          } 
           // Handle array of question objects with direct structure
-          else if (Array.isArray(quizData.questions) && quizData.questions.length > 0) {
+          if (Array.isArray(quizData.questions) && quizData.questions.length > 0) {
             quizData.questions = quizData.questions.map((q) => {
+              console.log('Processing question:', {
+                question: q.question,
+                type: q.type,
+                correct_answer: q.correct_answer,
+                options: q.options
+              });
+              
               // If question is already in the correct format
               if (q.question_text) {
                 return q;
               }
               
               // Convert from API format to display format
-              return {
+              const processedQuestion = {
                 question_text: q.question,
-                options: q.options && typeof q.options === 'object' ? 
-                  Object.entries(q.options).map(([key, text], idx) => ({
-                    option_text: text,
-                    is_correct: key === q.correct_answer,
-                    id: idx
-                  })) : [],
                 explanation: q.explanation || '',
-                type: q.type || 'mcq'
+                type: q.type || 'mcq',
+                correct_answer: q.correct_answer
               };
+
+              // Handle MCQ questions with options object
+              if (q.options && typeof q.options === 'object' && !Array.isArray(q.options)) {
+                // Convert options object to array format for display
+                processedQuestion.options = Object.entries(q.options).map(([key, text]) => {
+                  // Extract the correct answer key from "B: Patrick Hitler" format
+                  let correctKey = q.correct_answer;
+                  if (correctKey && correctKey.includes(':')) {
+                    correctKey = correctKey.split(':')[0].trim();
+                  }
+                  
+                  return {
+                    option_text: text,
+                    is_correct: key === correctKey,
+                    id: key
+                  };
+                });
+                
+                console.log('Processed MCQ options:', processedQuestion.options);
+              } else if (Array.isArray(q.options)) {
+                // Already in correct format
+                processedQuestion.options = q.options;
+              } else {
+                processedQuestion.options = [];
+              }
+
+              // For non-MCQ questions, ensure correct_answer is properly set
+              if (q.type !== 'mcq' && q.correct_answer) {
+                // Clean up the correct answer (remove prefix if it exists)
+                let cleanAnswer = q.correct_answer;
+                if (cleanAnswer.includes(':')) {
+                  cleanAnswer = cleanAnswer.split(':')[1]?.trim() || cleanAnswer;
+                }
+                processedQuestion.correct_answer = cleanAnswer;
+              }
+
+              console.log('Final processed question:', processedQuestion);
+              return processedQuestion;
             });
           }
         } catch (e) {
@@ -240,7 +276,7 @@ const QuizSection = () => {
         }
       }
       
-      console.log("Processed quiz data:", quizData);
+      console.log("Final processed quiz data:", quizData);
       setSelectedQuiz(quizData);
     } catch (error) {
       console.error('Failed to fetch quiz details:', error);
@@ -262,51 +298,93 @@ const QuizSection = () => {
     return <Chip label={status} color={color} size="small" sx={{ fontWeight: 'medium' }} />;
   };
 
-  const renderQuizCard = (quiz, index) => (
-    <Grid item xs={12} sm={6} md={4} key={quiz.quiz_id}>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: index * 0.05 }}
-        style={{ height: '100%' }}
-      >
-        <QuizStyledCard className="glass-effect">
-          <CardContent sx={{ flexGrow: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 'bold', flexGrow: 1, mr: 1 }}>
-                {quiz.title}
+  const renderQuizCard = (quiz, index) => {
+    // Helper function to display page ranges from various sources
+    const getPageRanges = (quiz) => {
+      // Check multiple possible locations for page ranges
+      if (quiz.metadata && quiz.metadata.page_ranges_str) {
+        return quiz.metadata.page_ranges_str;
+      } else if (quiz.pages && quiz.pages.length > 0) {
+        return quiz.pages.join(', ');
+      } else if (quiz.page_ranges) {
+        return quiz.page_ranges;
+      }
+      return 'All pages';
+    };
+
+    // Get department name from multiple possible sources
+    const getDepartmentName = (quiz) => {
+      if (quiz.department_name) {
+        return quiz.department_name;
+      } else if (quiz.department && typeof quiz.department === 'object' && quiz.department.name) {
+        return quiz.department.name;
+      } else if (departments.length > 0 && quiz.department_id) {
+        const dept = departments.find(d => d.id === quiz.department_id);
+        return dept ? dept.name : 'Not assigned';
+      }
+      return 'Not assigned';
+    };
+    
+    // Get passing score from multiple possible sources
+    const getPassingScore = (quiz) => {
+      // Check different locations for passing score with strict type checking
+      const passingScore = quiz.passing_score !== undefined && quiz.passing_score !== null
+        ? quiz.passing_score
+        : quiz.metadata?.passing_score;
+
+      if (passingScore !== undefined && passingScore !== null) {
+        return `${passingScore}%`;
+      }
+      
+      return '60%'; // Default passing score
+    };
+
+    return (
+      <Grid item xs={12} sm={6} md={4} key={quiz.quiz_id}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.05 }}
+          style={{ height: '100%' }}
+        >
+          <QuizStyledCard className="glass-effect">
+            <CardContent sx={{ flexGrow: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', flexGrow: 1, mr: 1 }}>
+                  {quiz.title}
+                </Typography>
+                {getStatusChip(quiz.is_published)}
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, minHeight: '40px' }}>
+                {quiz.description || 'No description available.'}
               </Typography>
-              {getStatusChip(quiz.is_published)}
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, minHeight: '40px' }}>
-              {quiz.description || 'No description available.'}
-            </Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'text.secondary', mb: 1 }}>
-              <Typography variant="caption">{quiz.no_of_questions || 0} Questions</Typography>
-              <Typography variant="caption">{quiz.time_limit_minutes || 'N/A'} min limit</Typography>
-            </Box>
-            <Typography variant="caption" color="text.secondary">
-              Dept: {quiz.department_name || 'General'} | Type: {quiz.quiz_type || 'Normal'}
-            </Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'text.secondary', mt: 1 }}>
-              <Typography variant="caption">Type: {quiz.question_type || 'Mixed'}</Typography>
-              <Typography variant="caption">Pass Score: {quiz.passing_score || 'N/A'}</Typography>
-            </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              Pages: {quiz.pages && quiz.pages.length > 0 ? quiz.pages.join(', ') : 'N/A'}
-            </Typography>
-          </CardContent>
-          <CardActions sx={{ justifyContent: 'space-between', p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
-          <Button variant="contained" startIcon={<AssignmentIcon />} size="small" onClick={() => handlePublishClick(quiz.quiz_id)}>PUBLISH</Button>
-            <Box>
-              <IconButton size="small" onClick={() => handleViewQuiz(quiz.quiz_id)}><VisibilityIcon /></IconButton>
-              <IconButton size="small" onClick={() => handleDelete(quiz.quiz_id)}><DeleteIcon /></IconButton>
-            </Box>
-          </CardActions>
-        </QuizStyledCard>
-      </motion.div>
-    </Grid>
-  );
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'text.secondary', mb: 1 }}>
+                <Typography variant="caption">{quiz.no_of_questions || 0} Questions</Typography>
+                <Typography variant="caption">{quiz.time_limit_minutes || 'N/A'} min limit</Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                Dept: {getDepartmentName(quiz)} | Type: {quiz.quiz_type || 'Normal'}
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'text.secondary', mt: 1 }}>
+                <Typography variant="caption">Type: {quiz.question_type || 'Mixed'}</Typography>
+                <Typography variant="caption">Pass Score: {getPassingScore(quiz)}</Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                Pages: {getPageRanges(quiz)}
+              </Typography>
+            </CardContent>
+            <CardActions sx={{ justifyContent: 'space-between', p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+            <Button variant="contained" startIcon={<AssignmentIcon />} size="small" onClick={() => handlePublishClick(quiz.quiz_id)}>PUBLISH</Button>
+              <Box>
+                <IconButton size="small" onClick={() => handleViewQuiz(quiz.quiz_id)}><VisibilityIcon /></IconButton>
+                <IconButton size="small" onClick={() => handleDelete(quiz.quiz_id)}><DeleteIcon /></IconButton>
+              </Box>
+            </CardActions>
+          </QuizStyledCard>
+        </motion.div>
+      </Grid>
+    );
+  };
 
   const publishedQuizzes = quizzes.filter(q => q.is_published);
   const draftQuizzes = quizzes.filter(q => !q.is_published);
@@ -334,45 +412,46 @@ const QuizSection = () => {
             />
 
             {isLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <CircularProgress />
+              </Box>
             ) : error ? (
-              <Typography color="error" sx={{ textAlign: 'center', mt: 4 }}>{error}</Typography>
+              <Box sx={{ mt: 4, p: 3, bgcolor: 'error.main', color: 'error.contrastText', borderRadius: 1 }}>
+                <Typography>{error}</Typography>
+              </Box>
+            ) : quizzes.length === 0 ? (
+              <Box sx={{ 
+                mt: 4, 
+                p: 4, 
+                textAlign: 'center',
+                bgcolor: 'background.paper',
+                borderRadius: 2,
+                boxShadow: 1
+              }}>
+                <Typography variant="h6" gutterBottom>No Quizzes Found</Typography>
+                <Typography color="text.secondary">
+                  Get started by creating your first quiz using the button above.
+                </Typography>
+              </Box>
             ) : (
               <>
-                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
-                  <Paper elevation={3} sx={{ borderRadius: '50px', overflow: 'hidden' }} className="glass-effect">
-                    <Tabs
-                      value={activeTab}
-                      onChange={handleTabChange}
-                      indicatorColor="primary"
-                      textColor="primary"
-                      variant="fullWidth"
-                      sx={{
-                        '& .MuiTabs-indicator': {
-                          height: '100%',
-                          backgroundColor: theme.palette.primary.main,
-                          borderRadius: '50px',
-                          zIndex: 1,
-                        },
-                        '& .MuiTab-root': {
-                          position: 'relative',
-                          zIndex: 2,
-                          color: theme.palette.text.secondary,
-                          transition: 'color 0.3s ease',
-                          '&.Mui-selected': {
-                            color: theme.palette.primary.contrastText,
-                          },
-                        },
-                      }}
-                    >
-                      <Tab label={`Published (${publishedQuizzes.length})`} />
-                      <Tab label={`Drafts (${draftQuizzes.length})`} />
-                    </Tabs>
-                  </Paper>
-                </Box>
+                <Paper sx={{ mb: 3, mt: 3 }}>
+                  <Tabs 
+                    value={activeTab} 
+                    onChange={(e, newValue) => setActiveTab(newValue)} 
+                    sx={{ borderBottom: 1, borderColor: 'divider' }}
+                  >
+                    <Tab value="all" label={`All Quizzes (${quizzes.length})`} />
+                    <Tab value="published" label={`Published (${publishedQuizzes.length})`} />
+                    <Tab value="draft" label={`Drafts (${draftQuizzes.length})`} />
+                  </Tabs>
+                </Paper>
 
                 <Grid container spacing={3}>
-                  {(activeTab === 0 ? publishedQuizzes : draftQuizzes).map((quiz, index) => renderQuizCard(quiz, index))}
+                  {(activeTab === 'all' ? quizzes :
+                    activeTab === 'published' ? publishedQuizzes :
+                    draftQuizzes
+                  ).map((quiz, index) => renderQuizCard(quiz, index))}
                 </Grid>
               </>
             )}

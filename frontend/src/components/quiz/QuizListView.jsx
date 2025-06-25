@@ -52,6 +52,78 @@ const QuizListView = () => {
       setQuestionsLoading(true);
       setViewModalOpen(true);
       const data = await quizService.getQuizDetails(quizId);
+      
+      console.log('Raw quiz data from backend:', data);
+      
+      // Process questions to normalize the data structure
+      if (data.questions && Array.isArray(data.questions)) {
+        data.questions = data.questions.map((question, qIndex) => {
+          console.log(`Processing question ${qIndex + 1}:`, {
+            question: question.question,
+            type: question.type,
+            correct_answer: question.correct_answer,
+            options: question.options,
+            options_type: typeof question.options
+          });
+          
+          const processedQuestion = {
+            ...question,
+            question_text: question.question_text || question.question,
+            type: question.type || 'mcq'
+          };
+
+          // Handle MCQ questions with options object
+          if (question.type === 'mcq' && question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
+            console.log('Converting MCQ options object to array:', question.options);
+            
+            // Convert options object to array format for display
+            processedQuestion.options = Object.entries(question.options).map(([key, text]) => {
+              // Extract the correct answer key from "B: Patrick Hitler" format
+              let correctKey = question.correct_answer;
+              if (correctKey && correctKey.includes(':')) {
+                correctKey = correctKey.split(':')[0].trim();
+              }
+              
+              const optionObj = {
+                option_text: text,
+                is_correct: key === correctKey,
+                id: key
+              };
+              
+              console.log(`  Option ${key}: "${text}", is_correct: ${key === correctKey} (correctKey: ${correctKey})`);
+              return optionObj;
+            });
+            
+            console.log('Final processed MCQ options:', processedQuestion.options);
+          } else if (question.type === 'mcq' && Array.isArray(question.options)) {
+            // Already in correct format
+            processedQuestion.options = question.options;
+            console.log('MCQ options already in array format:', processedQuestion.options);
+          } else if (question.type === 'mcq') {
+            // MCQ but no valid options
+            processedQuestion.options = [];
+            console.log('MCQ question but no valid options found');
+          } else {
+            // Non-MCQ questions
+            processedQuestion.options = [];
+          }
+
+          // For non-MCQ questions, ensure correct_answer is properly set
+          if (question.type !== 'mcq' && question.correct_answer) {
+            // Clean up the correct answer (remove prefix if it exists)
+            let cleanAnswer = question.correct_answer;
+            if (cleanAnswer.includes(':')) {
+              cleanAnswer = cleanAnswer.split(':')[1]?.trim() || cleanAnswer;
+            }
+            processedQuestion.correct_answer = cleanAnswer;
+          }
+
+          console.log(`Final processed question ${qIndex + 1}:`, processedQuestion);
+          return processedQuestion;
+        });
+      }
+      
+      console.log('Final processed quiz data:', data);
       setSelectedQuiz(data);
     } catch (error) {
       toast({
@@ -192,16 +264,37 @@ const QuizListView = () => {
                 <CardBody py={4}>
                     <VStack align="stretch" spacing={2}>
                         <HStack justifyContent="space-between">
-                            <Text fontSize="sm" color="gray.600">{quiz.question_count || 0} Questions</Text>
-                            <Text fontSize="sm" color="gray.600">{quiz.time_limit_minutes ? `${quiz.time_limit_minutes} min limit` : 'N/A min limit'}</Text>
+                            <Text fontSize="sm" color="gray.600">{quiz.no_of_questions || 0} Questions</Text>
+                            <Text fontSize="sm" color="gray.600">{quiz.time_limit_minutes ? `${quiz.time_limit_minutes} min limit` : '30 min limit'}</Text>
                         </HStack>
                         <HStack justifyContent="space-between">
-                            <Text fontSize="sm" color="gray.600">Dept: {quiz.department?.name || 'General'} | Type: {quiz.quiz_type_display || 'Easy'}</Text>
-                            <Text fontSize="sm" color="gray.600">Pass Score: {quiz.passing_score !== null ? `${quiz.passing_score}%` : 'N/A'}</Text>
+                            <Text fontSize="sm" color="gray.600">
+                              Dept: {quiz.department_name || (quiz.department && quiz.department.name) || 'Not assigned'}
+                            </Text>
+                            <Text fontSize="sm" color="gray.600">
+                              Type: {quiz.quiz_type_display || quiz.quiz_type || 'Easy'}
+                            </Text>
                         </HStack>
                         <HStack justifyContent="space-between">
-                            <Text fontSize="sm" color="gray.600">Type: {quiz.quiz_type || 'multiple_choice'}</Text>
-                            <Text fontSize="sm" color="gray.600">Pages: {quiz.source_document_page_range || 'N/A'}</Text>
+                            <Text fontSize="sm" color="gray.600">
+                              Pass Score: {
+                                (() => {
+                                  // Check various locations for passing score
+                                  if (quiz.passing_score !== undefined && quiz.passing_score !== null) {
+                                    return `${quiz.passing_score}%`;
+                                  } else if (quiz.metadata && quiz.metadata.passing_score) {
+                                    return `${quiz.metadata.passing_score}%`;
+                                  }
+                                  return '60%';  // Default
+                                })()
+                              }
+                            </Text>
+                            <Text fontSize="sm" color="gray.600">
+                              {new Date(quiz.quiz_date).toLocaleDateString()}
+                            </Text>
+                        </HStack>
+                        <HStack justifyContent="space-between">
+                            <Text fontSize="sm" color="gray.600">Pages: {quiz.metadata?.page_ranges_str || 'N/A'}</Text>
                         </HStack>
                     </VStack>
                 </CardBody>
@@ -262,16 +355,45 @@ const QuizListView = () => {
                     </CardHeader>
                     <CardBody>
                       <Text fontWeight="bold" mb={3}>{question.question_text}</Text>
-                      <VStack align="stretch" spacing={2}>
-                        {question.options.map((option, i) => (
-                          <HStack key={i} p={2} bg={option.is_correct ? 'green.100' : 'transparent'} borderRadius="md">
-                            <Text fontWeight={option.is_correct ? 'bold' : 'normal'}>
-                              {String.fromCharCode(65 + i)}. {option.option_text}
-                            </Text>
-                            {option.is_correct && <CheckIcon color="green.500" ml="auto"/>}
-                          </HStack>
-                        ))}
-                      </VStack>
+                      
+                      {/* Debug info */}
+                      <Text fontSize="xs" color="gray.500" mb={2}>
+                        Debug: Type={question.type}, Options={question.options?.length || 0}
+                      </Text>
+                      
+                      {/* Multiple choice options */}
+                      {question.type === 'mcq' && question.options && question.options.length > 0 && (
+                        <VStack align="stretch" spacing={2} mb={3}>
+                          <Text fontSize="sm" fontWeight="semibold" color="gray.600">Options:</Text>
+                          {question.options.map((option, i) => (
+                            <HStack key={i} p={2} bg={option.is_correct ? 'green.100' : 'gray.50'} borderRadius="md" border="1px solid" borderColor={option.is_correct ? 'green.300' : 'gray.200'}>
+                              <Text fontWeight={option.is_correct ? 'bold' : 'normal'} color={option.is_correct ? 'green.700' : 'gray.700'}>
+                                {String.fromCharCode(65 + i)}. {option.option_text}
+                              </Text>
+                              {option.is_correct && <CheckIcon color="green.500" ml="auto"/>}
+                            </HStack>
+                          ))}
+                        </VStack>
+                      )}
+                      
+                      {/* Show if MCQ but no options processed */}
+                      {question.type === 'mcq' && (!question.options || question.options.length === 0) && (
+                        <Box p={3} bg="red.50" borderRadius="md" border="1px solid" borderColor="red.200" mb={3}>
+                          <Text color="red.700" fontSize="sm">
+                            Debug: MCQ question but no options found. Raw options: {JSON.stringify(question.options)}
+                          </Text>
+                        </Box>
+                      )}
+                      
+                      {/* True/False, Fill, or One-line answer types */}
+                      {(question.type === 'truefalse' || question.type === 'fill' || question.type === 'oneline') && (
+                        <Box mt={2} p={3} bg="green.50" borderRadius="md" border="1px solid" borderColor="green.200">
+                          <Text fontWeight="bold" color="green.700">
+                            Correct Answer: {question.correct_answer}
+                          </Text>
+                        </Box>
+                      )}
+                      
                       {question.explanation && (
                         <Box mt={3} p={3} bg="gray.100" borderRadius="md">
                           <Text fontWeight="bold">Explanation:</Text>

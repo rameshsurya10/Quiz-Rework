@@ -1,31 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { CssBaseline, CircularProgress, Box } from '@mui/material';
-import { ThemeProvider } from './contexts/ThemeContext';
+import { CircularProgress, Box } from '@mui/material';
+import { CustomThemeProvider } from './contexts/ThemeContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import TeacherSection from './components/teachers/TeacherSection';
 import StudentSection from './components/students/StudentSection';
+import TeacherStudentSection from './components/students/TeacherStudentSection';
 import QuizSection from './components/quiz/QuizSection';
+import TeacherQuizSection from './components/quiz/TeacherQuizSection';
 import ResultsSection from './components/results/ResultsSection';
 import ProfilePage from './components/profile/ProfilePage';
 import SettingsPage from './components/settings/SettingsPage';
+import TeacherSettingsPage from './components/settings/TeacherSettingsPage';
 import DepartmentSection from './components/departments/DepartmentSection';
 import StudentReportSection from './components/results/StudentReportSection'; // Added for student reports
 import FullLayout from './components/FullLayout';
 import { SnackbarProvider } from './contexts/SnackbarContext';
 import apiService from './api';
 
+// New authentication components
+import TeacherDashboard, { TeacherLayout } from './components/dashboards/TeacherDashboard';
+import StudentDashboard from './components/dashboards/StudentDashboard';
+// Add OTP Verification component import
+import OTPVerification from './components/auth/OTPVerification';
+
 // Protected route component
 const ProtectedRoute = ({ children }) => {
   const authenticated = apiService.isAuthenticated();
+  const userRole = localStorage.getItem('userRole');
+  const hasToken = !!localStorage.getItem('token');
+  
+  // Add debugging logs
+  console.log('ProtectedRoute check:', {
+    authenticated,
+    userRole,
+    hasToken,
+    path: window.location.pathname
+  });
   
   if (!authenticated) {
+    console.log('Not authenticated, redirecting to login');
     // Not authenticated, redirect to login
     return <Navigate to="/login" replace />;
   }
   
   // Authenticated, render the child component
+  console.log('Authenticated, rendering protected content');
   return children;
 };
 
@@ -50,8 +71,7 @@ function App() {
   
   if (loading) {
     return (
-      <ThemeProvider>
-        <CssBaseline />
+      <CustomThemeProvider>
         <Box sx={{ 
           display: 'flex', 
           flexDirection: 'column',
@@ -64,25 +84,135 @@ function App() {
             Loading application...
           </Box>
         </Box>
-      </ThemeProvider>
+      </CustomThemeProvider>
     );
   }
   
   return (
-    <ThemeProvider>
+    <CustomThemeProvider>
       <SnackbarProvider>
-        <CssBaseline />
         <BrowserRouter>
         <Routes>
-          {/* Public routes */}
+          {/* Public routes - New Authentication System */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          
+          {/* Login route */}
           <Route path="/login" element={<Login />} />
           
-          {/* Protected routes */}
+          {/* CRITICAL: Add the missing OTP verification route */}
+          <Route path="/verify-otp/:role" element={<OTPVerification />} />
+          
+          {/* Role-specific dashboards */}
+          <Route path="/teacher-dashboard" element={
+            <ProtectedRoute>
+              <TeacherDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/student-dashboard" element={
+            <ProtectedRoute>
+              <StudentDashboard />
+            </ProtectedRoute>
+          } />
+
+          {/* Teacher-specific routes with TeacherLayout */}
+          <Route path="/teacher/quiz" element={
+            <ProtectedRoute>
+              <TeacherLayout>
+                <TeacherQuizSection />
+              </TeacherLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/teacher/students" element={
+            <ProtectedRoute>
+              <TeacherLayout>
+                <TeacherStudentSection />
+              </TeacherLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/teacher/departments" element={
+            <ProtectedRoute>
+              <TeacherLayout>
+                <DepartmentSection />
+              </TeacherLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/teacher/settings" element={
+            <ProtectedRoute>
+              <TeacherLayout>
+                <TeacherSettingsPage />
+              </TeacherLayout>
+            </ProtectedRoute>
+          } />
+          
+          {/* Protected routes - Admin Dashboard */}
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <Dashboard />
             </ProtectedRoute>
           } />
+          <Route path="/admin/dashboard" element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } />
+          {/* Admin Routes */}
+          <Route path="/admin/teachers" element={
+            <ProtectedRoute>
+              <FullLayout>
+                <TeacherSection />
+              </FullLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/teachers/add" element={
+            <ProtectedRoute>
+              <FullLayout>
+                <TeacherSection initialOpenDialog={true} />
+              </FullLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/students" element={
+            <ProtectedRoute>
+              <FullLayout>
+                <StudentSection />
+              </FullLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/students/add" element={
+            <ProtectedRoute>
+              <FullLayout>
+                <StudentSection initialOpenDialog={true} />
+              </FullLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/quiz" element={
+            <ProtectedRoute>
+              <QuizSection />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/results" element={
+            <ProtectedRoute>
+              <ResultsSection />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/profile" element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/settings" element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/departments" element={
+            <ProtectedRoute>
+              <FullLayout>
+                <DepartmentSection />
+              </FullLayout>
+            </ProtectedRoute>
+          } />
+          
+          {/* Legacy routes for backward compatibility */}
           <Route path="/teachers" element={
             <ProtectedRoute>
               <FullLayout>
@@ -97,8 +227,6 @@ function App() {
               </FullLayout>
             </ProtectedRoute>
           } />
-          
-          {/* Student Routes */}
           <Route path="/students" element={
             <ProtectedRoute>
               <FullLayout>
@@ -113,49 +241,26 @@ function App() {
               </FullLayout>
             </ProtectedRoute>
           } />
-
-          {/* Quiz Management Route */}
           <Route path="/quiz" element={
             <ProtectedRoute>
               <QuizSection />
             </ProtectedRoute>
           } />
-
-          {/* Results Route */}
           <Route path="/results" element={
             <ProtectedRoute>
               <ResultsSection />
             </ProtectedRoute>
           } />
-
-          {/* Profile Page Route - Handles both profile and user management */}
           <Route path="/profile" element={
             <ProtectedRoute>
               <ProfilePage />
             </ProtectedRoute>
-          }>
-            <Route path="users" element={
-              <ProtectedRoute>
-                <ProfilePage initialTab={1} />
-              </ProtectedRoute>
-            } />
-          </Route>
-
-          {/* Settings Page Route */}
+          } />
           <Route path="/settings" element={
             <ProtectedRoute>
               <SettingsPage />
             </ProtectedRoute>
           } />
-
-          {/* Student Reports Route */}
-          {/* <Route path="/student-reports" element={
-            <ProtectedRoute>
-              <StudentReportSection />
-            </ProtectedRoute>
-          } /> */}
-
-          {/* Department Management Route */}
           <Route path="/departments" element={
             <ProtectedRoute>
               <FullLayout>
@@ -164,23 +269,51 @@ function App() {
             </ProtectedRoute>
           } />
           
-          {/* Redirect root to dashboard if authenticated, otherwise to login */}
-          <Route path="/" element={
-            apiService.isAuthenticated() ? 
-              <Navigate to="/dashboard" replace /> : 
-              <Navigate to="/login" replace />
-          } />
-          
-          {/* Catch all - redirect to dashboard if authenticated, otherwise to login */}
+          {/* Catch all - redirect based on authentication and role */}
           <Route path="*" element={
-            apiService.isAuthenticated() ? 
-              <Navigate to="/dashboard" replace /> : 
-              <Navigate to="/login" replace />
+            (() => {
+              const authenticated = apiService.isAuthenticated();
+              console.log('Catch-all route triggered:', { 
+                path: window.location.pathname, 
+                authenticated 
+              });
+              
+              if (!authenticated) {
+                console.log('Not authenticated, redirecting to login');
+                return <Navigate to="/login" replace />;
+              }
+              
+              // User is authenticated, redirect based on role
+              const userRole = localStorage.getItem('userRole');
+              const apiRole = apiService.getUserRole();
+              const effectiveRole = userRole || apiRole;
+              
+              console.log('Authenticated user routing:', { 
+                userRole, 
+                apiRole, 
+                effectiveRole,
+                path: window.location.pathname
+              });
+              
+              if (effectiveRole === 'teacher') {
+                console.log('Redirecting teacher to teacher dashboard');
+                return <Navigate to="/teacher-dashboard" replace />;
+              } else if (effectiveRole === 'student') {
+                console.log('Redirecting student to student dashboard');
+                return <Navigate to="/student-dashboard" replace />;
+              } else if (effectiveRole === 'admin') {
+                console.log('Redirecting admin to admin dashboard');
+                return <Navigate to="/admin/dashboard" replace />;
+              } else {
+                console.log('Unknown role, defaulting to main dashboard');
+                return <Navigate to="/dashboard" replace />;
+              }
+            })()
           } />
         </Routes>
         </BrowserRouter>
       </SnackbarProvider>
-    </ThemeProvider>
+    </CustomThemeProvider>
   );
 }
 

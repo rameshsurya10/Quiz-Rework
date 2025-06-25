@@ -1,16 +1,43 @@
 .loader-overlay {
     position: fixed;
     top: 0;
-    left: 240px; /* Assuming sidebar width is 240px */
-    width: calc(100% - 240px); /* Adjust width to account for sidebar */
+    left: 0;
+    width: 100%;
     height: 100%;
-    background-color: rgba(255, 255, 255, 0.88); /* Lighter background */
+    background-color: rgba(255, 255, 255, 0.88);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 9999;
     backdrop-filter: blur(8px);
     animation: fadeIn 0.3s ease-in-out;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* Desktop with sidebar */
+@media (min-width: 900px) {
+    .loader-overlay {
+        left: 280px;
+        width: calc(100% - 280px);
+    }
+}
+
+/* Tablet landscape */
+@media (min-width: 768px) and (max-width: 899px) {
+    .loader-overlay {
+        left: 64px;
+        width: calc(100% - 64px);
+    }
+}
+
+/* Mobile and tablet portrait */
+@media (max-width: 767px) {
+    .loader-overlay {
+        left: 0;
+        width: 100%;
+        padding: 16px;
+    }
 }
 
 .loader-overlay.fade-out {
@@ -20,6 +47,17 @@
 .loader-content {
     text-align: center;
     animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    width: 100%;
+    max-width: 400px;
+    min-width: 280px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+    .loader-content {
+        min-width: 240px;
+        max-width: 320px;
+    }
 }
 
 .loader-image-container {
@@ -30,6 +68,29 @@
     justify-content: center;
     align-items: center;
     margin: 0 auto 20px;
+}
+
+/* Responsive image container */
+@media (max-width: 768px) {
+    .loader-image-container {
+        width: 150px;
+        height: 150px;
+    }
+}
+
+@media (max-width: 480px) {
+    .loader-image-container {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 15px;
+    }
+}
+
+@media (max-width: 360px) {
+    .loader-image-container {
+        width: 100px;
+        height: 100px;
+    }
 }
 
 .loader-image {
@@ -51,11 +112,112 @@
     z-index: 2;
 }
 
+/* Responsive percentage text */
+@media (max-width: 768px) {
+    .loader-percentage {
+        font-size: 28px;
+    }
+}
+
+@media (max-width: 480px) {
+    .loader-percentage {
+        font-size: 24px;
+    }
+}
+
+@media (max-width: 360px) {
+    .loader-percentage {
+        font-size: 20px;
+    }
+}
+
+.progress-bar-container {
+    margin: 20px auto;
+    width: 100%;
+    max-width: 280px;
+    padding: 0 10px;
+}
+
+/* Responsive progress bar */
+@media (max-width: 768px) {
+    .progress-bar-container {
+        max-width: 240px;
+        margin: 15px auto;
+    }
+}
+
+@media (max-width: 480px) {
+    .progress-bar-container {
+        max-width: 200px;
+        margin: 12px auto;
+        padding: 0 5px;
+    }
+}
+
+@media (max-width: 360px) {
+    .progress-bar-container {
+        max-width: 180px;
+        margin: 10px auto;
+    }
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive progress bar height */
+@media (max-width: 480px) {
+    .progress-bar {
+        height: 6px;
+    }
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2196f3, #64b5f6);
+    border-radius: 4px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.4);
+    animation: progressGlow 2s ease-in-out infinite;
+}
+
 .loader-text {
     font-family: 'Poppins', sans-serif;
     font-size: 18px;
     color: #120e0e;
     letter-spacing: 0.5px;
+    margin-top: 15px;
+    transition: color 0.3s ease;
+    line-height: 1.4;
+    padding: 0 10px;
+}
+
+/* Responsive text */
+@media (max-width: 768px) {
+    .loader-text {
+        font-size: 16px;
+        margin-top: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .loader-text {
+        font-size: 14px;
+        margin-top: 10px;
+        padding: 0 5px;
+    }
+}
+
+@media (max-width: 360px) {
+    .loader-text {
+        font-size: 13px;
+        margin-top: 8px;
+    }
 }
 
 @keyframes fadeIn {
@@ -71,6 +233,78 @@
 @keyframes popIn {
     from { transform: scale(0.5); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes progressGlow {
+    0%, 100% {
+        box-shadow: 0 2px 4px rgba(33, 150, 243, 0.4);
+    }
+    50% {
+        box-shadow: 0 2px 8px rgba(33, 150, 243, 0.6), 0 0 16px rgba(33, 150, 243, 0.3);
+    }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+    .loader-image {
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+    }
+}
+
+/* Landscape orientation adjustments */
+@media (max-height: 600px) and (orientation: landscape) {
+    .loader-content {
+        transform: scale(0.8);
+    }
+    
+    .loader-image-container {
+        width: 100px;
+        height: 100px;
+        margin: 0 auto 10px;
+    }
+    
+    .loader-percentage {
+        font-size: 20px;
+    }
+    
+    .loader-text {
+        font-size: 14px;
+        margin-top: 8px;
+    }
+    
+    .progress-bar-container {
+        margin: 8px auto;
+    }
+}
+
+/* Very small screens */
+@media (max-width: 320px) {
+    .loader-overlay {
+        padding: 12px;
+    }
+    
+    .loader-content {
+        min-width: 200px;
+        max-width: 280px;
+    }
+    
+    .loader-image-container {
+        width: 80px;
+        height: 80px;
+    }
+    
+    .loader-percentage {
+        font-size: 18px;
+    }
+    
+    .loader-text {
+        font-size: 12px;
+    }
+    
+    .progress-bar-container {
+        max-width: 160px;
+    }
 }
 
 

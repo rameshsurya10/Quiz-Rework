@@ -34,6 +34,63 @@ const QuizQuestionsView = () => {
     page_end: '',
   });
 
+  // Helper function to process questions
+  const processQuestions = (questions) => {
+    return questions.map((question) => {
+      console.log('Processing question:', {
+        question: question.question,
+        type: question.type,
+        correct_answer: question.correct_answer,
+        options: question.options
+      });
+      
+      const processedQuestion = {
+        ...question,
+        question_text: question.question_text || question.question,
+        question_type: question.question_type || question.type || 'mcq'
+      };
+
+      // Handle MCQ questions with options object
+      if (question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
+        // Convert options object to array format for display
+        processedQuestion.options = Object.entries(question.options).map(([key, text]) => {
+          // Extract the correct answer key from "B: Patrick Hitler" format
+          let correctKey = question.correct_answer;
+          if (correctKey && correctKey.includes(':')) {
+            correctKey = correctKey.split(':')[0].trim();
+          }
+          
+          return {
+            option_text: text,
+            is_correct: key === correctKey,
+            id: key
+          };
+        });
+        processedQuestion.question_type = 'multiple_choice';
+        
+        console.log('Processed MCQ options:', processedQuestion.options);
+      } else if (Array.isArray(question.options)) {
+        // Already in correct format
+        processedQuestion.options = question.options;
+      } else {
+        processedQuestion.options = [];
+      }
+
+      // For non-MCQ questions, ensure correct_answer is properly set
+      if (question.type !== 'mcq' && question.correct_answer) {
+        // Clean up the correct answer (remove prefix if it exists)
+        let cleanAnswer = question.correct_answer;
+        if (cleanAnswer.includes(':')) {
+          cleanAnswer = cleanAnswer.split(':')[1]?.trim() || cleanAnswer;
+        }
+        processedQuestion.correct_answer = cleanAnswer;
+      }
+
+      console.log('Final processed question:', processedQuestion);
+      return processedQuestion;
+    });
+  };
+
   // Fetch quiz details
   useEffect(() => {
     const fetchQuizData = async () => {
@@ -44,7 +101,12 @@ const QuizQuestionsView = () => {
         
         // Fetch questions
         const questionData = await quizService.getQuizQuestions(quizId);
-        setQuestions(questionData.questions || []);
+        let questions = questionData.questions || [];
+        
+        // Process questions to normalize the data structure
+        questions = processQuestions(questions);
+        
+        setQuestions(questions);
         
         // Fetch page analytics
         const analyticsData = await quizService.getQuizPageAnalytics(quizId);
@@ -86,7 +148,12 @@ const QuizQuestionsView = () => {
         value || null,
         complexity || null
       );
-      setQuestions(questionData.questions || []);
+      let questions = questionData.questions || [];
+      
+      // Process questions to normalize the data structure
+      questions = processQuestions(questions);
+      
+      setQuestions(questions);
     } catch (error) {
       toast({
         title: 'Error filtering questions',
@@ -112,7 +179,12 @@ const QuizQuestionsView = () => {
         pageFilter || null,
         value || null
       );
-      setQuestions(questionData.questions || []);
+      let questions = questionData.questions || [];
+      
+      // Process questions to normalize the data structure
+      questions = processQuestions(questions);
+      
+      setQuestions(questions);
     } catch (error) {
       toast({
         title: 'Error filtering questions',
@@ -186,7 +258,12 @@ const QuizQuestionsView = () => {
       setQuiz(updatedQuizData);
       
       const questionData = await quizService.getQuizQuestions(quizId);
-      setQuestions(questionData.questions || []);
+      let questions = questionData.questions || [];
+      
+      // Process questions to normalize the data structure
+      questions = processQuestions(questions);
+      
+      setQuestions(questions);
       
       toast({
         title: 'Questions regenerated',
@@ -371,7 +448,8 @@ const QuizQuestionsView = () => {
                       <CardBody>
                         <Text fontWeight="bold" mb={2}>{question.question_text}</Text>
                         
-                        {question.question_type === 'multiple_choice' && (
+                        {/* Multiple choice options */}
+                        {(question.question_type === 'multiple_choice' || (question.options && question.options.length > 0)) && (
                           <VStack align="stretch" mt={3} spacing={2}>
                             {question.options.map((option, i) => (
                               <HStack key={i} p={2} bg={option.is_correct ? 'green.50' : 'white'} borderRadius="md">
@@ -386,6 +464,16 @@ const QuizQuestionsView = () => {
                               </HStack>
                             ))}
                           </VStack>
+                        )}
+                        
+                        {/* True/False, Fill, or One-line answer types */}
+                        {((question.type === 'truefalse' || question.type === 'fill' || question.type === 'oneline') ||
+                          (question.question_type !== 'multiple_choice' && (!question.options || question.options.length === 0))) && (
+                          <Box mt={2} p={3} bg="green.50" borderRadius="md" border="1px solid" borderColor="green.200">
+                            <Text fontWeight="bold" color="green.700">
+                              Correct Answer: {question.correct_answer}
+                            </Text>
+                          </Box>
                         )}
                         
                         {question.explanation && (

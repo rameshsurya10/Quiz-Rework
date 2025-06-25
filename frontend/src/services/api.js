@@ -13,10 +13,21 @@ const api = axios.create({
 // Add a request interceptor to include the auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token =
+      localStorage.getItem('token') ||
+      localStorage.getItem('authToken') ||
+      localStorage.getItem('access_token') ||
+      localStorage.getItem('accessToken');
+
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers['Authorization'] = `Bearer ${token}`;
     }
+
+    // If the request data is FormData, let the browser set the Content-Type
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+    
     return config;
   },
   (error) => {
@@ -151,13 +162,9 @@ export const quizApi = {
   patch: (id, data) => api.patch(`/api/quiz/${id}/`, data),
   delete: (id) => api.delete(`/api/quiz/${id}/`),
   publish: (id) => api.post(`/api/quiz/${id}/publish/`),
-    uploadFile: (quizId, fileData, config) => api.post(`/api/quiz/${quizId}/files/upload/`, fileData, {
-    ...config,
-    headers: {
-      'Content-Type': 'multipart/form-data',
-      ...config?.headers,
-    },
-  }),
+  uploadFile: (quizId, fileData, config = {}) => {
+    return api.post(`/api/quiz/${quizId}/files/upload/`, fileData, config);
+  },
 };
 
 export const userApi = {
@@ -181,10 +188,10 @@ export const userApi = {
   getAllTeachers: (params) => api.get('/api/teacher/teachers/', { params }),
 
   // Profile specific endpoints for the current authenticated user
-  getProfile: () => api.get('/api/accounts/me/'),
-  updateProfile: (data) => api.put('/api/accounts/me/', data),
+  getProfile: () => api.get('/api/accounts/profile/'), // Updated to match the correct endpoint
+  updateProfile: (data) => api.put('/api/accounts/profile/', data), // Updated to match the correct endpoint
   changePassword: (data) => api.post('/api/accounts/change-password/', data),
-  uploadProfilePicture: (data) => api.post('/api/accounts/me/avatar/', data), // Add avatar upload endpoint
+  uploadProfilePicture: (data) => api.post('/api/accounts/profile/avatar/', data), // Updated avatar endpoint
 };
 
 // Settings are now handled through the user profile endpoint

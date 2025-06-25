@@ -41,51 +41,77 @@ const FileUpload = ({ onFilesSelect, onPageRangesChange }) => {
         { type: 'PDF', extensions: ['.pdf'], icon: 'pdf' },
         { type: 'Documents', extensions: ['.doc', '.docx', '.txt', '.rtf', '.md'], icon: 'doc' },
         { type: 'Spreadsheets', extensions: ['.xls', '.xlsx', '.csv'], icon: 'excel' },
-        { type: 'Images', extensions: ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'], icon: 'img' }
+        { type: 'Images', extensions: ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'], icon: 'img' },
+        { type: 'Others', extensions: ['.xml', '.json', '.html'], icon: 'default' }
     ];
 
+    // Helper function to check if a file is PDF - moved up before it's used in useEffect
+    const isPdfFile = (file) => {
+        return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    };
+
+    // Helper function to check if a file type is supported
+    const isSupportedFileType = (file) => {
+        const extension = `.${file.name.split('.').pop().toLowerCase()}`;
+        return supportedFileTypes.some(type => 
+            type.extensions.includes(extension)
+        );
+    };
+
     const handleFileChange = (selectedFiles) => {
-        // Check file size limits
+        // Check file size limits and supported types
         const newFilesArray = Array.from(selectedFiles);
-        const oversizedFiles = newFilesArray.filter(file => file.size > MAX_FILE_SIZE);
+        const oversizedFiles = [];
+        const unsupportedFiles = [];
+        const emptyFiles = [];
+        const validFiles = [];
+        
+        // First pass: validate each file
+        newFilesArray.forEach(file => {
+            if (file.size === 0) {
+                emptyFiles.push(file);
+            } else if (file.size > MAX_FILE_SIZE) {
+                oversizedFiles.push(file);
+            } else if (!isSupportedFileType(file)) {
+                unsupportedFiles.push(file);
+            } else {
+                validFiles.push(file);
+            }
+        });
+        
+        // Show warnings for invalid files
+        if (emptyFiles.length > 0) {
+            alert(`The following files are empty:\n${emptyFiles.map(f => f.name).join('\n')}\n\nPlease select files with content.`);
+        }
         
         if (oversizedFiles.length > 0) {
             alert(`The following files exceed the maximum size limit of ${MAX_FILE_SIZE / (1024 * 1024)}MB:\n${oversizedFiles.map(f => f.name).join('\n')}`);
-            // Remove oversized files
-            const validFiles = newFilesArray.filter(file => file.size <= MAX_FILE_SIZE);
-            
-            // Check total size
-            const currentTotalSize = files.reduce((total, f) => total + f.file.size, 0);
-            const newFilesSize = validFiles.reduce((total, f) => total + f.size, 0);
-            
-            if (currentTotalSize + newFilesSize > MAX_TOTAL_SIZE) {
-                alert(`Total file size would exceed the maximum allowed (${MAX_TOTAL_SIZE / (1024 * 1024)}MB). Please remove some files.`);
-                return;
-            }
-            
-            // Add only valid files
-            const newFiles = validFiles.map(file => ({
-                id: Math.random().toString(36).substring(2),
-                file,
-            }));
-            setFiles(prevFiles => [...prevFiles, ...newFiles]);
-        } else {
-            // Check total size
-            const currentTotalSize = files.reduce((total, f) => total + f.file.size, 0);
-            const newFilesSize = newFilesArray.reduce((total, f) => total + f.size, 0);
-            
-            if (currentTotalSize + newFilesSize > MAX_TOTAL_SIZE) {
-                alert(`Total file size would exceed the maximum allowed (${MAX_TOTAL_SIZE / (1024 * 1024)}MB). Please remove some files.`);
-                return;
-            }
-            
-            // All files are valid
-            const newFiles = newFilesArray.map(file => ({
-                id: Math.random().toString(36).substring(2),
-                file,
-            }));
-            setFiles(prevFiles => [...prevFiles, ...newFiles]);
         }
+        
+        if (unsupportedFiles.length > 0) {
+            alert(`The following files are not supported:\n${unsupportedFiles.map(f => f.name).join('\n')}\n\nPlease upload only PDF, document, spreadsheet, or image files.`);
+        }
+        
+        if (validFiles.length === 0) {
+            return; // No valid files to add
+        }
+        
+        // Check total size
+        const currentTotalSize = files.reduce((total, f) => total + f.file.size, 0);
+        const newFilesSize = validFiles.reduce((total, f) => total + f.size, 0);
+        
+        if (currentTotalSize + newFilesSize > MAX_TOTAL_SIZE) {
+            alert(`Total file size would exceed the maximum allowed (${MAX_TOTAL_SIZE / (1024 * 1024)}MB). Please remove some files.`);
+            return;
+        }
+        
+        // Add the valid files
+        const newFiles = validFiles.map(file => ({
+            id: Math.random().toString(36).substring(2),
+            file,
+        }));
+        
+        setFiles(prevFiles => [...prevFiles, ...newFiles]);
     };
 
     useEffect(() => {
@@ -97,13 +123,13 @@ const FileUpload = ({ onFilesSelect, onPageRangesChange }) => {
     useEffect(() => {
         if(onPageRangesChange) {
             // Find the first PDF file's page ranges (for now we only support one PDF)
-            const pdfFile = files.find(f => f.file.type === 'application/pdf' || f.file.name.toLowerCase().endsWith('.pdf'));
+            const pdfFile = files.find(f => isPdfFile(f.file));
             const currentPageRanges = pdfFile && pageRanges[pdfFile.id] ? pageRanges[pdfFile.id] : "";
             
             // Only call onPageRangesChange if the value has actually changed
             onPageRangesChange(currentPageRanges);
         }
-    }, [pageRanges, files]); // Remove onPageRangesChange from dependencies to prevent loop
+    }, [pageRanges, files, onPageRangesChange]);
 
     const handleDragEnter = useCallback((e) => {
         e.preventDefault();
@@ -136,7 +162,12 @@ const FileUpload = ({ onFilesSelect, onPageRangesChange }) => {
         const input = document.createElement('input');
         input.type = 'file';
         input.multiple = true;
-        input.onchange = (e) => handleFileChange(e.target.files);
+        input.accept = '.pdf,.doc,.docx,.txt,.rtf,.md,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.xml,.json,.html';
+        input.onchange = (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                handleFileChange(e.target.files);
+            }
+        };
         input.click();
     };
 
@@ -242,10 +273,6 @@ const FileUpload = ({ onFilesSelect, onPageRangesChange }) => {
         if (['xls', 'xlsx', 'csv'].includes(extension)) return 'excel';
         if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff'].includes(extension)) return 'img';
         return 'default';
-    };
-
-    const isPdfFile = (file) => {
-        return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     };
 
     const formatFileSize = (bytes) => {

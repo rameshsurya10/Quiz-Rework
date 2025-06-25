@@ -30,11 +30,6 @@ class Quiz(models.Model):
     time_limit_minutes = models.IntegerField(default=30)
     passing_score = models.IntegerField(null=True, blank=True)
     share_url = models.URLField(max_length=500, blank=True, null=True, help_text="URL for sharing the quiz")
-    created_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who created the quiz")
-    created_at = models.DateTimeField(auto_now_add=True)
-    last_modified_at = models.DateTimeField(auto_now=True)
-    last_modified_by = models.CharField(max_length=255, null=True, blank=True, help_text="Email of the user who last modified the quiz")
-    is_published = models.BooleanField(default=False)
     uploadedfiles = models.JSONField(default=list, blank=True, null=True)
     pages = models.JSONField(help_text="List of page ranges to generate questions from", null=True, blank=True, default=list)
     department = models.ForeignKey(
@@ -46,6 +41,7 @@ class Quiz(models.Model):
     )
     quiz_date = models.DateTimeField(default=timezone.now)
     published_at = models.DateTimeField(null=True, blank=True)
+    is_published = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
     creator = models.CharField(max_length=255, null=True, blank=True, help_text="Name of the user who created the quiz")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -127,35 +123,41 @@ class Question(models.Model):
         super().save(*args, **kwargs)
 
 class QuizAttempt(models.Model):
+    """Model representing a student's attempt at a quiz"""
     attempt_id = models.AutoField(primary_key=True)
-    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='attempts')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='quiz_attempts')
-    start_time = models.DateTimeField(default=timezone.now)
-    end_time = models.DateTimeField(null=True, blank=True)
-    score = models.FloatField(null=True, blank=True)
-    status = models.CharField(max_length=50, default='in_progress')  # in_progress, completed, abandoned
-    answers = models.JSONField(default=dict)
-    
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.SET_NULL,
+        related_name='quiz_attempts',
+        null=True,
+        blank=True,
+        db_column='student_id'
+    )
+    quiz = models.ForeignKey(
+        Quiz,
+        on_delete=models.SET_NULL,
+        related_name='quiz_attempts',
+        null=True,
+        blank=True,
+        db_column='quiz_id'
+    )
+    question_answer = models.JSONField(help_text="Stores question-answer pairs as JSON")
+    score = models.IntegerField(default=0)
+    result = models.CharField(
+        max_length=10,
+        choices=[('pass', 'Pass'), ('fail', 'Fail')],
+        default='fail'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.CharField(max_length=255)
+    last_modified_at = models.DateTimeField(auto_now=True)
+    last_modified_by = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'quiz_attempts'
+        ordering = ['attempt_id']
+        verbose_name = 'Quiz Attempt'
+        verbose_name_plural = 'Quiz Attempts'
+
     def __str__(self):
-        return f"Attempt {self.attempt_id} by {self.user.email} on {self.quiz.title}"
-    
-    def calculate_score(self):
-        if not self.answers:
-            return 0
-        
-        correct_count = 0
-        total_questions = len(self.answers)
-        
-        for question_id, answer_data in self.answers.items():
-            if answer_data.get('is_correct', False):
-                correct_count += 1
-        
-        if total_questions > 0:
-            return (correct_count / total_questions) * 100
-        return 0
-    
-    def complete_attempt(self):
-        self.end_time = timezone.now()
-        self.score = self.calculate_score()
-        self.status = 'completed'
-        self.save()
+        return f"Attempt {self.attempt_id} - Student {self.student_id} on Quiz {self.quiz_id}"

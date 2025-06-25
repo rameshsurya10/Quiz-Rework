@@ -18,6 +18,7 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import { useTheme as useCustomTheme } from '../contexts/ThemeContext';
 import apiService from "../api";
 import { 
   PerformanceGaugeCard,
@@ -863,44 +864,55 @@ const Dashboard = () => {
         <FullLayout hideToolbar>
             <Box sx={{ 
                 minHeight: '100vh',
-                padding: { xs: 2, md: 3 },
+                padding: { xs: 1, sm: 2, md: 3 },
                 overflow: 'auto'
             }}>
                 <Box maxWidth="1600px" mx="auto">
                     {/* Header with Title and Actions */}
-                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={4} sx={{ 
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        backdropFilter: 'blur(20px)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '20px',
-                        p: 3,
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={{ xs: 2, sm: 3, md: 4 }} sx={{ 
+                        background: theme.custom?.glassmorphism 
+                            ? 'rgba(255, 255, 255, 0.05)'
+                            : theme.palette.background.paper,
+                        backdropFilter: theme.custom?.glassmorphism ? 'blur(20px)' : 'none',
+                        border: `1px solid ${theme.palette.divider}`,
+                        borderRadius: theme.shape.borderRadius,
+                        p: { xs: 2, sm: 2.5, md: 3 },
                         position: 'relative',
                         overflow: 'hidden',
-                        '&::before': {
+                        boxShadow: theme.custom?.highContrast 
+                            ? `2px 2px 0px ${theme.palette.text.primary}`
+                            : theme.shadows[2],
+                        flexDirection: { xs: 'column', sm: 'row' },
+                        gap: { xs: 2, sm: 0 },
+                        '&::before': theme.custom?.glassmorphism ? {
                             content: '""',
                             position: 'absolute',
                             top: 0,
                             left: 0,
                             right: 0,
                             bottom: 0,
-                            background: 'linear-gradient(135deg, rgba(120, 119, 198, 0.05) 0%, rgba(78, 205, 196, 0.05) 100%)',
+                            background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
                             pointerEvents: 'none',
-                        }
+                        } : {},
                     }}>
-                        <Box sx={{ position: 'relative', zIndex: 1 }}>
+                        <Box sx={{ position: 'relative', zIndex: 1, textAlign: { xs: 'center', sm: 'left' } }}>
                             <Typography variant="h4" component="h1" sx={{ 
                                 fontWeight: 700,
-                                background: 'linear-gradient(135deg, #ffffff 0%, #4ecdc4 50%, #7877c6 100%)',
-                                backgroundClip: 'text',
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                                mb: 0.5
+                                background: theme.custom?.highContrast 
+                                    ? 'none'
+                                    : `linear-gradient(135deg, ${theme.palette.text.primary} 0%, ${theme.palette.primary.main} 50%, ${theme.palette.secondary.main} 100%)`,
+                                backgroundClip: theme.custom?.highContrast ? 'none' : 'text',
+                                WebkitBackgroundClip: theme.custom?.highContrast ? 'none' : 'text',
+                                WebkitTextFillColor: theme.custom?.highContrast ? theme.palette.text.primary : 'transparent',
+                                color: theme.custom?.highContrast ? theme.palette.text.primary : 'inherit',
+                                mb: 0.5,
+                                fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' }
                             }}>
                                 Dashboard Overview
                             </Typography>
                             <Typography variant="body2" sx={{ 
-                                color: 'rgba(255, 255, 255, 0.7)',
-                                fontSize: '0.9rem'
+                                color: theme.palette.text.secondary,
+                                fontSize: { xs: '0.8rem', sm: '0.9rem' }
                             }}>
                                 {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                             </Typography>
@@ -918,23 +930,40 @@ const Dashboard = () => {
                                 startIcon={<StyleIcon />}
                                 size={isMobile ? "small" : "medium"}
                                 sx={{
-                                    borderRadius: '16px',
+                                    borderRadius: theme.shape.borderRadius,
                                     textTransform: 'none',
                                     px: { xs: 2, sm: 3 },
-                                    py: 1.5,
+                                    py: { xs: 1, sm: 1.5 },
                                     fontWeight: 600,
-                                    fontSize: '0.9rem',
-                                    background: isAdvancedView ? 'transparent' : 'linear-gradient(135deg, #4ecdc4 0%, #7877c6 100%)',
-                                    border: isAdvancedView ? '1px solid rgba(255, 255, 255, 0.2)' : 'none',
-                                    color: '#ffffff',
-                                    backdropFilter: 'blur(10px)',
-                                    boxShadow: isAdvancedView ? 'none' : '0 4px 20px rgba(78, 205, 196, 0.3)',
+                                    fontSize: { xs: '0.8rem', sm: '0.9rem' },
+                                    background: isAdvancedView 
+                                        ? 'transparent' 
+                                        : theme.custom?.glassmorphism
+                                            ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`
+                                            : theme.palette.primary.main,
+                                    border: isAdvancedView ? `1px solid ${theme.palette.primary.main}` : 'none',
+                                    color: isAdvancedView ? theme.palette.primary.main : theme.palette.primary.contrastText,
+                                    backdropFilter: theme.custom?.glassmorphism ? 'blur(10px)' : 'none',
+                                    boxShadow: theme.custom?.highContrast 
+                                        ? 'none'
+                                        : isAdvancedView 
+                                            ? 'none' 
+                                            : `0 4px 20px ${alpha(theme.palette.primary.main, 0.3)}`,
                                     whiteSpace: 'nowrap',
                                     minWidth: 'auto',
+                                    width: { xs: '100%', sm: 'auto' },
                                     '&:hover': {
-                                        background: isAdvancedView ? 'rgba(255, 255, 255, 0.1)' : 'linear-gradient(135deg, #45b7b8 0%, #6c5ce7 100%)',
-                                        transform: 'translateY(-2px)',
-                                        boxShadow: isAdvancedView ? 'none' : '0 6px 25px rgba(78, 205, 196, 0.4)',
+                                        background: isAdvancedView 
+                                            ? alpha(theme.palette.primary.main, 0.1)
+                                            : theme.custom?.glassmorphism
+                                                ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.9)} 0%, ${alpha(theme.palette.secondary.main, 0.9)} 100%)`
+                                                : theme.palette.primary.dark,
+                                        transform: theme.custom?.highContrast ? 'none' : 'translateY(-2px)',
+                                        boxShadow: theme.custom?.highContrast 
+                                            ? 'none'
+                                            : isAdvancedView 
+                                                ? 'none' 
+                                                : `0 6px 25px ${alpha(theme.palette.primary.main, 0.4)}`,
                                     },
                                     '& .MuiButton-startIcon': {
                                         mr: { xs: 0.5, sm: 1 }
@@ -947,223 +976,89 @@ const Dashboard = () => {
                     </Box>
 
                     {/* Stats Overview Cards */}
-                    <Grid container spacing={3} sx={{ mb: 4 }}>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Box sx={{
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                backdropFilter: 'blur(20px)',
-                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                borderRadius: '20px',
-                                p: 3,
-                                height: '140px',
-                                position: 'relative',
-                                overflow: 'hidden',
-                                transition: 'all 0.3s ease',
-                                '&:hover': {
-                                    transform: 'translateY(-4px)',
-                                    background: 'rgba(255, 255, 255, 0.08)',
-                                    boxShadow: '0 10px 30px rgba(120, 119, 198, 0.2)'
-                                },
-                                '&::before': {
-                                    content: '""',
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    background: 'linear-gradient(135deg, rgba(120, 119, 198, 0.1) 0%, transparent 50%)',
-                                    pointerEvents: 'none',
-                                }
-                            }}>
-                                <Box sx={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                                        <Typography variant="subtitle2" sx={{ 
-                                            color: 'rgba(255, 255, 255, 0.7)',
-                                            fontSize: '0.85rem',
+                    <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: 4 }}>
+                        {[
+                            { title: 'Total Teachers', icon: TeacherIcon, value: data.total_teachers || '0', change: '+12.5%', color: theme.palette.primary.main },
+                            { title: 'Total Students', icon: StudentIcon, value: data.total_students || '0', change: '+8.3%', color: theme.palette.secondary.main },
+                            { title: 'Total Quiz', icon: QuizIcon, value: data.total_quizes || '0', change: '+5.7%', color: theme.palette.accent?.main || theme.palette.error.main },
+                            { title: 'Active Participants', icon: PersonIcon, value: data.total_participants || '0', change: '+15.2%', color: theme.palette.primary.main }
+                        ].map((stat, index) => (
+                            <Grid item xs={6} sm={6} md={3} key={stat.title}>
+                                <Card sx={{
+                                    background: theme.custom?.glassmorphism 
+                                        ? 'rgba(255, 255, 255, 0.05)'
+                                        : theme.palette.background.paper,
+                                    backdropFilter: theme.custom?.glassmorphism ? 'blur(20px)' : 'none',
+                                    border: `1px solid ${theme.palette.divider}`,
+                                    borderRadius: theme.custom?.appearance === 'royal' ? '16px' : theme.custom?.appearance === 'classic' ? '8px' : '12px',
+                                    height: '140px',
+                                    position: 'relative',
+                                    overflow: 'hidden',
+                                    transition: 'all 0.3s ease',
+                                    boxShadow: theme.custom?.highContrast 
+                                        ? `1px 1px 0px ${theme.palette.text.primary}`
+                                        : theme.shadows[1],
+                                    '&:hover': {
+                                        transform: theme.custom?.highContrast ? 'none' : 'translateY(-4px)',
+                                        background: theme.custom?.glassmorphism 
+                                            ? 'rgba(255, 255, 255, 0.08)'
+                                            : alpha(theme.palette.background.paper, 0.9),
+                                        boxShadow: theme.custom?.highContrast 
+                                            ? `2px 2px 0px ${theme.palette.text.primary}`
+                                            : `0 8px 24px ${alpha(stat.color, 0.2)}`
+                                    },
+                                    '&::before': theme.custom?.glassmorphism && !theme.custom?.highContrast ? {
+                                        content: '""',
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        background: `linear-gradient(135deg, ${alpha(stat.color, 0.08)} 0%, transparent 50%)`,
+                                        pointerEvents: 'none',
+                                    } : {},
+                                }}>
+                                    <CardContent sx={{ 
+                                        p: { xs: 2, sm: 3 },
+                                        height: '100%', 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        justifyContent: 'space-between',
+                                        position: 'relative',
+                                        zIndex: 1
+                                    }}>
+                                        <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                                            <Typography variant="subtitle2" sx={{ 
+                                                color: theme.palette.text.secondary,
+                                                fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                                                fontWeight: 500,
+                                                lineHeight: 1.2
+                                            }}>
+                                                {stat.title}
+                                            </Typography>
+                                            <stat.icon sx={{ color: stat.color, fontSize: { xs: '20px', sm: '24px' } }} />
+                                        </Box>
+                                        <Typography variant="h3" sx={{ 
+                                            color: theme.palette.text.primary,
+                                            fontWeight: 700,
+                                            fontSize: { xs: '1.5rem', sm: '2rem' },
+                                            textAlign: 'center',
+                                            my: 1
+                                        }}>
+                                            {stat.value}
+                                        </Typography>
+                                        <Typography variant="caption" sx={{ 
+                                            color: theme.palette.success?.main || theme.palette.primary.main,
+                                            fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                                            textAlign: 'center',
                                             fontWeight: 500
                                         }}>
-                                            Total Teachers
+                                            {stat.change} from last month
                                         </Typography>
-                                        <TeacherIcon sx={{ color: '#7877c6', fontSize: '24px' }} />
-                                    </Box>
-                                    <Typography variant="h3" sx={{ 
-                                        color: '#ffffff',
-                                        fontWeight: 700,
-                                        fontSize: '2.2rem'
-                                    }}>
-                                        {data.total_teachers || '0'}
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ 
-                                        color: 'rgba(78, 205, 196, 0.8)',
-                                        fontSize: '0.75rem'
-                                    }}>
-                                        +12.5% from last month
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Box sx={{
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                backdropFilter: 'blur(20px)',
-                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                borderRadius: '20px',
-                                p: 3,
-                                height: '140px',
-                                position: 'relative',
-                                overflow: 'hidden',
-                                transition: 'all 0.3s ease',
-                                '&:hover': {
-                                    transform: 'translateY(-4px)',
-                                    background: 'rgba(255, 255, 255, 0.08)',
-                                    boxShadow: '0 10px 30px rgba(78, 205, 196, 0.2)'
-                                },
-                                '&::before': {
-                                    content: '""',
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    background: 'linear-gradient(135deg, rgba(78, 205, 196, 0.1) 0%, transparent 50%)',
-                                    pointerEvents: 'none',
-                                }
-                            }}>
-                                <Box sx={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                                        <Typography variant="subtitle2" sx={{ 
-                                            color: 'rgba(255, 255, 255, 0.7)',
-                                            fontSize: '0.85rem',
-                                            fontWeight: 500
-                                        }}>
-                                            Total Students
-                                        </Typography>
-                                        <StudentIcon sx={{ color: '#4ecdc4', fontSize: '24px' }} />
-                                    </Box>
-                                    <Typography variant="h3" sx={{ 
-                                        color: '#ffffff',
-                                        fontWeight: 700,
-                                        fontSize: '2.2rem'
-                                    }}>
-                                        {data.total_students || '0'}
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ 
-                                        color: 'rgba(78, 205, 196, 0.8)',
-                                        fontSize: '0.75rem'
-                                    }}>
-                                        +8.3% from last month
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Box sx={{
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                backdropFilter: 'blur(20px)',
-                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                borderRadius: '20px',
-                                p: 3,
-                                height: '140px',
-                                position: 'relative',
-                                overflow: 'hidden',
-                                transition: 'all 0.3s ease',
-                                '&:hover': {
-                                    transform: 'translateY(-4px)',
-                                    background: 'rgba(255, 255, 255, 0.08)',
-                                    boxShadow: '0 10px 30px rgba(255, 107, 107, 0.2)'
-                                },
-                                '&::before': {
-                                    content: '""',
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    background: 'linear-gradient(135deg, rgba(255, 107, 107, 0.1) 0%, transparent 50%)',
-                                    pointerEvents: 'none',
-                                }
-                            }}>
-                                <Box sx={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                                        <Typography variant="subtitle2" sx={{ 
-                                            color: 'rgba(255, 255, 255, 0.7)',
-                                            fontSize: '0.85rem',
-                                            fontWeight: 500
-                                        }}>
-                                            Total Quiz
-                                        </Typography>
-                                        <QuizIcon sx={{ color: '#ff6b6b', fontSize: '24px' }} />
-                                    </Box>
-                                    <Typography variant="h3" sx={{ 
-                                        color: '#ffffff',
-                                        fontWeight: 700,
-                                        fontSize: '2.2rem'
-                                    }}>
-                                        {data.total_quizes || '0'}
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ 
-                                        color: 'rgba(78, 205, 196, 0.8)',
-                                        fontSize: '0.75rem'
-                                    }}>
-                                        +5.7% from last month
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={3}>
-                            <Box sx={{
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                backdropFilter: 'blur(20px)',
-                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                borderRadius: '20px',
-                                p: 3,
-                                height: '140px',
-                                position: 'relative',
-                                overflow: 'hidden',
-                                transition: 'all 0.3s ease',
-                                '&:hover': {
-                                    transform: 'translateY(-4px)',
-                                    background: 'rgba(255, 255, 255, 0.08)',
-                                    boxShadow: '0 10px 30px rgba(120, 119, 198, 0.2)'
-                                },
-                                '&::before': {
-                                    content: '""',
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    background: 'linear-gradient(135deg, rgba(120, 119, 198, 0.1) 0%, rgba(78, 205, 196, 0.1) 100%)',
-                                    pointerEvents: 'none',
-                                }
-                            }}>
-                                <Box sx={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                                        <Typography variant="subtitle2" sx={{ 
-                                            color: 'rgba(255, 255, 255, 0.7)',
-                                            fontSize: '0.85rem',
-                                            fontWeight: 500
-                                        }}>
-                                            Active Participants
-                                        </Typography>
-                                        <PersonIcon sx={{ color: '#4ecdc4', fontSize: '24px' }} />
-                                    </Box>
-                                    <Typography variant="h3" sx={{ 
-                                        color: '#ffffff',
-                                        fontWeight: 700,
-                                        fontSize: '2.2rem'
-                                    }}>
-                                        {data.total_participants || '0'}
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ 
-                                        color: 'rgba(78, 205, 196, 0.8)',
-                                        fontSize: '0.75rem'
-                                    }}>
-                                        +15.2% from last month
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </Grid>
+                                    </CardContent>
+                                </Card>
+                            </Grid>
+                        ))}
                     </Grid>
 
                     {/* Main Content Area */}
@@ -1171,216 +1066,132 @@ const Dashboard = () => {
                         {/* Left Side - Main Content */}
                         <Grid item xs={12} lg={showTrendDetails ? 8 : 12}>
                             {/* Performance Overview */}
-                            <Box sx={{ 
-                                mb: 3,
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                backdropFilter: 'blur(20px)',
-                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                borderRadius: '20px',
-                                p: 3,
+                            <Card sx={{
+                                background: theme.custom?.glassmorphism 
+                                    ? 'rgba(255, 255, 255, 0.05)'
+                                    : theme.palette.background.paper,
+                                backdropFilter: theme.custom?.glassmorphism ? 'blur(20px)' : 'none',
+                                border: `1px solid ${theme.palette.divider}`,
+                                borderRadius: theme.custom?.appearance === 'royal' ? '16px' : theme.custom?.appearance === 'classic' ? '8px' : '12px',
+                                mb: 4,
                                 position: 'relative',
                                 overflow: 'hidden',
-                                '&::before': {
+                                boxShadow: theme.custom?.highContrast 
+                                    ? `1px 1px 0px ${theme.palette.text.primary}`
+                                    : theme.shadows[1],
+                                '&::before': theme.custom?.glassmorphism && !theme.custom?.highContrast ? {
                                     content: '""',
                                     position: 'absolute',
                                     top: 0,
                                     left: 0,
                                     right: 0,
                                     bottom: 0,
-                                    background: 'linear-gradient(135deg, rgba(120, 119, 198, 0.03) 0%, rgba(78, 205, 196, 0.03) 100%)',
+                                    background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.03)} 0%, ${alpha(theme.palette.secondary.main, 0.03)} 100%)`,
                                     pointerEvents: 'none',
-                                }
+                                } : {},
                             }}>
-                                <Box sx={{ position: 'relative', zIndex: 1 }}>
-                                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-                                        <Typography variant="h6" sx={{ 
-                                            fontWeight: 600,
-                                            color: '#ffffff',
-                                            fontSize: '1.3rem'
+                                <CardContent sx={{ p: { xs: 3, sm: 4 }, position: 'relative', zIndex: 1 }}>
+                                    <Typography variant="h5" sx={{ 
+                                        mb: 3, 
+                                        fontWeight: 600,
+                                        color: theme.palette.text.primary,
+                                        fontSize: { xs: '1.3rem', sm: '1.5rem' },
+                                        fontFamily: theme.custom?.appearance === 'royal' ? '"Playfair Display", serif' : 'inherit',
+                                    }}>
+                                        Performance Overview
+                                    </Typography>
+                                    
+                                    {/* Main Performance Score */}
+                                    <Box sx={{ 
+                                        textAlign: 'center',
+                                        mb: 4,
+                                        py: 2
+                                    }}>
+                                        <Typography variant="h1" sx={{ 
+                                            fontSize: { xs: '3rem', sm: '4rem' },
+                                            fontWeight: 700,
+                                            color: theme.palette.error.main,
+                                            mb: 1,
+                                            lineHeight: 1
                                         }}>
-                                            Performance Overview
+                                            0%
                                         </Typography>
-                                        {isAdvancedView && (
-                                            <Button
-                                                size="small"
-                                                variant="outlined"
-                                                onClick={exportDashboardReport}
-                                                disabled={exportLoading}
-                                                startIcon={exportLoading ? 
-                                                    <CircularProgress size={16} sx={{ color: '#4ecdc4' }} /> : 
-                                                    <BarChartIcon fontSize="small" />}
-                                                sx={{ 
-                                                    borderRadius: '12px', 
-                                                    textTransform: 'none',
-                                                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                                                    color: '#ffffff',
-                                                    backdropFilter: 'blur(10px)',
-                                                    '&:hover': {
-                                                        background: 'rgba(255, 255, 255, 0.1)',
-                                                        border: '1px solid rgba(78, 205, 196, 0.5)',
-                                                    }
-                                                }}
-                                            >
-                                                {exportLoading ? 'Exporting...' : 'Export Report'}
-                                            </Button>
-                                        )}
+                                        <Typography variant="body1" sx={{ 
+                                            color: theme.palette.text.secondary,
+                                            fontSize: { xs: '0.9rem', sm: '1rem' }
+                                        }}>
+                                            Based on {data.total_participants || 0} participants
+                                        </Typography>
                                     </Box>
-                                    <Grid container spacing={3} alignItems="center">
-                                        <Grid item xs={12} md={4}>
-                                            <PerformanceGaugeCard 
-                                                title="Performance Score"
-                                                averageScore={data.average_score || 0}
-                                                secondaryText={`Based on ${str(data.participants) || 0} participants`}
-                                                height={250}
-                                                animationSpeed={1200}
-                                            />
-                                            {isAdvancedView && (
-                                                <Box sx={{ 
-                                                    mt: 2, 
-                                                    p: 2, 
-                                                    background: 'rgba(78, 205, 196, 0.1)',
-                                                    backdropFilter: 'blur(10px)',
-                                                    border: '1px solid rgba(78, 205, 196, 0.2)',
-                                                    borderRadius: '12px' 
+
+                                    <Typography variant="h6" sx={{ 
+                                        mb: 3, 
+                                        textAlign: 'center',
+                                        color: theme.palette.text.primary,
+                                        fontSize: { xs: '1.1rem', sm: '1.25rem' },
+                                        fontWeight: 600
+                                    }}>
+                                        Performance Metrics
+                                    </Typography>
+
+                                    {/* Performance Stats Grid */}
+                                    <Grid container spacing={2} justifyContent="center">
+                                        {[
+                                            { label: 'Correct', value: data.right_answers || '0%', color: theme.palette.success?.main || '#4caf50' },
+                                            { label: 'Wrong', value: data.wrong_answers || '0%', color: theme.palette.error.main },
+                                            { label: 'Unanswered', value: data.unanswered_questions || '0%', color: theme.palette.warning?.main || '#ff9800' },
+                                            { label: 'Avg. Time', value: formatTime(data.average_duration || 0), color: theme.palette.info?.main || '#2196f3' }
+                                        ].map((metric, index) => (
+                                            <Grid item xs={6} sm={3} key={index}>
+                                                <Card variant="outlined" sx={{
+                                                    background: theme.custom?.highContrast 
+                                                        ? 'transparent'
+                                                        : alpha(metric.color, 0.08),
+                                                    borderColor: theme.custom?.highContrast 
+                                                        ? metric.color
+                                                        : alpha(metric.color, 0.2),
+                                                    borderWidth: theme.custom?.highContrast ? 2 : 1,
+                                                    borderRadius: theme.custom?.appearance === 'royal' ? '12px' : theme.custom?.appearance === 'classic' ? '6px' : '8px',
+                                                    textAlign: 'center',
+                                                    transition: 'all 0.3s ease',
+                                                    height: '100px',
+                                                    '&:hover': {
+                                                        transform: theme.custom?.highContrast ? 'none' : 'translateY(-2px)',
+                                                        boxShadow: theme.custom?.highContrast 
+                                                            ? 'none'
+                                                            : `0 8px 20px ${alpha(metric.color, 0.2)}`
+                                                    }
                                                 }}>
-                                                    <Typography variant="subtitle2" sx={{ color: 'rgba(255, 255, 255, 0.8)', mb: 1 }}>
-                                                        Score Comparison
-                                                    </Typography>
-                                                    <Box display="flex" justifyContent="space-between" mt={1}>
-                                                        <Box>
-                                                            <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>vs. Last Month</Typography>
-                                                            <Typography variant="body2" sx={{ color: '#4ecdc4', fontWeight: 600 }}>
-                                                                +{(data.average_score ? data.average_score * 0.12 : 4.2).toFixed(1)}%
-                                                            </Typography>
-                                                        </Box>
-                                                        <Box>
-                                                            <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>vs. Benchmark</Typography>
-                                                            <Typography variant="body2" sx={{ 
-                                                                color: (data.average_score && data.average_score > 65) ? '#4ecdc4' : '#ff6b6b', 
-                                                                fontWeight: 600 
-                                                            }}>
-                                                                {(data.average_score && data.average_score > 65) ? '+' : ''}
-                                                                {(data.average_score ? (data.average_score - 65).toFixed(1) : -5.0)}%
-                                                            </Typography>
-                                                        </Box>
-                                                    </Box>
-                                                </Box>
-                                            )}
-                                        </Grid>
-                                        <Grid item xs={12} md={8}>
-                                            <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                                                <Typography variant="h6" sx={{ 
-                                                    fontWeight: 600,
-                                                    color: '#ffffff',
-                                                    mb: 2
-                                                }}>
-                                                    Performance Metrics
-                                                </Typography>
-                                                <Box sx={{ flexGrow: 1, mt: 2 }}>
-                                                    <Grid container spacing={2}>
-                                                        <Grid item xs={6} sm={3}>
-                                                            <Box sx={{ 
-                                                                textAlign: 'center', 
-                                                                p: 2, 
-                                                                background: 'rgba(78, 205, 196, 0.1)',
-                                                                backdropFilter: 'blur(10px)',
-                                                                border: '1px solid rgba(78, 205, 196, 0.2)',
-                                                                borderRadius: '12px' 
-                                                            }}>
-                                                                <Typography variant="h4" sx={{ color: '#4ecdc4', fontWeight: 700 }}>
-                                                                    {str(data.right_answers || 0)}%
-                                                                </Typography>
-                                                                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>Correct</Typography>
-                                                                {isAdvancedView && data.right_answers && (
-                                                                    <Typography variant="caption" sx={{ 
-                                                                        display: 'block', 
-                                                                        mt: 0.5, 
-                                                                        color: data.right_answers > 70 ? '#4ecdc4' : '#ff6b6b' 
-                                                                    }}>
-                                                                        {data.right_answers > 70 ? 'Above Average' : 'Below Average'}
-                                                                    </Typography>
-                                                                )}
-                                                            </Box>
-                                                        </Grid>
-                                                        <Grid item xs={6} sm={3}>
-                                                            <Box sx={{ 
-                                                                textAlign: 'center', 
-                                                                p: 2, 
-                                                                background: 'rgba(255, 107, 107, 0.1)',
-                                                                backdropFilter: 'blur(10px)',
-                                                                border: '1px solid rgba(255, 107, 107, 0.2)',
-                                                                borderRadius: '12px' 
-                                                            }}>
-                                                                <Typography variant="h4" sx={{ color: '#ff6b6b', fontWeight: 700 }}>
-                                                                    {str(data.wrong_answers || 0)}%
-                                                                </Typography>
-                                                                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>Wrong</Typography>
-                                                                {isAdvancedView && data.wrong_answers !== undefined && (
-                                                                    <Typography variant="caption" sx={{ 
-                                                                        display: 'block', 
-                                                                        mt: 0.5, 
-                                                                        color: 'rgba(255, 255, 255, 0.6)' 
-                                                                    }}>
-                                                                        {data.wrong_answers < 20 ? 'Good Performance' : 'Needs Improvement'}
-                                                                    </Typography>
-                                                                )}
-                                                            </Box>
-                                                        </Grid>
-                                                        <Grid item xs={6} sm={3}>
-                                                            <Box sx={{ 
-                                                                textAlign: 'center', 
-                                                                p: 2, 
-                                                                background: 'rgba(255, 107, 107, 0.1)',
-                                                                backdropFilter: 'blur(10px)',
-                                                                border: '1px solid rgba(255, 107, 107, 0.2)',
-                                                                borderRadius: '12px' 
-                                                            }}>
-                                                                <Typography variant="h4" sx={{ color: '#ff6b6b', fontWeight: 700 }}>
-                                                                    {str(data.unanswered_questions || 0)}%
-                                                                </Typography>
-                                                                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>Unanswered</Typography>
-                                                                {isAdvancedView && data.unanswered_questions !== undefined && (
-                                                                    <Typography variant="caption" sx={{ 
-                                                                        display: 'block', 
-                                                                        mt: 0.5, 
-                                                                        color: 'rgba(255, 255, 255, 0.6)' 
-                                                                    }}>
-                                                                        {data.unanswered_questions < 10 ? 'Good Attempt Rate' : 'Time Management Issue'}
-                                                                    </Typography>
-                                                                )}
-                                                            </Box>
-                                                        </Grid>
-                                                        <Grid item xs={6} sm={3}>
-                                                            <Box sx={{ 
-                                                                textAlign: 'center', 
-                                                                p: 2, 
-                                                                background: 'rgba(78, 205, 196, 0.1)',
-                                                                backdropFilter: 'blur(10px)',
-                                                                border: '1px solid rgba(78, 205, 196, 0.2)',
-                                                                borderRadius: '12px' 
-                                                            }}>
-                                                                <Typography variant="h4" sx={{ color: '#4ecdc4', fontWeight: 700 }}>
-                                                                    {formatTime(data.average_duration || 0)}
-                                                                </Typography>
-                                                                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>Avg. Time</Typography>
-                                                                {isAdvancedView && data.average_duration && (
-                                                                    <Typography variant="caption" sx={{ 
-                                                                        display: 'block', 
-                                                                        mt: 0.5, 
-                                                                        color: 'rgba(255, 255, 255, 0.6)' 
-                                                                    }}>
-                                                                        {data.average_duration < 600 ? 'Fast Completion' : 'Thorough Analysis'}
-                                                                    </Typography>
-                                                                )}
-                                                            </Box>
-                                                        </Grid>
-                                                    </Grid>
-                                                </Box>
-                                            </Box>
-                                        </Grid>
+                                                    <CardContent sx={{ 
+                                                        p: 2,
+                                                        height: '100%',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        justifyContent: 'center',
+                                                        alignItems: 'center'
+                                                    }}>
+                                                        <Typography variant="h4" sx={{ 
+                                                            color: metric.color,
+                                                            fontWeight: 700,
+                                                            mb: 1,
+                                                            fontSize: { xs: '1.3rem', sm: '1.5rem' }
+                                                        }}>
+                                                            {metric.value}
+                                                        </Typography>
+                                                        <Typography variant="caption" sx={{ 
+                                                            color: theme.palette.text.secondary,
+                                                            fontWeight: 500,
+                                                            fontSize: { xs: '0.7rem', sm: '0.8rem' }
+                                                        }}>
+                                                            {metric.label}
+                                                        </Typography>
+                                                    </CardContent>
+                                                </Card>
+                                            </Grid>
+                                        ))}
                                     </Grid>
-                                </Box>
-                            </Box>
+                                </CardContent>
+                            </Card>
 
                             {/* Additional Stats */}
                             <Grid container spacing={3}>
