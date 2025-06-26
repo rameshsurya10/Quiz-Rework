@@ -554,8 +554,10 @@ class ListStudentQuizResultsView(APIView):
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
             if not teacher:
                 return Response({"error": "Teacher not found"}, status=status.HTTP_404_NOT_FOUND)
-            attempts = QuizAttempt.objects.filter(quiz__teacher=teacher).select_related('quiz', 'student').order_by('-created_at')
 
+            attempts = QuizAttempt.objects.filter(
+                quiz__is_deleted=False  # or use quiz__creator=teacher.get_full_name()
+            ).select_related('quiz', 'student').order_by('-created_at')
         elif role == "STUDENT":
             student = Student.objects.filter(email=user.email, is_deleted=False).first()
             if not student:
@@ -599,7 +601,7 @@ class ListStudentQuizResultsView(APIView):
             }
 
             if role in ["ADMIN", "TEACHER"]:
-                data["student_name"] = f"{attempt.student.first_name} {attempt.student.last_name}"
+                data["student_name"] = attempt.student.name
 
             result_data.append(data)
 
