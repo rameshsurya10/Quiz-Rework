@@ -70,11 +70,28 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """
         Handle POST request to create a new department.
+        Prevents creation if department code already exists.
         """
-        serializer = self.get_serializer(data=request.data)
+        data = request.data
+        department_code = data.get("code")
+
+        # Check if department with this code already exists
+        if Department.objects.filter(code=department_code, is_deleted=False).exists():
+            return Response(
+                {
+                    "error": "Duplicate department",
+                    "message": f"Department with code '{department_code}' already exists.",
+                    "title": "Duplicate Entry"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Proceed with creation if not duplicate
+        serializer = self.get_serializer(data=data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['post'], url_path='bulk-upload-students')
