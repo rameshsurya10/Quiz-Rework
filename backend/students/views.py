@@ -1,7 +1,7 @@
-from rest_framework import generics, status, viewsets
+from rest_framework import generics, status, viewsets,permissions
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
+from rest_framework.decorators import action,permission_classes
 from django.shortcuts import get_object_or_404
 from .models import Student
 from .serializers import StudentSerializer
@@ -18,6 +18,10 @@ from rest_framework import status
 from departments.models import Department
 from .utils import send_student_verification_email
 from quiz.models import QuizAttempt,Quiz,Question
+from django.core.mail import send_mail
+from accounts.permissions import IsOwnerOrAdminOrReadOnly, IsTeacherOrAdmin
+from django.utils import timezone
+from datetime import timedelta
 
 
 
@@ -600,3 +604,74 @@ class ListStudentQuizResultsView(APIView):
             result_data.append(data)
 
         return Response(result_data, status=status.HTTP_200_OK)
+
+class QuizReminderStudent(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsTeacherOrAdmin]
+
+    def post(self, request):
+        """
+        Send email reminders to students X days before the quiz quiz_date.
+        Payload: { "day": 3 }
+        """
+        try:
+            user = request.user
+            if not hasattr(user, "role") or user.role != "TEACHER":
+                return Response({"error": "Only teachers can send reminders."}, status=status.HTTP_403_FORBIDDEN)
+
+            teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+            print("teacher:",teacher)
+            if not teacher:
+                return Response({"error": "Teacher not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            days_before = int(request.data.get("day", 3))
+            print("days_before:",days_before)
+
+            # Convert now to UTC to match quiz_date timezone
+            now_utc = timezone.now().astimezone(timezone.utc).date()
+            print("now_utc:",now_utc)
+            target_date = now_utc + timedelta(days=days_before)
+            print("target_date:",target_date)
+
+            # Get quizzes whose date (only date portion) is exactly `days_before` ahead
+            department_ids = teacher.department_ids if isinstance(teacher.department_ids, list) else [teacher.department_ids]
+            print("department_ids:",department_ids)
+            quizzes = Quiz.objects.filter(
+                department_id__in=department_ids,
+                is_deleted=False,
+            )
+            print("len quizess:",len(quizzes))
+            # Filter quizzes manually by checking date difference
+            quizzes_to_remind = []
+            for quiz in quizzes:
+                quiz_date = quiz.quiz_date.astimezone(timezone.utc).date()
+                print("quiz_date:",quiz_date)
+                if quiz_date == target_date:
+                    quizzes_to_remind.append(quiz)
+
+            if not quizzes_to_remind:
+                return Response({"message": f"No quizzes scheduled in {days_before} days."}, status=200)
+
+            # Notify students
+            students = Student.objects.filter(department_id__in=department_ids, is_deleted=False)
+            print("students:",students)
+
+            for student in students:
+                for quiz in quizzes_to_remind:
+                    send_mail(
+                        subject=f"Reminder: Upcoming Quiz - {quiz.title}",
+                        message=(
+                            f"Hi {student.name},\n\n"
+                            f"This is a reminder that your quiz \"{quiz.title}\" is scheduled on {quiz.quiz_date.strftime('%Y-%m-%d %H:%M')}.\n\n"
+                            f"Please be prepared!"
+                        ),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[student.email],
+                        fail_silently=True,
+                    )
+
+            return Response({
+                "message": f"Reminder sent to {students.count()} students for {len(quizzes_to_remind)} quiz/quizzes happening in {days_before} days."
+            }, status=200)
+
+        except Exception as e:
+            return Response({"error": "Failed to send reminders", "details": str(e)}, status=500)
