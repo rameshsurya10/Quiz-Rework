@@ -407,7 +407,7 @@ export const quizService = {
 
   // Get quiz report summary
   getQuizReport(quizId) {
-    return axios.get(`${API_BASE_URL}/api/quiz/${quizId}/report/`, getAuthHeaders())
+    return axios.get(`${API_BASE_URL}/api/reports/quiz/${quizId}/`, getAuthHeaders())
       .then(response => response.data)
       .catch(error => {
         console.error('Error fetching quiz report:', error);
@@ -417,7 +417,7 @@ export const quizService = {
 
   // Get student performance for a quiz
   getStudentPerformance(quizId) {
-    return axios.get(`${API_BASE_URL}/api/quiz/${quizId}/student-performance/`, getAuthHeaders())
+    return axios.get(`${API_BASE_URL}/api/reports/quiz/${quizId}/student_performance/`, getAuthHeaders())
       .then(response => response.data)
       .catch(error => {
         console.error('Error fetching student performance:', error);
@@ -427,7 +427,7 @@ export const quizService = {
 
   // Get question analysis for a quiz
   getQuestionAnalysis(quizId) {
-    return axios.get(`${API_BASE_URL}/api/quiz/${quizId}/question-analysis/`, getAuthHeaders())
+    return axios.get(`${API_BASE_URL}/api/reports/quiz/${quizId}/question_analysis/`, getAuthHeaders())
       .then(response => response.data)
       .catch(error => {
         console.error('Error fetching question analysis:', error);

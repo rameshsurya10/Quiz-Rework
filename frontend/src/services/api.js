@@ -227,4 +227,5 @@ export const reportApi = {
   // getAllReports: (params) => api.get('/api/reports/', { params }),
 };
 
-export default api;
+const apiService = api;
+export default apiService;

@@ -20,6 +20,7 @@ import { motion } from 'framer-motion';
 import { visuallyHidden } from '@mui/utils';
 import { alpha } from '@mui/material/styles';
 import ResultReportSection from './ResultReportSection';
+import apiService from '../../services/api'; // Import the API service
 
 const ResultsSection = () => {
   const navigate = useNavigate();
@@ -39,57 +40,245 @@ const ResultsSection = () => {
   const [orderBy, setOrderBy] = useState('quizTitle');
 
   useEffect(() => {
-    // Simulate fetching summary stats
-    setTimeout(() => {
+    const fetchResultsData = async () => {
+      try {
+        setIsLoading(true);
+        setIsLoadingTable(true);
+
+        // Try to fetch quiz attempts/results data using the API service
+        try {
+          console.log('Attempting to fetch quiz attempts...');
+          const attemptsResponse = await apiService.get('/api/students/quiz_attempts/');
+          const attemptsData = attemptsResponse.data;
+          
+          console.log('Quiz attempts data:', attemptsData);
+
+          // Process the attempts data to calculate summary stats
+          if (Array.isArray(attemptsData) && attemptsData.length > 0) {
+            // Calculate summary statistics
+            const totalAttempts = attemptsData.length;
+            const totalScore = attemptsData.reduce((sum, attempt) => sum + (attempt.percentage || 0), 0);
+            const averageScore = totalScore / totalAttempts;
+            const passedAttempts = attemptsData.filter(attempt => attempt.result === 'pass').length;
+            const completionRate = (passedAttempts / totalAttempts) * 100;
+            const uniqueQuizzes = new Set(attemptsData.map(attempt => attempt.quiz_id)).size;
+            const uniqueStudents = new Set(attemptsData.map(attempt => attempt.student_name)).size;
+
+            setSummaryStats([
+              {
+                title: 'Average Score',
+                value: `${Math.round(averageScore)}%`,
+                icon: <EmojiEventsIcon sx={{ fontSize: '2rem' }} />,
+                color: theme.palette.success.main,
+                trend: averageScore > 75 ? 'up' : averageScore > 50 ? 'stable' : 'down',
+                trendValue: Math.abs(averageScore - 75).toFixed(0),
+              },
+              {
+                title: 'Pass Rate',
+                value: `${Math.round(completionRate)}%`,
+                icon: <RateReviewIcon sx={{ fontSize: '2rem' }} />,
+                color: theme.palette.info.main,
+                trend: completionRate > 80 ? 'up' : completionRate > 60 ? 'stable' : 'down',
+                trendValue: Math.abs(completionRate - 80).toFixed(0),
+              },
+              {
+                title: 'Total Participants',
+                value: uniqueStudents || 0,
+                icon: <PeopleIcon sx={{ fontSize: '2rem' }} />,
+                color: theme.palette.secondary.main,
+                trend: 'stable',
+                trendValue: '0',
+              },
+              {
+                title: 'Quizzes Taken',
+                value: uniqueQuizzes || 0,
+                icon: <QuizIcon sx={{ fontSize: '2rem' }} />,
+                color: theme.palette.warning.main,
+                trend: uniqueQuizzes > 5 ? 'up' : 'stable',
+                trendValue: uniqueQuizzes > 5 ? '2' : '0',
+              },
+            ]);
+
+            // Group attempts by quiz to create quiz results table
+            const quizMap = new Map();
+            attemptsData.forEach(attempt => {
+              const quizId = attempt.quiz_id;
+              if (!quizMap.has(quizId)) {
+                quizMap.set(quizId, {
+                  id: quizId,
+                  quizTitle: attempt.quiz_title,
+                  attempts: [],
+                  lastAttemptDate: attempt.attempted_at
+                });
+              }
+              
+              const quizData = quizMap.get(quizId);
+              quizData.attempts.push(attempt);
+              
+              // Update last attempt date if this attempt is more recent
+              if (new Date(attempt.attempted_at) > new Date(quizData.lastAttemptDate)) {
+                quizData.lastAttemptDate = attempt.attempted_at;
+              }
+            });
+
+            // Convert map to array and calculate statistics for each quiz
+            const quizResultsArray = Array.from(quizMap.values()).map(quiz => {
+              const totalAttempts = quiz.attempts.length;
+              const totalScore = quiz.attempts.reduce((sum, attempt) => sum + (attempt.percentage || 0), 0);
+              const averageScore = Math.round(totalScore / totalAttempts);
+              const passedAttempts = quiz.attempts.filter(attempt => attempt.result === 'pass').length;
+              const passRate = Math.round((passedAttempts / totalAttempts) * 100);
+              
+              return {
+                id: quiz.id,
+                quizTitle: quiz.quizTitle,
+                attempts: totalAttempts,
+                averageScore: averageScore,
+                passRate: passRate,
+                lastAttemptDate: quiz.lastAttemptDate.split('T')[0] // Format date
+              };
+            });
+
+            setQuizResults(quizResultsArray);
+          } else {
+            // No attempts data available, try dashboard fallback
+            throw new Error('No quiz attempts data available');
+          }
+        } catch (attemptsError) {
+          // If quiz attempts endpoint fails, try to fallback to dashboard data
+          console.warn('Students quiz_attempts endpoint failed, trying dashboard data...', attemptsError);
+          
+          try {
+            const dashboardResponse = await apiService.get('/api/dashboard/');
+            const dashboardData = dashboardResponse.data;
+            
+            console.log('Dashboard data received:', dashboardData);
+            
+            // Use dashboard data to create summary stats
       setSummaryStats([
         {
           title: 'Average Score',
-          value: '82%',
+                value: `${Math.round(dashboardData.overall_quiz_average_percentage || 0)}%`,
           icon: <EmojiEventsIcon sx={{ fontSize: '2rem' }} />,
           color: theme.palette.success.main,
-          trend: 'up',
-          trendValue: '5',
+                trend: dashboardData.overall_quiz_average_percentage > 75 ? 'up' : 'stable',
+                trendValue: '0',
         },
         {
-          title: 'Completion Rate',
-          value: '91%',
+                title: 'Pass Rate',
+                value: 'N/A',
           icon: <RateReviewIcon sx={{ fontSize: '2rem' }} />,
           color: theme.palette.info.main,
-          trend: 'up',
-          trendValue: '2',
+                trend: 'stable',
+                trendValue: '0',
         },
         {
           title: 'Total Participants',
-          value: '1,250',
+                value: dashboardData.total_students_attempted || 0,
           icon: <PeopleIcon sx={{ fontSize: '2rem' }} />,
           color: theme.palette.secondary.main,
           trend: 'stable',
           trendValue: '0',
         },
         {
-          title: 'quiz Taken',
-          value: '320',
+                title: 'Quizzes Taken',
+                value: dashboardData.quizzes || 0,
           icon: <QuizIcon sx={{ fontSize: '2rem' }} />,
           color: theme.palette.warning.main,
-          trend: 'down',
-          trendValue: '3',
+                trend: 'stable',
+                trendValue: '0',
         },
       ]);
-      setIsLoading(false);
-    }, 1000);
 
-    // Simulate fetching table data
-    setTimeout(() => {
-      setQuizResults([
-        { id: 'q1', quizTitle: 'Introduction to React', attempts: 150, averageScore: 85, passRate: 92, lastAttemptDate: '2024-05-28' },
-        { id: 'q2', quizTitle: 'Advanced JavaScript', attempts: 95, averageScore: 78, passRate: 85, lastAttemptDate: '2024-05-25' },
-        { id: 'q3', quizTitle: 'Python for Data Science', attempts: 120, averageScore: 88, passRate: 95, lastAttemptDate: '2024-05-29' },
-        { id: 'q4', quizTitle: 'SQL Fundamentals', attempts: 200, averageScore: 75, passRate: 80, lastAttemptDate: '2024-05-22' },
-        { id: 'q5', quizTitle: 'DevOps Basics', attempts: 70, averageScore: 82, passRate: 90, lastAttemptDate: '2024-05-27' },
-        { id: 'q6', quizTitle: 'Cybersecurity Essentials', attempts: 50, averageScore: 90, passRate: 96, lastAttemptDate: '2024-05-26' },
+            // Set empty quiz results since we don't have detailed data
+            setQuizResults([]);
+          } catch (dashboardError) {
+            console.error('Dashboard fallback also failed:', dashboardError);
+            
+            // Both endpoints failed - show N/A stats
+            setSummaryStats([
+              {
+                title: 'Average Score',
+                value: 'N/A',
+                icon: <EmojiEventsIcon sx={{ fontSize: '2rem' }} />,
+                color: theme.palette.warning.main,
+                trend: 'stable',
+                trendValue: '0',
+              },
+              {
+                title: 'Pass Rate',
+                value: 'N/A',
+                icon: <RateReviewIcon sx={{ fontSize: '2rem' }} />,
+                color: theme.palette.warning.main,
+                trend: 'stable',
+                trendValue: '0',
+              },
+              {
+                title: 'Total Participants',
+                value: 'N/A',
+                icon: <PeopleIcon sx={{ fontSize: '2rem' }} />,
+                color: theme.palette.warning.main,
+                trend: 'stable',
+                trendValue: '0',
+              },
+              {
+                title: 'Quizzes Taken',
+                value: 'N/A',
+                icon: <QuizIcon sx={{ fontSize: '2rem' }} />,
+                color: theme.palette.warning.main,
+                trend: 'stable',
+                trendValue: '0',
+              },
+            ]);
+            setQuizResults([]);
+          }
+        }
+
+      } catch (error) {
+        console.error('Error fetching results data:', error);
+        // Set error stats to show there's an issue but not break the UI
+        setSummaryStats([
+          {
+            title: 'Average Score',
+            value: 'N/A',
+            icon: <EmojiEventsIcon sx={{ fontSize: '2rem' }} />,
+            color: theme.palette.warning.main,
+            trend: 'stable',
+            trendValue: '0',
+          },
+          {
+            title: 'Pass Rate',
+            value: 'N/A',
+            icon: <RateReviewIcon sx={{ fontSize: '2rem' }} />,
+            color: theme.palette.warning.main,
+            trend: 'stable',
+            trendValue: '0',
+          },
+          {
+            title: 'Total Participants',
+            value: 'N/A',
+            icon: <PeopleIcon sx={{ fontSize: '2rem' }} />,
+            color: theme.palette.warning.main,
+            trend: 'stable',
+            trendValue: '0',
+          },
+          {
+            title: 'Quizzes Taken',
+            value: 'N/A',
+            icon: <QuizIcon sx={{ fontSize: '2rem' }} />,
+            color: theme.palette.warning.main,
+            trend: 'stable',
+            trendValue: '0',
+          },
       ]);
+        setQuizResults([]);
+      } finally {
+        setIsLoading(false);
       setIsLoadingTable(false);
-    }, 1500);
+      }
+    };
+
+    fetchResultsData();
   }, [theme]);
 
   // Table sorting and pagination functions
@@ -141,8 +330,7 @@ const ResultsSection = () => {
   ];
 
   const handleViewResult = (quizId) => {
-    // Navigate to the detailed result view
-    navigate(`/quiz-results/${quizId}`);
+    navigate(`/quiz/${quizId}/results`);
   };
 
   const handleViewReport = (quizId) => {
@@ -152,6 +340,7 @@ const ResultsSection = () => {
 
   const handleCloseReportDialog = () => {
     setOpenReportDialog(false);
+    setSelectedQuizId(null);
   };
 
   return (
@@ -173,24 +362,56 @@ const ResultsSection = () => {
             <Typography>Loading stats...</Typography>
           </Box>
         ) : summaryStats && (
-          <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid container spacing={{ xs: 2, md: 3 }} sx={{ mb: 4 }}>
             {summaryStats.map((stat, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
-                <motion.div
+              <Grid item xs={12} sm={6} md={3} key={stat.title}>
+                <Paper
+                  component={motion.div}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  style={{ height: '100%' }}
+                  sx={{
+                    p: 3,
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    borderRadius: 2,
+                    background: alpha(theme.palette.background.paper, 0.8),
+                    backdropFilter: 'blur(6px)',
+                    boxShadow: theme.shadows[2],
+                    '&:hover': {
+                      boxShadow: theme.shadows[8],
+                      transform: 'translateY(-4px)',
+                      transition: 'all 0.3s'
+                    }
+                  }}
                 >
-                  <InfoCard 
-                    title={stat.title} 
-                    value={stat.value} 
-                    icon={stat.icon} 
-                    color={stat.color}
-                    trend={stat.trend}
-                    trendValue={stat.trendValue}
-                  />
-                </motion.div>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      {stat.title}
+                    </Typography>
+                    <Box
+                      sx={{
+                        p: 1,
+                        borderRadius: '50%',
+                        bgcolor: alpha(stat.color, 0.1),
+                        color: stat.color
+                      }}
+                    >
+                      {stat.icon}
+                    </Box>
+                  </Box>
+                  <Typography variant="h4" component="div" sx={{ mb: 1 }}>
+                    {stat.value}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color={stat.trend === 'up' ? 'success.main' : stat.trend === 'down' ? 'error.main' : 'text.secondary'}
+                    sx={{ display: 'flex', alignItems: 'center' }}
+                  >
+                    {stat.trend === 'up' ? '+' : stat.trend === 'down' ? '-' : ''}{stat.trendValue}%
+                  </Typography>
+                </Paper>
               </Grid>
             ))}
           </Grid>
@@ -213,75 +434,93 @@ const ResultsSection = () => {
           />
         ) : (
           <Paper
-            elevation={0}
             sx={{
               width: '100%',
-              mb: 2,
               overflow: 'hidden',
               borderRadius: 2,
-              border: `1px solid ${alpha(theme.palette.divider, 0.15)}`,
+              background: alpha(theme.palette.background.paper, 0.8),
+              backdropFilter: 'blur(6px)'
             }}
           >
-            <TableContainer>
-              <Table sx={{ minWidth: 750 }} aria-labelledby="resultsTable">
+            <TableContainer sx={{ maxHeight: 440, overflowX: 'auto' }}>
+              <Table stickyHeader aria-label="quiz results table">
                 <TableHead>
                   <TableRow>
-                    {tableHeadCells.map((headCell) => (
-                      <TableCell
-                        key={headCell.id}
-                        align={headCell.numeric ? 'right' : 'left'}
-                        padding={headCell.disablePadding ? 'none' : 'normal'}
-                        sortDirection={orderBy === headCell.id ? order : false}
-                      >
-                        {headCell.sortDisabled ? headCell.label : (
+                    <TableCell>
                           <TableSortLabel
-                            active={orderBy === headCell.id}
-                            direction={orderBy === headCell.id ? order : 'asc'}
-                            onClick={(event) => handleRequestSort(event, headCell.id)}
+                        active={orderBy === 'quizTitle'}
+                        direction={orderBy === 'quizTitle' ? order : 'asc'}
+                        onClick={() => handleRequestSort('quizTitle')}
                           >
-                            {headCell.label}
-                            {orderBy === headCell.id ? (
+                        Quiz Title
+                        {orderBy === 'quizTitle' ? (
                               <Box component="span" sx={visuallyHidden}>
                                 {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
                               </Box>
                             ) : null}
                           </TableSortLabel>
-                        )}
                       </TableCell>
-                    ))}
+                    <TableCell align="center">Attempts</TableCell>
+                    <TableCell align="center">Avg. Score (%)</TableCell>
+                    <TableCell align="center">Pass Rate (%)</TableCell>
+                    <TableCell align="center">Last Attempt</TableCell>
+                    <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {visibleRows.map((row, index) => {
-                    return (
-                      <TableRow hover tabIndex={-1} key={row.id}>
-                        <TableCell component="th" scope="row">{row.quizTitle}</TableCell>
-                        <TableCell align="right">{row.attempts}</TableCell>
-                        <TableCell align="right">{row.averageScore}%</TableCell>
-                        <TableCell align="right">{row.passRate}%</TableCell>
-                        <TableCell>{row.lastAttemptDate}</TableCell>
-                        <TableCell align="right">
+                  {visibleRows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      hover
+                      sx={{
+                        '&:last-child td, &:last-child th': { border: 0 },
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s',
+                        '&:hover': {
+                          bgcolor: alpha(theme.palette.primary.main, 0.1)
+                        }
+                      }}
+                    >
+                      <TableCell component="th" scope="row">
+                        {row.quizTitle}
+                      </TableCell>
+                      <TableCell align="center">{row.attempts}</TableCell>
+                      <TableCell align="center">{row.averageScore}%</TableCell>
+                      <TableCell align="center">{row.passRate}%</TableCell>
+                      <TableCell align="center">{row.lastAttemptDate}</TableCell>
+                      <TableCell align="center">
                           <IconButton
-                            onClick={() => handleViewResult(row.id)}
-                            size="small"
-                            aria-label="view"
-                            sx={{ mr: 1 }}
-                            title="View Details"
+                          color="primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewResult(row.id);
+                          }}
+                          sx={{
+                            '&:hover': {
+                              bgcolor: alpha(theme.palette.primary.main, 0.1)
+                            }
+                          }}
                           >
-                            <VisibilityIcon fontSize="small" />
+                          <VisibilityIcon />
                           </IconButton>
                           <IconButton
-                            onClick={() => handleViewReport(row.id)}
-                            size="small"
-                            aria-label="report"
-                            title="View Report"
+                          color="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewReport(row.id);
+                          }}
+                          sx={{
+                            ml: 1,
+                            '&:hover': {
+                              bgcolor: alpha(theme.palette.secondary.main, 0.1)
+                            }
+                          }}
                           >
-                            <AssessmentOutlinedIcon fontSize="small" />
+                          <AssessmentOutlinedIcon />
                           </IconButton>
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
+                  ))}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -307,24 +546,28 @@ const ResultsSection = () => {
         PaperProps={{
           sx: {
             borderRadius: 2,
-            boxShadow: 24,
+            background: alpha(theme.palette.background.paper, 0.9),
+            backdropFilter: 'blur(10px)'
           }
         }}
       >
-        <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">Quiz Result Report</Typography>
+        <DialogTitle sx={{ m: 0, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="h6">Detailed Quiz Report</Typography>
           <IconButton
             aria-label="close"
             onClick={handleCloseReportDialog}
             sx={{
-              color: (theme) => theme.palette.grey[500],
+              color: theme.palette.grey[500],
+              '&:hover': {
+                bgcolor: alpha(theme.palette.grey[500], 0.1)
+              }
             }}
           >
             <CloseIcon />
           </IconButton>
         </DialogTitle>
         <DialogContent dividers>
-          <ResultReportSection quizId={selectedQuizId} />
+          {selectedQuizId && <ResultReportSection quizId={selectedQuizId} />}
         </DialogContent>
       </Dialog>
     </FullLayout>

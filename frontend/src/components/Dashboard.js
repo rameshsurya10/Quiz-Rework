@@ -19,7 +19,7 @@ import TimelineIcon from '@mui/icons-material/Timeline';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import { useTheme as useCustomTheme } from '../contexts/ThemeContext';
-import apiService from "../api";
+import apiService from "../services/api";
 import { 
   PerformanceGaugeCard,
   QuizAnswerDonutChart,
@@ -45,7 +45,6 @@ const Dashboard = () => {
     const [scoreInsightType, setScoreInsightType] = useState('peak'); // 'peak', 'average', 'trend'
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const { read } = apiService.useCRUD();
 
     // Format time from seconds to m:ss format
     const formatTime = (seconds) => {
@@ -131,19 +130,19 @@ const Dashboard = () => {
             
             // Add summary data
             csvRows.push(['Summary Statistics']);
-            csvRows.push(['Total Teachers', data.total_teachers || "0"]);
-            csvRows.push(['Total Students', data.total_students || "0"]);
-            csvRows.push(['Total Quizzes', data.total_quizes || "0"]);
-            csvRows.push(['Active Participants', data.total_participants || "0"]);
+            csvRows.push(['Total Teachers', data.totalTeachers || "0"]);
+            csvRows.push(['Total Students', data.totalStudents || "0"]);
+            csvRows.push(['Total Quizzes', data.totalQuizzes || "0"]);
+            csvRows.push(['Active Participants', data.activeParticipants || "0"]);
             csvRows.push([""]);
             
             // Add performance metrics
             csvRows.push(['Performance Metrics']);
-            csvRows.push(['Average Score', `${data.average_score || 0}%`]);
-            csvRows.push(['Correct Answers', `${data.right_answers || 0}%`]);
-            csvRows.push(['Wrong Answers', `${data.wrong_answers || 0}%`]);
-            csvRows.push(['Unanswered', `${data.unanswered_questions || 0}%`]);
-            csvRows.push(['Average Duration', formatTime(data.average_duration || 0)]);
+            csvRows.push(['Average Score', `${data.averagePerformance || 0}%`]);
+            csvRows.push(['Correct Answers', `${data.correctAnswers || 0}%`]);
+            csvRows.push(['Wrong Answers', `${data.wrongAnswers || 0}%`]);
+            csvRows.push(['Unanswered', `${data.unansweredQuestions || 0}%`]);
+            csvRows.push(['Average Duration', formatTime(data.totalQuestions || 0)]);
             
             // Add trend data if available
             if (trendData && trendData.labels && trendData.scores) {
@@ -180,30 +179,82 @@ const Dashboard = () => {
     const refresh = async () => {
         setIsLoading(true);
         try {
-            console.log('Fetching dashboard data...');
+            console.log('Fetching admin dashboard data...');
             
-            const dashboardData = await apiService.useCRUD().read(
-                'api/dashboard',  // Add 'api/' prefix here
-                1,                // page
-                10,               // pageSize
-                {},               // No filters needed
-                (error) => {
-                    console.error('Dashboard endpoint error:', error);
-                    showMessage('Failed to load dashboard data.', 'error');
-                }
-            );
+            // Corrected API call to match backend URL pattern
+            const response = await apiService.get('/api/dashboard/');
+            const dashboardData = response.data;
             
             console.log('Dashboard data received:', dashboardData);
-            
+
             if (dashboardData) {
-                setData(dashboardData);
+                // Map backend data to frontend state structure
+                const mappedData = {
+                    // Basic counts
+                    totalTeachers: dashboardData.teachers || 0,
+                    totalStudents: dashboardData.students || 0,
+                    totalQuizzes: dashboardData.quizzes || 0,
+                    totalDepartments: dashboardData.departments || 0,
+                    activeParticipants: dashboardData.total_students_attempted || 0,
+                    
+                    // Performance metrics - calculate percentages
+                    totalAttempts: dashboardData.total_quiz_attempts || 0,
+                    totalQuestions: dashboardData.questions || 0,
+                    
+                    // Calculate percentages for answer distribution
+                    correctAnswers: (() => {
+                        const total = dashboardData.overall_correct_answers + dashboardData.overall_wrong_answers + dashboardData.overall_unanswered;
+                        return total > 0 ? Math.round((dashboardData.overall_correct_answers / total) * 100) : 0;
+                    })(),
+                    wrongAnswers: (() => {
+                        const total = dashboardData.overall_correct_answers + dashboardData.overall_wrong_answers + dashboardData.overall_unanswered;
+                        return total > 0 ? Math.round((dashboardData.overall_wrong_answers / total) * 100) : 0;
+                    })(),
+                    unansweredQuestions: (() => {
+                        const total = dashboardData.overall_correct_answers + dashboardData.overall_wrong_answers + dashboardData.overall_unanswered;
+                        return total > 0 ? Math.round((dashboardData.overall_unanswered / total) * 100) : 0;
+                    })(),
+                    
+                    averagePerformance: Math.round(dashboardData.overall_quiz_average_percentage || 0),
+                    
+                    // Score insights - extract percentage values from score objects
+                    highScore: dashboardData.high_score ? Math.round(dashboardData.high_score.percentage) : 0,
+                    lowScore: dashboardData.low_score ? Math.round(dashboardData.low_score.percentage) : 0,
+                    
+                    // Performance distribution - convert counts to percentages
+                    performanceDistribution: (() => {
+                        const dist = dashboardData.performance_distribution || { excellent: 0, good: 0, average: 0, poor: 0 };
+                        const totalAttempts = dist.excellent + dist.good + dist.average + dist.poor;
+                        if (totalAttempts === 0) return { excellent: 0, good: 0, average: 0, poor: 0 };
+                        
+                        return {
+                            excellent: Math.round((dist.excellent / totalAttempts) * 100),
+                            good: Math.round((dist.good / totalAttempts) * 100),
+                            average: Math.round((dist.average / totalAttempts) * 100),
+                            poor: Math.round((dist.poor / totalAttempts) * 100)
+                        };
+                    })(),
+                    
+                    // Department performance
+                    departmentPerformance: dashboardData.department_wise_performance || {},
+                    
+                    // Additional calculated metrics
+                    participationRate: dashboardData.students > 0 
+                        ? ((dashboardData.total_students_attempted / dashboardData.students) * 100).toFixed(1)
+                        : 0
+                };
+                
+                console.log('Mapped dashboard data:', mappedData);
+                setData(mappedData);
                 showMessage('Dashboard data loaded successfully.', 'success');
             } else {
                 showMessage('No dashboard data available yet.', 'info');
             }
         } catch (error) {
             console.error('Error in refresh:', error);
-            showMessage('An error occurred while loading dashboard data.', 'error');
+            const errorMessage = error.response?.data?.detail || 'An error occurred while loading dashboard data.';
+            showMessage(errorMessage, 'error');
+            setData({});
         } finally {
             setIsLoading(false);
         }
@@ -227,7 +278,7 @@ const Dashboard = () => {
         return () => {
             window.removeEventListener('focus', handleFocus);
         };
-    }, [search]); // Include search in dependency array to refetch when filter changes
+    }, []); // Removed search from dependency array to prevent re-fetch on filter change
 
     const handleSearchChange = (event) => {
         const { name, value } = event.target;
@@ -467,9 +518,9 @@ const Dashboard = () => {
             <DialogContent>
                 <Box sx={{ height: 300, mb: 3, mt: 2 }}>
                     <QuizMetricsBarChart 
-                        averageScore={data.average_score}
-                        highestScore={data.greatest_score}
-                        lowestScore={data.least_score}
+                        averageScore={data.averagePerformance}
+                        highestScore={data.highScore}
+                        lowestScore={data.lowScore}
                     />
                 </Box>
                 <Grid container spacing={3}>
@@ -477,13 +528,13 @@ const Dashboard = () => {
                         <Box sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ mb: 1 }}>Highest Score</Typography>
                             <Typography variant="h4" color="success.main" fontWeight="bold">
-                                {data.greatest_score || 0}%
+                                {data.highScore || 0}%
                             </Typography>
                             <Typography variant="body2" color="text.secondary" mt={1}>
                                 Achieved by {data.highest_score_student || 'Advanced Student'}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                Quiz: {data.highest_score_quiz || 'Mathematics Quiz 3'}
+                                                                        Quiz: {data.highest_score_quiz || 'N/A'}
                             </Typography>
                         </Box>
                     </Grid>
@@ -491,13 +542,13 @@ const Dashboard = () => {
                         <Box sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.1), borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ mb: 1 }}>Average Score</Typography>
                             <Typography variant="h4" color="primary.main" fontWeight="bold">
-                                {data.average_score || 0}%
+                                {data.averagePerformance || 0}%
                             </Typography>
                             <Typography variant="body2" color="text.secondary" mt={1}>
-                                Based on {data.participants || 0} participants
+                                Based on {data.activeParticipants || 0} participants
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                {data.average_score > 70 ? 'Good overall performance' : 'Needs improvement'}
+                                {data.averagePerformance > 70 ? 'Good overall performance' : 'Needs improvement'}
                             </Typography>
                         </Box>
                     </Grid>
@@ -505,13 +556,13 @@ const Dashboard = () => {
                         <Box sx={{ p: 2, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ mb: 1 }}>Lowest Score</Typography>
                             <Typography variant="h4" color="error.main" fontWeight="bold">
-                                {data.least_score || 0}%
+                                {data.lowScore || 0}%
                             </Typography>
                             <Typography variant="body2" color="text.secondary" mt={1}>
-                                Quiz: {data.lowest_score_quiz || 'Physics Quiz 1'}
+                                                                        Quiz: {data.lowest_score_quiz || 'N/A'}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                {data.least_score < 40 ? 'Significant attention required' : 'Review recommended'}
+                                {data.lowScore < 40 ? 'Significant attention required' : 'Review recommended'}
                             </Typography>
                         </Box>
                     </Grid>
@@ -522,7 +573,7 @@ const Dashboard = () => {
                         <Grid item xs={6} sm={3}>
                             <Box sx={{ p: 2, bgcolor: alpha(theme.palette.success.dark, 0.1), borderRadius: 2, textAlign: 'center' }}>
                                 <Typography variant="h5" fontWeight="medium" color="success.dark">
-                                    {data.excellent_percentage || '18'}%
+                                    {data.performanceDistribution.excellent || '18'}%
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">Excellent<br/>(90-100%)</Typography>
                             </Box>
@@ -530,7 +581,7 @@ const Dashboard = () => {
                         <Grid item xs={6} sm={3}>
                             <Box sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: 2, textAlign: 'center' }}>
                                 <Typography variant="h5" fontWeight="medium" color="success.main">
-                                    {data.good_percentage || '42'}%
+                                    {data.performanceDistribution.good || '42'}%
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">Good<br/>(70-89%)</Typography>
                             </Box>
@@ -538,7 +589,7 @@ const Dashboard = () => {
                         <Grid item xs={6} sm={3}>
                             <Box sx={{ p: 2, bgcolor: alpha(theme.palette.warning.main, 0.1), borderRadius: 2, textAlign: 'center' }}>
                                 <Typography variant="h5" fontWeight="medium" color="warning.main">
-                                    {data.average_percentage || '25'}%
+                                    {data.performanceDistribution.average || '25'}%
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">Average<br/>(50-69%)</Typography>
                             </Box>
@@ -546,7 +597,7 @@ const Dashboard = () => {
                         <Grid item xs={6} sm={3}>
                             <Box sx={{ p: 2, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 2, textAlign: 'center' }}>
                                 <Typography variant="h5" fontWeight="medium" color="error.main">
-                                    {data.poor_percentage || '15'}%
+                                    {data.performanceDistribution.poor || '15'}%
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">Poor<br/>(0-49%)</Typography>
                             </Box>
@@ -585,9 +636,9 @@ const Dashboard = () => {
             <DialogContent>
                 <Box sx={{ height: 300, mb: 3, mt: 2 }}>
                     <QuizAnswerDonutChart 
-                        rightAnswers={data.right_answers}
-                        wrongAnswers={data.wrong_answers}
-                        unansweredQuestions={data.unanswered_questions}
+                        rightAnswers={data.correctAnswers}
+                        wrongAnswers={data.wrongAnswers}
+                        unansweredQuestions={data.unansweredQuestions}
                     />
                 </Box>
                 <Grid container spacing={3}>
@@ -595,12 +646,12 @@ const Dashboard = () => {
                         <Box sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ mb: 1 }}>Correct Answers</Typography>
                             <Typography variant="h4" color="success.main" fontWeight="bold">
-                                {data.right_answers || 0}%
+                                {data.correctAnswers || 0}%
                             </Typography>
                             <Typography variant="body2" color="textSecondary" mt={1}>
                                 Questions answered correctly
                             </Typography>
-                            {data.right_answers > 70 ? (
+                            {data.correctAnswers > 70 ? (
                                 <Typography variant="body2" color="success.main">
                                     Good understanding of material
                                 </Typography>
@@ -615,12 +666,12 @@ const Dashboard = () => {
                         <Box sx={{ p: 2, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ mb: 1 }}>Incorrect Answers</Typography>
                             <Typography variant="h4" color="error.main" fontWeight="bold">
-                                {data.wrong_answers || 0}%
+                                {data.wrongAnswers || 0}%
                             </Typography>
                             <Typography variant="body2" color="textSecondary" mt={1}>
                                 Questions answered incorrectly
                             </Typography>
-                            {data.wrong_answers < 20 ? (
+                            {data.wrongAnswers < 20 ? (
                                 <Typography variant="body2" color="success.main">
                                     Low error rate
                                 </Typography>
@@ -635,12 +686,12 @@ const Dashboard = () => {
                         <Box sx={{ p: 2, bgcolor: alpha(theme.palette.warning.main, 0.1), borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ mb: 1 }}>Skipped Questions</Typography>
                             <Typography variant="h4" color="warning.main" fontWeight="bold">
-                                {data.unanswered_questions || 0}%
+                                {data.unansweredQuestions || 0}%
                             </Typography>
                             <Typography variant="body2" color="textSecondary" mt={1}>
                                 Questions left unanswered
                             </Typography>
-                            {data.unanswered_questions < 10 ? (
+                            {data.unansweredQuestions < 10 ? (
                                 <Typography variant="body2" color="success.main">
                                     Good attempt rate
                                 </Typography>
@@ -659,7 +710,7 @@ const Dashboard = () => {
                             <Box sx={{ p: 2, bgcolor: alpha(theme.palette.background.paper, 0.5), borderRadius: 2, border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
                                 <Typography variant="subtitle1" fontWeight="medium" gutterBottom>Strengths</Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                    <Typography variant="body2" sx={{ minWidth: 120 }}>{data.strongest_topic || 'Mathematics'}</Typography>
+                                                                                    <Typography variant="body2" sx={{ minWidth: 120 }}>{data.strongest_topic || 'No data'}</Typography>
                                     <Box sx={{ flexGrow: 1, mx: 1 }}>
                                         <Box sx={{ height: 8, bgcolor: alpha(theme.palette.success.main, 0.2), borderRadius: 1, position: 'relative' }}>
                                             <Box sx={{ 
@@ -667,16 +718,16 @@ const Dashboard = () => {
                                                 left: 0, 
                                                 top: 0, 
                                                 height: '100%', 
-                                                width: `${data.strongest_topic_percentage || 82}%`,
+                                                                                                    width: `${data.strongest_topic_percentage || 0}%`,
                                                 bgcolor: theme.palette.success.main,
                                                 borderRadius: 1 
                                             }} />
                                         </Box>
                                     </Box>
-                                    <Typography variant="body2">{data.strongest_topic_percentage || 82}%</Typography>
+                                                                                    <Typography variant="body2">{data.strongest_topic_percentage || 0}%</Typography>
                                 </Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                    <Typography variant="body2" sx={{ minWidth: 120 }}>{data.second_strongest_topic || 'History'}</Typography>
+                                                                                    <Typography variant="body2" sx={{ minWidth: 120 }}>{data.second_strongest_topic || 'No data'}</Typography>
                                     <Box sx={{ flexGrow: 1, mx: 1 }}>
                                         <Box sx={{ height: 8, bgcolor: alpha(theme.palette.success.main, 0.2), borderRadius: 1, position: 'relative' }}>
                                             <Box sx={{ 
@@ -684,13 +735,13 @@ const Dashboard = () => {
                                                 left: 0, 
                                                 top: 0, 
                                                 height: '100%', 
-                                                width: `${data.second_strongest_topic_percentage || 76}%`,
+                                                                                                    width: `${data.second_strongest_topic_percentage || 0}%`,
                                                 bgcolor: theme.palette.success.main,
                                                 borderRadius: 1 
                                             }} />
                                         </Box>
                                     </Box>
-                                    <Typography variant="body2">{data.second_strongest_topic_percentage || 76}%</Typography>
+                                                                                    <Typography variant="body2">{data.second_strongest_topic_percentage || 0}%</Typography>
                                 </Box>
                             </Box>
                         </Grid>
@@ -698,7 +749,7 @@ const Dashboard = () => {
                             <Box sx={{ p: 2, bgcolor: alpha(theme.palette.background.paper, 0.5), borderRadius: 2, border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
                                 <Typography variant="subtitle1" fontWeight="medium" gutterBottom>Improvement Areas</Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                    <Typography variant="body2" sx={{ minWidth: 120 }}>{data.weakest_topic || 'Physics'}</Typography>
+                                                                                    <Typography variant="body2" sx={{ minWidth: 120 }}>{data.weakest_topic || 'No data'}</Typography>
                                     <Box sx={{ flexGrow: 1, mx: 1 }}>
                                         <Box sx={{ height: 8, bgcolor: alpha(theme.palette.error.main, 0.2), borderRadius: 1, position: 'relative' }}>
                                             <Box sx={{ 
@@ -706,16 +757,16 @@ const Dashboard = () => {
                                                 left: 0, 
                                                 top: 0, 
                                                 height: '100%', 
-                                                width: `${data.weakest_topic_percentage || 45}%`,
+                                                                                                    width: `${data.weakest_topic_percentage || 0}%`,
                                                 bgcolor: theme.palette.error.main,
                                                 borderRadius: 1 
                                             }} />
                                         </Box>
                                     </Box>
-                                    <Typography variant="body2">{data.weakest_topic_percentage || 45}%</Typography>
+                                                                                    <Typography variant="body2">{data.weakest_topic_percentage || 0}%</Typography>
                                 </Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                    <Typography variant="body2" sx={{ minWidth: 120 }}>{data.second_weakest_topic || 'Chemistry'}</Typography>
+                                                                                    <Typography variant="body2" sx={{ minWidth: 120 }}>{data.second_weakest_topic || 'No data'}</Typography>
                                     <Box sx={{ flexGrow: 1, mx: 1 }}>
                                         <Box sx={{ height: 8, bgcolor: alpha(theme.palette.error.main, 0.2), borderRadius: 1, position: 'relative' }}>
                                             <Box sx={{ 
@@ -723,13 +774,13 @@ const Dashboard = () => {
                                                 left: 0, 
                                                 top: 0, 
                                                 height: '100%', 
-                                                width: `${data.second_weakest_topic_percentage || 52}%`,
+                                                                                                    width: `${data.second_weakest_topic_percentage || 0}%`,
                                                 bgcolor: theme.palette.error.main,
                                                 borderRadius: 1 
                                             }} />
                                         </Box>
                                     </Box>
-                                    <Typography variant="body2">{data.second_weakest_topic_percentage || 52}%</Typography>
+                                                                                    <Typography variant="body2">{data.second_weakest_topic_percentage || 0}%</Typography>
                                 </Box>
                             </Box>
                         </Grid>
@@ -978,10 +1029,10 @@ const Dashboard = () => {
                     {/* Stats Overview Cards */}
                     <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: 4 }}>
                         {[
-                            { title: 'Total Teachers', icon: TeacherIcon, value: data.total_teachers || '0', change: '+12.5%', color: theme.palette.primary.main },
-                            { title: 'Total Students', icon: StudentIcon, value: data.total_students || '0', change: '+8.3%', color: theme.palette.secondary.main },
-                            { title: 'Total Quiz', icon: QuizIcon, value: data.total_quizes || '0', change: '+5.7%', color: theme.palette.accent?.main || theme.palette.error.main },
-                            { title: 'Active Participants', icon: PersonIcon, value: data.total_participants || '0', change: '+15.2%', color: theme.palette.primary.main }
+                            { title: 'Total Teachers', icon: TeacherIcon, value: data.totalTeachers || '0', change: '+12.5%', color: theme.palette.primary.main },
+                            { title: 'Total Students', icon: StudentIcon, value: data.totalStudents || '0', change: '+8.3%', color: theme.palette.secondary.main },
+                            { title: 'Total Quiz', icon: QuizIcon, value: data.totalQuizzes || '0', change: '+5.7%', color: theme.palette.accent?.main || theme.palette.error.main },
+                            { title: 'Active Participants', icon: PersonIcon, value: data.activeParticipants || '0', change: '+15.2%', color: theme.palette.primary.main }
                         ].map((stat, index) => (
                             <Grid item xs={6} sm={6} md={3} key={stat.title}>
                                 <Card sx={{
@@ -1101,27 +1152,17 @@ const Dashboard = () => {
                                         Performance Overview
                                     </Typography>
                                     
-                                    {/* Main Performance Score */}
+                                    {/* Main Performance Score - Speedometer Chart */}
                                     <Box sx={{ 
                                         textAlign: 'center',
                                         mb: 4,
                                         py: 2
                                     }}>
-                                        <Typography variant="h1" sx={{ 
-                                            fontSize: { xs: '3rem', sm: '4rem' },
-                                            fontWeight: 700,
-                                            color: theme.palette.error.main,
-                                            mb: 1,
-                                            lineHeight: 1
-                                        }}>
-                                            0%
-                                        </Typography>
-                                        <Typography variant="body1" sx={{ 
-                                            color: theme.palette.text.secondary,
-                                            fontSize: { xs: '0.9rem', sm: '1rem' }
-                                        }}>
-                                            Based on {data.total_participants || 0} participants
-                                        </Typography>
+                                        <PerformanceGaugeCard 
+                                            averageScore={data.averagePerformance || 0}
+                                            secondaryText={`Based on ${data.activeParticipants || 0} participants`}
+                                            height={180}
+                                        />
                                     </Box>
 
                                     <Typography variant="h6" sx={{ 
@@ -1137,10 +1178,10 @@ const Dashboard = () => {
                                     {/* Performance Stats Grid */}
                                     <Grid container spacing={2} justifyContent="center">
                                         {[
-                                            { label: 'Correct', value: data.right_answers || '0%', color: theme.palette.success?.main || '#4caf50' },
-                                            { label: 'Wrong', value: data.wrong_answers || '0%', color: theme.palette.error.main },
-                                            { label: 'Unanswered', value: data.unanswered_questions || '0%', color: theme.palette.warning?.main || '#ff9800' },
-                                            { label: 'Avg. Time', value: formatTime(data.average_duration || 0), color: theme.palette.info?.main || '#2196f3' }
+                                            { label: 'Correct', value: data.correctAnswers || '0%', color: theme.palette.success?.main || '#4caf50' },
+                                            { label: 'Wrong', value: data.wrongAnswers || '0%', color: theme.palette.error.main },
+                                            { label: 'Unanswered', value: data.unansweredQuestions || '0%', color: theme.palette.warning?.main || '#ff9800' },
+                                            { label: 'Avg. Time', value: formatTime(data.totalQuestions || 0), color: theme.palette.info?.main || '#2196f3' }
                                         ].map((metric, index) => (
                                             <Grid item xs={6} sm={3} key={index}>
                                                 <Card variant="outlined" sx={{
@@ -1217,9 +1258,9 @@ const Dashboard = () => {
                                             </Box>
                                             <Box sx={{ height: isAdvancedView ? 200 : 250, mt: 2 }}>
                                                 <QuizMetricsBarChart 
-                                                    averageScore={data.average_score}
-                                                    highestScore={data.greatest_score}
-                                                    lowestScore={data.least_score}
+                                                    averageScore={data.averagePerformance}
+                                                    highestScore={data.highScore}
+                                                    lowestScore={data.lowScore}
                                                     options={{ animation: { duration: 1200, easing: 'easeInOutQuint' } }}
                                                 />
                                             </Box>
@@ -1229,15 +1270,15 @@ const Dashboard = () => {
                                                     <Grid container spacing={2}>
                                                         <Grid item xs={4} textAlign="center">
                                                             <Typography variant="caption" color="textSecondary">Average</Typography>
-                                                            <Typography variant="h6" fontWeight="bold">{data.average_score}%</Typography>
+                                                            <Typography variant="h6" fontWeight="bold">{data.averagePerformance}%</Typography>
                                                         </Grid>
                                                         <Grid item xs={4} textAlign="center">
                                                             <Typography variant="caption" color="textSecondary">Highest</Typography>
-                                                            <Typography variant="h6" fontWeight="bold" color="success.main">{data.greatest_score}%</Typography>
+                                                            <Typography variant="h6" fontWeight="bold" color="success.main">{data.highScore}%</Typography>
                                                         </Grid>
                                                         <Grid item xs={4} textAlign="center">
                                                             <Typography variant="caption" color="textSecondary">Lowest</Typography>
-                                                            <Typography variant="h6" fontWeight="bold" color="error.main">{data.least_score}%</Typography>
+                                                            <Typography variant="h6" fontWeight="bold" color="error.main">{data.lowScore}%</Typography>
                                                         </Grid>
                                                     </Grid>
                                                 </Box>
@@ -1267,9 +1308,9 @@ const Dashboard = () => {
                                             </Box>
                                             <Box sx={{ height: isAdvancedView ? 200 : 250, mt: 2 }}>
                                                 <QuizAnswerDonutChart 
-                                                    rightAnswers={data.right_answers}
-                                                    wrongAnswers={data.wrong_answers}
-                                                    unansweredQuestions={data.unanswered_questions}
+                                                    rightAnswers={data.correctAnswers}
+                                                    wrongAnswers={data.wrongAnswers}
+                                                    unansweredQuestions={data.unansweredQuestions}
                                                     options={{ animation: { duration: 1500, animateRotate: true, animateScale: true } }}
                                                 />
                                             </Box>
@@ -1280,10 +1321,10 @@ const Dashboard = () => {
                                                             <Box sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: 2 }}>
                                                                 <Typography variant="caption" color="textSecondary" display="block">Most Correct Topic</Typography>
                                                                 <Typography variant="body2" fontWeight="medium">
-                                                                    {data.strongest_topic || 'Mathematics'}
+                                                                    {data.strongest_topic || 'No data available'}
                                                                 </Typography>
                                                                 <Typography variant="caption" color="success.main">
-                                                                    {data.strongest_topic_percentage || 82}% correct rate
+                                                                    {data.strongest_topic_percentage || 0}% correct rate
                                                                 </Typography>
                                                             </Box>
                                                         </Grid>
@@ -1291,10 +1332,10 @@ const Dashboard = () => {
                                                             <Box sx={{ p: 2, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 2 }}>
                                                                 <Typography variant="caption" color="textSecondary" display="block">Most Incorrect Topic</Typography>
                                                                 <Typography variant="body2" fontWeight="medium">
-                                                                    {data.weakest_topic || 'Physics'}
+                                                                    {data.weakest_topic || 'No data available'}
                                                                 </Typography>
                                                                 <Typography variant="caption" color="error.main">
-                                                                    {data.weakest_topic_percentage || 45}% correct rate
+                                                                    {data.weakest_topic_percentage || 0}% correct rate
                                                                 </Typography>
                                                             </Box>
                                                         </Grid>
