@@ -50,57 +50,75 @@ class StudentBulkUploadSerializer(serializers.Serializer):
         user = self.context['request'].user
         errors = []
         success_count = 0
-        
+
         try:
-            # Read the Excel file
             df = pd.read_excel(file)
-            
-            # Validate required columns
-            required_columns = ['name', 'email']
+
+            # Ensure required columns
+            required_columns = ['name', 'email', 'code']
             missing_columns = [col for col in required_columns if col not in df.columns]
-            
+
             if missing_columns:
                 raise serializers.ValidationError(
                     f"Missing required columns: {', '.join(missing_columns)}"
                 )
-            
+
             # Process each row
             for index, row in df.iterrows():
                 try:
-                    # Validate email
-                    if not row.get('email'):
-                        errors.append(f"Row {index + 2}: Email is required")
+                    row_num = index + 2  # For Excel row number
+                    email = str(row.get('email', '')).strip().lower()
+
+                    if not email:
+                        errors.append(f"Row {row_num}: Email is required")
                         continue
-                    
+
                     try:
-                        validate_email(row['email'])
+                        validate_email(email)
                     except ValidationError:
-                        errors.append(f"Row {index + 2}: Invalid email format - {row['email']}")
+                        errors.append(f"Row {row_num}: Invalid email format - {email}")
                         continue
-                    
-                    # Check for duplicate email
-                    if Student.objects.filter(email=row['email']).exists():
-                        errors.append(f"Row {index + 2}: Student with this email already exists - {row['email']}")
+
+                    if Student.objects.filter(email=email, is_deleted=False).exists():
+                        errors.append(f"Row {row_num}: Student already exists - {email}")
                         continue
-                    
-                    # Create student
-                    student_data = {
-                        'name': row.get('name', '').strip(),
-                        'email': row['email'].strip().lower(),
-                        'phone': str(row.get('phone', '')).strip() if pd.notna(row.get('phone')) else None,
-                        'department_id': int(row['department_id']) if pd.notna(row.get('department_id')) else None,
-                        'created_by': user,
-                        'last_modified_by': user
-                    }
-                    
-                    Student.objects.create(**student_data)
+
+                    department_id = row.get('department_id')
+                    if pd.isna(department_id):
+                        errors.append(f"Row {row_num}: Department ID is missing")
+                        continue
+
+                    try:
+                        department = Department.objects.get(pk=int(department_id), is_deleted=False)
+                    except Department.DoesNotExist:
+                        # ✅ Auto-create department if not exists
+                        department_name = str(row.get('department_name', f'Department {department_id}')).strip()
+
+                        department = Department.objects.create(
+                            department_id=int(department_id),
+                            name=department_name,
+                            code=f'DEP{department_id}',
+                            created_by=user,
+                            last_modified_by=user
+                        )
+
+                    # Create the student
+                    student = Student.objects.create(
+                        name=str(row.get('name', '')).strip(),
+                        email=email,
+                        phone=str(row.get('phone', '')).strip() if pd.notna(row.get('phone')) else None,
+                        department_id=department,
+                        created_by=user,
+                        last_modified_by=user
+                    )
+
                     success_count += 1
                     send_student_verification_email(student)
-                    
+
                 except Exception as e:
-                    errors.append(f"Row {index + 2}: {str(e)}")
+                    errors.append(f"Row {row_num}: Unexpected error: {str(e)}")
                     continue
-                    
+
             return {
                 'success': True,
                 'message': f'Successfully processed {success_count} students',
@@ -109,6 +127,6 @@ class StudentBulkUploadSerializer(serializers.Serializer):
                 'success_count': success_count,
                 'error_count': len(errors)
             }
-            
+
         except Exception as e:
             raise serializers.ValidationError(f"Error processing file: {str(e)}")
