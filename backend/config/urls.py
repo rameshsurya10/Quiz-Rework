@@ -59,7 +59,7 @@ urlpatterns = [
     # API endpoints - Include accounts URLs with namespace
     path('api/accounts/', include(('accounts.urls', 'accounts'), namespace='accounts')),  # User and authentication endpoints
     # path('api/accounts/', include('accounts.urls')),
-    path('api/documents/', include('documents.urls')),
+    # path('api/documents/', include('documents.urls')),
     path('api/quiz/', include('quiz.urls')),
     # path('api/ai/', include('ai_processing.urls')),  # Removed as unused
     path('api/departments/', include('departments.urls')),
