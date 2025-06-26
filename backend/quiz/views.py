@@ -7,7 +7,7 @@ from django.core.files.storage import default_storage
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from .models import Quiz, Question
+from .models import Quiz, Question, User
 from students.models import Student
 from .serializers import QuizSerializer, QuizCreateSerializer, QuizUpdateSerializer
 import os
@@ -28,6 +28,7 @@ from django.db.models import Q
 from documents.utils import extract_text_from_file
 import logging
 from .serializers import QuizSerializer, QuestionSerializer,SlimQuestionSerializer
+from accounts.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -408,8 +409,31 @@ class QuizListCreateView(generics.ListCreateAPIView):
         
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
-        
-        # Validate number of questions - handle both string and integer inputs
+        user = request.user
+
+        # ✅ Check quiz creation limit for both TEACHER and ADMIN
+        role = getattr(user, 'role', '').upper()
+        if role in ['TEACHER', 'ADMIN']:
+            # Optional: Validate existence for teacher/admin record if needed
+            if role == 'TEACHER':
+                teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+                if not teacher:
+                    return Response({"message": "Teacher record not found"}, status=404)
+            elif role == 'ADMIN':
+                admin = User.objects.filter(email=user.email).first()
+                if not admin:
+                    return Response({"message": "Admin record not found"}, status=404)
+
+            # Count how many quizzes this user has created
+            quiz_count = Quiz.objects.filter(created_by=user.email, is_deleted=False).count()
+            if quiz_count >= 5:
+                return Response({
+                    "error": "Quiz creation limit reached",
+                    "message": "You have reached the limit of 5 quizzes. Please subscribe to create more quizzes.",
+                    "title": "Limit Exceeded"
+                }, status=status.HTTP_403_FORBIDDEN)
+
+        # ✅ Validate number of questions
         try:
             no_of_questions = int(data.get('no_of_questions', 0))
             if no_of_questions > self.MAX_QUESTIONS:
@@ -419,9 +443,9 @@ class QuizListCreateView(generics.ListCreateAPIView):
                     "title": "Question Limit Exceeded"
                 }, status=status.HTTP_400_BAD_REQUEST)
         except (ValueError, TypeError):
-            # If the value can't be converted to int, let the serializer handle it
-            pass
-        
+            pass  # Let the serializer handle invalid inputs
+
+        # ✅ Continue with quiz creation
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
 
@@ -434,7 +458,7 @@ class QuizListCreateView(generics.ListCreateAPIView):
             response_data['created_by'] = str(quiz.created_by)
             response_data['last_modified_by'] = str(quiz.last_modified_by)
             response_data['message'] = "Quiz created successfully"
-            
+
             headers = self.get_success_headers(serializer.data)
             return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 

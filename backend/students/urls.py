@@ -20,6 +20,7 @@ urlpatterns = [
     path('quiz_submit/', SubmitQuizAttemptView.as_view(), name='quiz-submit'),
     path('quiz_attempt/<int:quiz_id>/', RetrieveQuizAttemptView.as_view(), name='quiz-attempt-detail'),
     path('quiz_attempts/', ListStudentQuizResultsView.as_view(), name='quiz-attempts-list'),
+    path('send_reminder/', QuizReminderStudent.as_view(), name='send_quiz_reminders'),
     
     # Include router URLs
 ] + router.urls
