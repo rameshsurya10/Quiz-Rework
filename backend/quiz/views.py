@@ -37,8 +37,10 @@ class QuizFileUploadView(APIView):
     """
     Upload a document for a quiz, store it in vector DB, and generate questions.
     """
-    parser_classes = (MultiPartParser, FormParser, JSONParser)
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+    # parser_classes = (MultiPartParser, FormParser, JSONParser)
+    # permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
     MAX_FILE_SIZE = 60 * 1024 * 1024  # 60 MB
 
     def get_quiz(self, quiz_id):
@@ -740,8 +742,8 @@ class QuizPublishView(APIView):
     """
     API endpoint to publish/unpublish a quiz, save URL, and notify students via email.
     """
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
-    
+    # permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
     def post(self, request, quiz_id):
         try:
             quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
@@ -764,7 +766,7 @@ class QuizPublishView(APIView):
 
                 # ✅ Fetch department students
                 department = quiz.department_id
-                students = Student.objects.filter(department_id=department)
+                students = Student.objects.filter(department_id=department,is_verified=True)
 
                 # Email content
                 subject = f"Quiz Assigned: {quiz.title}"
@@ -782,8 +784,8 @@ Date Assigned: {quiz.published_at.strftime('%Y-%m-%d %I:%M %p')}
 👉 Click the link below to join your quiz:
 {quiz.url_link}
 
-Regards,
-Your Institute Team
+Best Regards,
+Redlitmus teams
 """.strip()
                         send_mail(
                             subject,

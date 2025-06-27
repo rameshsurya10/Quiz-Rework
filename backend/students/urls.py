@@ -11,11 +11,10 @@ router.register(r'', views.StudentViewSet, basename='student')
 
 urlpatterns = [
     # Standard REST endpoints
-    path('', views.StudentListCreateView.as_view(), name='student-list-create'),
+    path('', views.StudentListView.as_view(), name='student-list-create'),
     path('<int:student_id>/', views.StudentDetailView.as_view(), name='student-detail'),
     path('verify/<int:student_id>/', StudentVerificationView.as_view(), name='student-verify'),
     # Additional endpoints - handle both with and without trailing slash
-    path('create_student/', views.StudentCreateView.as_view(), name='create-student'),
     re_path(r'^create_student$', views.StudentCreateView.as_view(), name='create-student-no-slash'),
     path('quiz_submit/', SubmitQuizAttemptView.as_view(), name='quiz-submit'),
     path('quiz_attempt/<int:quiz_id>/', RetrieveQuizAttemptView.as_view(), name='quiz-attempt-detail'),

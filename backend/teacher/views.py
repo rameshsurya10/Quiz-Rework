@@ -9,63 +9,63 @@ from rest_framework.decorators import action
 
 User = get_user_model()
 
-class TeacherListCreateView(generics.ListCreateAPIView):
-    queryset = Teacher.objects.filter(is_deleted=False)
-    serializer_class = TeacherSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# class TeacherListCreateView(generics.ListCreateAPIView):
+#     queryset = Teacher.objects.filter(is_deleted=False)
+#     serializer_class = TeacherSerializer
+#     permission_classes = [permissions.IsAuthenticated]
 
-    def create(self, request, *args, **kwargs):
-        data = request.data.copy()
+#     def create(self, request, *args, **kwargs):
+#         data = request.data.copy()
 
-        # ✅ Combine country_code and phone
-        country_code = data.get("country_code", "").strip()
-        data["country_code"] = country_code
-        phone = data.get("phone", "").strip()
-        data["phone"] = phone
+#         # ✅ Combine country_code and phone
+#         country_code = data.get("country_code", "").strip()
+#         data["country_code"] = country_code
+#         phone = data.get("phone", "").strip()
+#         data["phone"] = phone
         
 
-        country = data.get("country", "").strip()
-        data["country"] = country
+#         country = data.get("country", "").strip()
+#         data["country"] = country
 
-        # ✅ Clean up extra fields
-        # data.pop("country_code", None)
-        # data.pop("country_name", None)
+#         # ✅ Clean up extra fields
+#         # data.pop("country_code", None)
+#         # data.pop("country_name", None)
 
-        # ✅ Convert join_date from datetime to date
-        join_date = data.get("join_date")
-        if join_date:
-            try:
-                parsed = datetime.fromisoformat(join_date.replace("T", " ").replace(":", ":", 1))
-                data["join_date"] = parsed.date()  # Store only the date part
-            except ValueError:
-                return Response(
-                    {"join_date": ["Invalid date format. Use YYYY-MM-DD or ISO format."]},
-                    status=400
-                )
+#         # ✅ Convert join_date from datetime to date
+#         join_date = data.get("join_date")
+#         if join_date:
+#             try:
+#                 parsed = datetime.fromisoformat(join_date.replace("T", " ").replace(":", ":", 1))
+#                 data["join_date"] = parsed.date()  # Store only the date part
+#             except ValueError:
+#                 return Response(
+#                     {"join_date": ["Invalid date format. Use YYYY-MM-DD or ISO format."]},
+#                     status=400
+#                 )
 
-        # ✅ Extract department_ids and handle them after object creation
-        department_ids = data.pop("department_ids", [])
+#         # ✅ Extract department_ids and handle them after object creation
+#         department_ids = data.pop("department_ids", [])
 
-        # ✅ Save teacher (without department_ids yet)
-        serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        teacher = serializer.save(
-            created_by=request.user.email,
-            last_modified_by=request.user.email
-        )
+#         # ✅ Save teacher (without department_ids yet)
+#         serializer = self.get_serializer(data=data)
+#         serializer.is_valid(raise_exception=True)
+#         teacher = serializer.save(
+#             created_by=request.user.email,
+#             last_modified_by=request.user.email
+#         )
 
-        # ✅ Now set department_ids after saving
-        if department_ids:
-            teacher.departments.set([dept.id for dept in departments])
+#         # ✅ Now set department_ids after saving
+#         if department_ids:
+#             teacher.departments.set([dept.id for dept in departments])
 
-        headers = self.get_success_headers(serializer.data)
-        return Response(TeacherSerializer(teacher).data, status=status.HTTP_201_CREATED, headers=headers)
+#         headers = self.get_success_headers(serializer.data)
+#         return Response(TeacherSerializer(teacher).data, status=status.HTTP_201_CREATED, headers=headers)
 
-    def perform_create(self, serializer):
-        serializer.save(
-            created_by=self.request.user.email,
-            last_modified_by=self.request.user.email
-        )
+#     def perform_create(self, serializer):
+#         serializer.save(
+#             created_by=self.request.user.email,
+#             last_modified_by=self.request.user.email
+#         )
 
 class TeacherViewSet(viewsets.ModelViewSet):
     """
