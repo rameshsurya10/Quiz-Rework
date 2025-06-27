@@ -302,12 +302,12 @@ const QuizListView = () => {
                 <CardFooter pt={3} borderTop="1px solid" borderColor="gray.200">
                     <HStack spacing={2} width="100%" justify="space-between">
                         <Button 
-                            colorScheme="blue" 
+                            colorScheme={quiz.is_published ? "green" : "blue"}
                             size="sm"
                             leftIcon={<ViewIcon />}
                             onClick={() => handleViewClick(quiz.id)}
                         >
-                            View & PUBLISH
+                            {quiz.is_published ? "View Quiz" : "View & PUBLISH"}
                         </Button>
                         <HStack>
                             <IconButton
@@ -410,14 +410,30 @@ const QuizListView = () => {
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" onClick={closeViewModal} mr={3}>Close</Button>
-            <Button colorScheme="blue" onClick={() => {
-              if (selectedQuiz) {
-                navigate(`/PUBLISH-quiz/${selectedQuiz.id}`);
+            {selectedQuiz && !selectedQuiz.is_published && (
+              <Button colorScheme="blue" onClick={() => {
+                if (selectedQuiz) {
+                  navigate(`/PUBLISH-quiz/${selectedQuiz.id}`);
+                  closeViewModal();
+                }
+              }}>
+                Proceed to PUBLISH
+              </Button>
+            )}
+            {selectedQuiz && selectedQuiz.is_published && (
+              <Button colorScheme="green" variant="outline" onClick={() => {
+                const shareUrl = selectedQuiz.share_url || selectedQuiz.url_link || `${window.location.origin}/quiz/${selectedQuiz.id}/join/`;
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                  // You might want to add a toast notification here
+                  console.log('Quiz link copied to clipboard!');
+                }).catch(() => {
+                  console.error('Failed to copy link');
+                });
                 closeViewModal();
-              }
-            }}>
-              Proceed to PUBLISH
-            </Button>
+              }}>
+                Copy Quiz Link
+              </Button>
+            )}
           </ModalFooter>
         </ModalContent>
       </Modal>

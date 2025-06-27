@@ -205,7 +205,10 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
 
   const filteredTeachers = [...teacherData]; // Keep the data structure but remove filtering
 
-  const paginatedTeachers = filteredTeachers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const paginatedTeachers = filteredTeachers.slice(
+    page * rowsPerPage, 
+    page * rowsPerPage + rowsPerPage > 0 ? page * rowsPerPage + rowsPerPage : filteredTeachers.length
+  );
 
   return (
     <Box
@@ -399,8 +402,8 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
             </Grid>
             {teacherData.length > 0 && (
               <TablePagination
+                rowsPerPageOptions={[12, 24, 36, { label: 'All', value: -1 }]}
                 component="div"
-                rowsPerPageOptions={[12,16,20]}
                 count={filteredTeachers.length}
                 rowsPerPage={rowsPerPage}
                 page={page}

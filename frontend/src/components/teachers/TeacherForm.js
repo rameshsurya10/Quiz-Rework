@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-
-
 import {
   Box,
   TextField,
@@ -19,6 +17,7 @@ import {
   ListItemText
 } from '@mui/material';
 import { departmentApi, teacherApi } from '../../services/api';
+import { getUserFromToken } from '../../utils/auth';
 
 // Simple country list; extend as needed
 const COUNTRY_OPTIONS = [
@@ -48,23 +47,87 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
   const [isFetchingDepartments, setIsFetchingDepartments] = useState(false);
   const [allDepartments, setAllDepartments] = useState([]);
   const [departmentSelectOpen, setDepartmentSelectOpen] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Effect to fetch all departments once on mount
   useEffect(() => {
-    const fetchDepartments = async () => {
+    const fetchDepartments = async (attempt = 1) => {
       setIsFetchingDepartments(true);
+      setErrors(prev => { const newErrors = { ...prev }; delete newErrors.form; return newErrors; }); // Clear any previous errors
+      
       try {
+        console.log(`Fetching departments (attempt ${attempt})...`);
+        
+        // Check user authentication state
+        const userInfo = getUserFromToken();
+        console.log('Current user info:', userInfo);
+        
         const response = await departmentApi.getAll();
-        const fetchedDepartments = response.data?.results || response.data || [];
+        console.log('Departments API response:', response);
+        
+        // Handle different response structures
+        let fetchedDepartments = [];
+        if (response.data) {
+          fetchedDepartments = response.data.results || response.data || [];
+        }
+        
+        console.log('Fetched departments:', fetchedDepartments);
         setAllDepartments(fetchedDepartments);
+        setRetryCount(0); // Reset retry count on success
+        
+        if (fetchedDepartments.length === 0) {
+          console.warn('No departments found in response');
+          const userRole = userInfo?.role;
+          if (userRole === 'TEACHER') {
+            setErrors(prev => ({ ...prev, form: 'No subjects assigned to you. Please contact your administrator to assign subjects.' }));
+          } else {
+            setErrors(prev => ({ ...prev, form: 'No subjects available. Please create subjects first in the Subjects section.' }));
+          }
+        }
       } catch (error) {
         console.error('Error fetching departments:', error);
-        setErrors(prev => ({ ...prev, form: 'Failed to load subjects.' }));
+        console.error('Error details:', {
+          message: error.message,
+          response: error.response,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        
+        let errorMessage = 'Failed to load subjects.';
+        let shouldRetry = false;
+        
+        if (error.response?.status === 401) {
+          errorMessage = 'Authentication required. Please log in again.';
+        } else if (error.response?.status === 403) {
+          errorMessage = 'You do not have permission to access subjects.';
+        } else if (error.response?.status === 500) {
+          errorMessage = 'Server error. Please try again later.';
+          shouldRetry = attempt < 3;
+        } else if (error.message.includes('Network Error') || !error.response) {
+          errorMessage = 'Network error. Please check your connection.';
+          shouldRetry = attempt < 3;
+        }
+        
+        setErrors(prev => ({ ...prev, form: errorMessage }));
+        setAllDepartments([]); // Ensure departments are empty on error
+        
+        // Retry logic for network errors or server errors
+        if (shouldRetry) {
+          console.log(`Retrying in 2 seconds... (attempt ${attempt + 1})`);
+          setRetryCount(attempt);
+          setTimeout(() => {
+            fetchDepartments(attempt + 1);
+          }, 2000);
+          return; // Don't set loading to false yet
+        }
+      } finally {
+        if (retryCount === 0) { // Only set to false if not retrying
+          setIsFetchingDepartments(false);
+        }
       }
-      setIsFetchingDepartments(false);
     };
     fetchDepartments();
-  }, []);
+  }, [retryCount]);
 
   // Effect to populate form when in edit mode or reset for create mode
   useEffect(() => {
@@ -324,9 +387,27 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
               MenuProps={{ PaperProps: { style: { maxHeight: 300, width: 250 } } }}
             >
               {isFetchingDepartments ? (
-                <MenuItem disabled>Loading subjects...</MenuItem>
+                <MenuItem disabled>
+                  <CircularProgress size={20} sx={{ mr: 1 }} />
+                  Loading subjects{retryCount > 0 ? ` (retry ${retryCount})` : ''}...
+                </MenuItem>
               ) : allDepartments.length === 0 ? (
-                <MenuItem disabled>No subjects available.</MenuItem>
+                <Box sx={{ p: 2, textAlign: 'center' }}>
+                  <MenuItem disabled>No subjects available.</MenuItem>
+                  {errors.form && (
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => {
+                        setRetryCount(0);
+                        setErrors(prev => { const newErrors = { ...prev }; delete newErrors.form; return newErrors; });
+                      }}
+                      sx={{ mt: 1 }}
+                    >
+                      Retry Loading Subjects
+                    </Button>
+                  )}
+                </Box>
               ) : (
                 [
                   ...allDepartments.map((dept) => (

@@ -86,13 +86,40 @@ const StudentSection = ({ initialOpenDialog = false }) => {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [studentsRes, deptsRes, teachersRes] = await Promise.all([
-        studentApi.getAll({ page_size: 1000 }),
+      // Fetch all students by handling pagination
+      let allStudents = [];
+      let page = 1;
+      let hasMore = true;
+
+      while(hasMore) {
+          try {
+              const response = await studentApi.getAll({ page });
+              if (response.data && response.data.results) {
+                  allStudents = allStudents.concat(response.data.results);
+                  if (response.data.next) {
+                      page++;
+                  } else {
+                      hasMore = false;
+                  }
+              } else {
+                  // If response is not paginated, assume it's the full list
+                  allStudents = response.data || [];
+                  hasMore = false;
+              }
+          } catch (err) {
+              // If a page fails, stop fetching
+              console.error(`Failed to fetch page ${page} of students`, err);
+              hasMore = false;
+              // Optionally show a message that only partial data might be loaded
+              showMessage('Could not load all students. Some data may be missing.', 'warning');
+          }
+      }
+
+      const [deptsRes, teachersRes] = await Promise.all([
         departmentApi.getAll(),
         teacherApi.getAll(),
       ]);
 
-      const studentsData = studentsRes.data?.results || studentsRes.data || [];
       const deptsData = deptsRes.data?.results || deptsRes.data || [];
       const teachersData = teachersRes.data?.results || teachersRes.data || [];
 
@@ -101,7 +128,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
         return acc;
       }, {});
 
-      const processedStudents = studentsData.map(student => ({
+      const processedStudents = allStudents.map(student => ({
         ...student,
         id: student.student_id,
         department: student.department_id ? departmentMap[student.department_id] : null,
@@ -196,6 +223,13 @@ const StudentSection = ({ initialOpenDialog = false }) => {
     }
   };
 
+  const paginatedStudents = useMemo(() => {
+    return filteredStudents.slice(
+      page * rowsPerPage, 
+      page * rowsPerPage + rowsPerPage > 0 ? page * rowsPerPage + rowsPerPage : filteredStudents.length
+    );
+  }, [filteredStudents, page, rowsPerPage]);
+
   if (isLoading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
   }
@@ -272,7 +306,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredStudents.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((student) => (
+              {paginatedStudents.map((student) => (
                 <TableRow key={student.id} hover>
                   <TableCell>{student.name}</TableCell>
                   <TableCell>{student.email}</TableCell>
@@ -295,7 +329,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
           </Table>
         </TableContainer>
         <TablePagination
-          rowsPerPageOptions={[5, 10, 25]}
+          rowsPerPageOptions={[5, 10, 25, { label: 'All', value: -1 }]}
           component="div"
           count={filteredStudents.length}
           rowsPerPage={rowsPerPage}

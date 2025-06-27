@@ -6,6 +6,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -185,12 +186,12 @@ const QuizSection = () => {
   // Publish quiz and refresh list
   const handlePublishClick = async (quizId) => {
     try {
-      await quizApi.patch(quizId, { is_published: true });
+      await quizApi.publish(quizId);
       await fetchQuizzes();
-      showSnackbar('Publish status updated', 'success');
+      showSnackbar('Quiz published successfully and notifications sent!', 'success');
     } catch (error) {
       console.error('Failed to publish quiz:', error);
-      showSnackbar('Failed to update publish status', 'error');
+      showSnackbar(error.response?.data?.message || 'Failed to publish quiz', 'error');
     }
   };
 
@@ -374,11 +375,35 @@ const QuizSection = () => {
               </Typography>
             </CardContent>
             <CardActions sx={{ justifyContent: 'space-between', p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
-            <Button variant="contained" startIcon={<AssignmentIcon />} size="small" onClick={() => handlePublishClick(quiz.quiz_id)}>PUBLISH</Button>
               <Box>
                 <IconButton size="small" onClick={() => handleViewQuiz(quiz.quiz_id)}><VisibilityIcon /></IconButton>
                 <IconButton size="small" onClick={() => handleDelete(quiz.quiz_id)}><DeleteIcon /></IconButton>
               </Box>
+              {!quiz.is_published ? (
+                <Button 
+                  variant="contained" 
+                  startIcon={<AssignmentIcon />} 
+                  size="small" 
+                  onClick={() => handlePublishClick(quiz.quiz_id)}>
+                  PUBLISH
+                </Button>
+              ) : (
+                <Button 
+                  variant="outlined" 
+                  color="success"
+                  startIcon={<ContentCopyIcon />} 
+                  size="small" 
+                  onClick={() => {
+                    const shareUrl = quiz.share_url || quiz.url_link || `${window.location.origin}/quiz/${quiz.quiz_id}/join/`;
+                    navigator.clipboard.writeText(shareUrl).then(() => {
+                      showSnackbar('Quiz link copied to clipboard!', 'success');
+                    }).catch(() => {
+                      showSnackbar('Failed to copy link', 'error');
+                    });
+                  }}>
+                  Copy Link
+                </Button>
+              )}
             </CardActions>
           </QuizStyledCard>
         </motion.div>

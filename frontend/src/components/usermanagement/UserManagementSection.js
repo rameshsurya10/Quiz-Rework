@@ -145,7 +145,7 @@ const UserManagementSection = () => {
   const visibleUsers = useMemo(() => {
     return sortedAndFilteredUsers.slice(
       page * rowsPerPage,
-      page * rowsPerPage + rowsPerPage
+      page * rowsPerPage + rowsPerPage > 0 ? page * rowsPerPage + rowsPerPage : sortedAndFilteredUsers.length
     );
   }, [sortedAndFilteredUsers, page, rowsPerPage]);
 
@@ -363,7 +363,7 @@ const UserManagementSection = () => {
                 </Table>
               </TableContainer>
               <TablePagination
-                rowsPerPageOptions={[5, 10, 25, 50]}
+                rowsPerPageOptions={[5, 10, 25, 50, { label: 'All', value: -1 }]}
                 component="div"
                 count={sortedAndFilteredUsers.length} // Count should be based on filtered list
                 rowsPerPage={rowsPerPage}

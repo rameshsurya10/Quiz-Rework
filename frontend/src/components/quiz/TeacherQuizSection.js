@@ -14,6 +14,7 @@ import PublishIcon from '@mui/icons-material/Publish';
 import DraftIcon from '@mui/icons-material/Drafts';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import QuizIcon from '@mui/icons-material/Quiz';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -429,6 +430,35 @@ const TeacherQuizSection = () => {
                   Publish
                 </Button>
               )}
+              
+              {quiz.is_published && (
+                <Button 
+                  variant="outlined" 
+                  size="small"
+                  startIcon={<ContentCopyIcon />}
+                  onClick={() => {
+                    const shareUrl = quiz.share_url || quiz.url_link || `${window.location.origin}/quiz/${quiz.quiz_id}/join/`;
+                    navigator.clipboard.writeText(shareUrl).then(() => {
+                      showSnackbar('Quiz link copied to clipboard!', 'success');
+                    }).catch(() => {
+                      showSnackbar('Failed to copy link', 'error');
+                    });
+                  }}
+                  sx={{ 
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    color: 'success.main',
+                    borderColor: 'success.main',
+                    '&:hover': {
+                      backgroundColor: 'success.50',
+                      borderColor: 'success.main'
+                    }
+                  }}
+                >
+                  Copy Link
+                </Button>
+              )}
             </CardActions>
           </StyledCard>
         </motion.div>
@@ -713,6 +743,31 @@ const TeacherQuizSection = () => {
               }}
             >
               Publish Quiz
+            </Button>
+          )}
+          {selectedQuiz && selectedQuiz.is_published && (
+            <Button 
+              variant="outlined" 
+              startIcon={<ContentCopyIcon />}
+              onClick={() => {
+                const shareUrl = selectedQuiz.share_url || selectedQuiz.url_link || `${window.location.origin}/quiz/${selectedQuiz.quiz_id}/join/`;
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                  showSnackbar('Quiz link copied to clipboard!', 'success');
+                }).catch(() => {
+                  showSnackbar('Failed to copy link', 'error');
+                });
+              }}
+              sx={{ 
+                textTransform: 'none',
+                color: 'success.main',
+                borderColor: 'success.main',
+                '&:hover': {
+                  backgroundColor: 'success.50',
+                  borderColor: 'success.main'
+                }
+              }}
+            >
+              Copy Quiz Link
             </Button>
           )}
         </DialogActions>

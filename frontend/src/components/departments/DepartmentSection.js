@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Container, Grid, Paper, Typography, Button, Box, Avatar,
   Pagination, TextField, InputAdornment, Dialog, DialogTitle,
@@ -124,7 +124,12 @@ const DepartmentSection = () => {
     setPage(0);
   };
 
-  const paginatedDepartments = filteredDepartments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const paginatedDepartments = useMemo(() => {
+    return filteredDepartments.slice(
+        page * rowsPerPage,
+        page * rowsPerPage + rowsPerPage > 0 ? page * rowsPerPage + rowsPerPage : filteredDepartments.length
+    );
+  }, [filteredDepartments, page, rowsPerPage]);
 
   // Aggregate totals
   // Compute unique teachers to avoid double-counting when a teacher belongs to multiple subjects
@@ -283,7 +288,7 @@ const DepartmentSection = () => {
                   })}
                 </Grid>
                 <TablePagination
-                  rowsPerPageOptions={[9, 18, 27]}
+                  rowsPerPageOptions={[9, 18, 27, { label: 'All', value: -1 }]}
                   component="div"
                   count={filteredDepartments.length}
                   rowsPerPage={rowsPerPage}

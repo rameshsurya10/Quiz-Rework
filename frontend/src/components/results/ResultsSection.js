@@ -21,6 +21,7 @@ import { visuallyHidden } from '@mui/utils';
 import { alpha } from '@mui/material/styles';
 import ResultReportSection from './ResultReportSection';
 import apiService from '../../services/api'; // Import the API service
+import QuizDetailsContent from './QuizDetailsContent';
 
 const ResultsSection = () => {
   const navigate = useNavigate();
@@ -30,8 +31,9 @@ const ResultsSection = () => {
   const [quizResults, setQuizResults] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingTable, setIsLoadingTable] = useState(true);
-  const [openReportDialog, setOpenReportDialog] = useState(false);
+  const [openQuizDialog, setOpenQuizDialog] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState(null);
+  const [selectedQuizData, setSelectedQuizData] = useState(null);
 
   // Table state
   const [page, setPage] = useState(0);
@@ -316,7 +318,7 @@ const ResultsSection = () => {
   const visibleRows = React.useMemo(() => {
     return sortedRows.slice(
       page * rowsPerPage, 
-      page * rowsPerPage + rowsPerPage
+      page * rowsPerPage + rowsPerPage > 0 ? page * rowsPerPage + rowsPerPage : sortedRows.length
     );
   }, [sortedRows, page, rowsPerPage]);
 
@@ -329,18 +331,19 @@ const ResultsSection = () => {
     { id: 'actions', numeric: true, disablePadding: false, label: 'Actions', sortDisabled: true },
   ];
 
-  const handleViewResult = (quizId) => {
-    navigate(`/quiz/${quizId}/results`);
-  };
-
-  const handleViewReport = (quizId) => {
+  const handleViewQuizDetails = async (quizId) => {
     setSelectedQuizId(quizId);
-    setOpenReportDialog(true);
+    setOpenQuizDialog(true);
+    
+    // Find the quiz data from our results
+    const quizData = quizResults.find(quiz => quiz.id === quizId);
+    setSelectedQuizData(quizData);
   };
 
-  const handleCloseReportDialog = () => {
-    setOpenReportDialog(false);
+  const handleCloseQuizDialog = () => {
+    setOpenQuizDialog(false);
     setSelectedQuizId(null);
+    setSelectedQuizData(null);
   };
 
   return (
@@ -493,7 +496,7 @@ const ResultsSection = () => {
                           color="primary"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleViewResult(row.id);
+                            handleViewQuizDetails(row.id);
                           }}
                           sx={{
                             '&:hover': {
@@ -503,21 +506,6 @@ const ResultsSection = () => {
                           >
                           <VisibilityIcon />
                           </IconButton>
-                          <IconButton
-                          color="secondary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewReport(row.id);
-                          }}
-                          sx={{
-                            ml: 1,
-                            '&:hover': {
-                              bgcolor: alpha(theme.palette.secondary.main, 0.1)
-                            }
-                          }}
-                          >
-                          <AssessmentOutlinedIcon />
-                          </IconButton>
                         </TableCell>
                       </TableRow>
                   ))}
@@ -525,7 +513,7 @@ const ResultsSection = () => {
               </Table>
             </TableContainer>
             <TablePagination
-              rowsPerPageOptions={[5, 10, 25]}
+              rowsPerPageOptions={[5, 10, 25, { label: 'All', value: -1 }]}
               component="div"
               count={quizResults.length}
               rowsPerPage={rowsPerPage}
@@ -537,37 +525,76 @@ const ResultsSection = () => {
         )}
       </Container>
       
-      {/* Report Dialog */}
+      {/* Comprehensive Quiz Details Dialog */}
       <Dialog
-        open={openReportDialog}
-        onClose={handleCloseReportDialog}
-        maxWidth="lg"
+        open={openQuizDialog}
+        onClose={handleCloseQuizDialog}
+        maxWidth="xl"
         fullWidth
         PaperProps={{
           sx: {
-            borderRadius: 2,
-            background: alpha(theme.palette.background.paper, 0.9),
-            backdropFilter: 'blur(10px)'
+            borderRadius: 3,
+            background: alpha(theme.palette.background.paper, 0.95),
+            backdropFilter: 'blur(20px)',
+            minHeight: '80vh'
           }
         }}
       >
-        <DialogTitle sx={{ m: 0, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography variant="h6">Detailed Quiz Report</Typography>
+        <DialogTitle sx={{ 
+          m: 0, 
+          p: 3, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box
+              sx={{
+                p: 1.5,
+                borderRadius: '50%',
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                color: theme.palette.primary.main
+              }}
+            >
+              <AssessmentIcon sx={{ fontSize: '1.5rem' }} />
+            </Box>
+            <Box>
+              <Typography variant="h5" component="div">
+                Quiz Analytics & Details
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {selectedQuizData?.quizTitle || 'Quiz Details'}
+              </Typography>
+            </Box>
+          </Box>
           <IconButton
             aria-label="close"
-            onClick={handleCloseReportDialog}
+            onClick={handleCloseQuizDialog}
             sx={{
               color: theme.palette.grey[500],
               '&:hover': {
-                bgcolor: alpha(theme.palette.grey[500], 0.1)
-              }
+                bgcolor: alpha(theme.palette.grey[500], 0.1),
+                transform: 'scale(1.1)'
+              },
+              transition: 'all 0.2s'
             }}
           >
             <CloseIcon />
           </IconButton>
         </DialogTitle>
-        <DialogContent dividers>
-          {selectedQuizId && <ResultReportSection quizId={selectedQuizId} />}
+        
+        <DialogContent sx={{ p: 0 }}>
+          {selectedQuizData && selectedQuizId && (
+            <QuizDetailsContent 
+              quizData={selectedQuizData} 
+              quizId={selectedQuizId}
+              onNavigateToQuiz={() => {
+                handleCloseQuizDialog();
+                navigate('/admin/quiz');
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </FullLayout>
