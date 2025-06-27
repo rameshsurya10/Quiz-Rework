@@ -278,15 +278,9 @@ const QuizListView = () => {
                         <HStack justifyContent="space-between">
                             <Text fontSize="sm" color="gray.600">
                               Pass Score: {
-                                (() => {
-                                  // Check various locations for passing score
-                                  if (quiz.passing_score !== undefined && quiz.passing_score !== null) {
-                                    return `${quiz.passing_score}%`;
-                                  } else if (quiz.metadata && quiz.metadata.passing_score) {
-                                    return `${quiz.metadata.passing_score}%`;
-                                  }
-                                  return '60%';  // Default
-                                })()
+                                quiz.passing_score !== undefined && quiz.passing_score !== null 
+                                  ? `${quiz.passing_score}%` 
+                                  : 'Not set'
                               }
                             </Text>
                             <Text fontSize="sm" color="gray.600">
@@ -294,7 +288,18 @@ const QuizListView = () => {
                             </Text>
                         </HStack>
                         <HStack justifyContent="space-between">
-                            <Text fontSize="sm" color="gray.600">Pages: {quiz.metadata?.page_ranges_str || 'N/A'}</Text>
+                            <Text fontSize="sm" color="gray.600">
+                              Pages: {
+                                quiz.pages && Array.isArray(quiz.pages) && quiz.pages.length > 0 
+                                  ? (typeof quiz.pages[0] === 'number' 
+                                      ? quiz.pages.join(', ')
+                                      : typeof quiz.pages[0] === 'object' && quiz.pages[0].start && quiz.pages[0].end
+                                        ? quiz.pages.map(range => `${range.start}-${range.end}`).join(', ')
+                                        : quiz.pages.join(', ')
+                                    )
+                                  : 'All pages'
+                              }
+                            </Text>
                         </HStack>
                     </VStack>
                 </CardBody>

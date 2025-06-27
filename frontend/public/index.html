@@ -15,6 +15,24 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
     />
+    
+    <!-- Theme persistence script - prevents white flash -->
+    <script>
+      (function() {
+        try {
+          const savedTheme = localStorage.getItem('themeMode') || 'dark';
+          if (savedTheme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+          } else {
+            document.documentElement.removeAttribute('data-theme');
+          }
+        } catch (e) {
+          // Fallback if localStorage is not available
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
+    
     <title>Quiz Application</title>
   </head>
   <body>

@@ -323,10 +323,18 @@ const TeacherQuizSection = () => {
 
   const renderQuizCard = (quiz, index) => {
     const getPageRanges = (quiz) => {
-      if (quiz.metadata?.page_ranges_str) {
-        return quiz.metadata.page_ranges_str;
-      } else if (quiz.page_ranges && Array.isArray(quiz.page_ranges) && quiz.page_ranges.length > 0) {
-        return quiz.page_ranges.map(range => `${range.start}-${range.end}`).join(', ');
+      // Use only the backend pages field - no fallbacks to mock data
+      if (quiz.pages && Array.isArray(quiz.pages) && quiz.pages.length > 0) {
+        // If pages is an array of numbers, join them
+        if (typeof quiz.pages[0] === 'number') {
+          return quiz.pages.join(', ');
+        }
+        // If pages is an array of objects with start/end, format them
+        if (typeof quiz.pages[0] === 'object' && quiz.pages[0].start && quiz.pages[0].end) {
+          return quiz.pages.map(range => `${range.start}-${range.end}`).join(', ');
+        }
+        // If pages is an array of strings, join them
+        return quiz.pages.join(', ');
       }
       return 'All Pages';
     };
@@ -341,12 +349,11 @@ const TeacherQuizSection = () => {
     };
 
     const getPassingScore = (quiz) => {
+      // Use only the backend passing_score field - no fallbacks to mock data
       if (quiz.passing_score !== undefined && quiz.passing_score !== null) {
         return `${quiz.passing_score}%`;
-      } else if (quiz.metadata && quiz.metadata.passing_score) {
-        return `${quiz.metadata.passing_score}%`;
       }
-      return '60%';
+      return 'Not set';
     };
 
     return (

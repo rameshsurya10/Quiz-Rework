@@ -5,11 +5,12 @@ A modern web application that generates quiz from PDF documents using AI.
 ## Core Features
 
 - PDF Upload and Text Extraction
-- AI-Generated Questions from PDF Content
-- Role-Based Authentication (Admin/Teacher/Student)
-- Quiz Creation and Management
-- Quiz Sharing via Unique URLs
-- Analytics and Performance Tracking
+- AI-Generated Quiz Questions from PDF & Text Documents
+- Vector Search-powered Document Retrieval (pgvector)
+- Isolated Authentication Flows: Admin (password) & Teacher/Student (OTP)
+- Quiz Creation, Scheduling, and Sharing via Secure URLs
+- Real-time Analytics & Performance Tracking
+- Supabase & AWS S3 Pluggable Storage Backends
 
 ## Recent Updates
 
@@ -21,6 +22,12 @@ A modern web application that generates quiz from PDF documents using AI.
 - **API Response Improvement**: Modified document upload responses to include file metadata instead of exposing generated questions
 - **Unused Module Removal**: Removed the unused ai_processing module as its functionality had been moved elsewhere
 - **Package Management Optimization**: Consolidated package.json files and removed redundant node_modules directories
+
+### Authentication Revamp (August 2024)
+
+- **Isolated Auth Services**: Introduced `adminAuthService` (password-based) and `otpAuthService` (OTP-based) with independent request headers, timeouts, and localStorage scopes.
+- **Fault Isolation**: Errors in one auth flow no longer affect the other, preventing cross-contamination between admin and teacher/student sessions.
+- **Improved Security**: Added role-scoped JWTs and stricter CORS policies for auth endpoints.
 
 ## Project Structure
 
@@ -35,12 +42,14 @@ A modern web application that generates quiz from PDF documents using AI.
 - **settings**: Application settings
 - **notifications**: User notifications
 - **dashboard**: Analytics and reporting
+- **reports**: Result aggregation and PDF exports
 
 ### Frontend (React)
 
 - **components**: Reusable UI components
-- **contexts**: React contexts for state management
-- **services**: API service integrations
+- **contexts**: React contexts for global state management
+- **services**: API & Supabase service integrations
+- **routes**: React Router route definitions
 - **utils**: Utility functions
 
 ## Technology Stack
@@ -50,7 +59,7 @@ A modern web application that generates quiz from PDF documents using AI.
 - **Database**: PostgreSQL with pgvector extension
 - **Storage**: Vector Database for documents
 - **AI**: OpenAI API for question generation
-- **Authentication**: JWT Token-based authentication
+- **Authentication**: Isolated JWT & OTP-based authentication services
 
 ## Setup Instructions
 
@@ -110,9 +119,11 @@ quiz-app/
 │   ├── accounts/          # User authentication & profiles
 │   ├── departments/       # Department & bulk student management
 │   ├── documents/         # PDF document handling
-│   ├── quiz/           # Quiz management
-│   ├── ai_processing/     # AI question generation
+│   ├── quiz/              # Quiz management
 │   ├── notifications/     # Email & SMS notifications
+│   ├── students/          # Student records
+│   ├── teacher/           # Teacher records
+│   ├── reports/           # Analytics & PDF exports
 │   ├── migrations/        # Consolidated migrations
 │   ├── templates/         # Sample templates and email templates
 │   └── config/            # Project settings
@@ -121,10 +132,10 @@ quiz-app/
     ├── public/
     └── src/
         ├── components/    # Reusable UI components
-        ├── pages/         # Application pages
-        ├── api/           # API integration
         ├── hooks/         # Custom React hooks
-        ├── context/       # React context providers
+        ├── services/      # API & Supabase integrations
+        ├── routes/        # Application routes
+        ├── contexts/      # React context providers
         └── utils/         # Helper functions
 ```
 

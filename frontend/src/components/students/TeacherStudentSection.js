@@ -220,8 +220,9 @@ const TeacherStudentSection = () => {
   };
 
   const getDepartmentName = (departmentId) => {
+    if (!departmentId) return 'No Department Assigned';
     const dept = departments.find(d => d.department_id === departmentId);
-    return dept ? dept.name : 'Unknown';
+    return dept ? dept.name : 'Unknown Department';
   };
 
   const getStatusColor = (isVerified) => {

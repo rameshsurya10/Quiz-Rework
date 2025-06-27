@@ -186,15 +186,21 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
     setIsFadingOut(false);
 
     const questionTypeMapping = {
-      'MCQ': 'multiple_choice',
-      'Fill ups': 'fill_in_blanks',
-      'True/False': 'true_false',
-      'One Line': 'one_line',
+      'MCQ': 'mcq',
+      'Fill ups': 'fill',
+      'True/False': 'truefalse',
+      'One Line': 'oneline',
       'Mixed': 'mixed'
     };
-
+    const complexityMapping = {
+      'Easy': 'easy',
+      'Medium': 'medium',
+      'Hard': 'hard',
+      'Mixed': 'mixed'
+    };
     try {
       // Simulate initial preparation
+      await new Promise(resolve => setTimeout(resolve, 300));
       setUploadProgress(5);
 
       // Create a clean payload with proper field mapping
@@ -203,10 +209,11 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
         description: form.description,
         no_of_questions: form.no_of_questions ? parseInt(form.no_of_questions, 10) : undefined,
         time_limit_minutes: form.time_limit_minutes ? parseInt(form.time_limit_minutes, 10) : undefined,
-        quiz_date: form.quiz_date,
+        quiz_date: form.quiz_date || undefined,
         question_type: questionTypeMapping[form.quiz_type] || form.quiz_type,
-        quiz_type: form.complexity, // Complexity maps to quiz_type
-        files: form.files
+        quiz_type: complexityMapping[form.complexity] || form.complexity,
+        files: form.files,
+        page_ranges: form.page_ranges
       };
 
       // Add department if selected
@@ -214,11 +221,6 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
         payload.department_id = form.department;
       }
       
-      // Add page ranges if provided
-      if (form.page_ranges) {
-        payload.page_ranges = form.page_ranges;
-      }
-
       // Add passing score if provided
       if (form.passing_score) {
         payload.passing_score = parseInt(form.passing_score, 10);
@@ -596,16 +598,81 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
             </Box>
           </Grid>
 
-          {/* Right Column: Illustration */}
-          <Grid item xs={12} md={6} display={{ xs: 'none', md: 'block' }}>
+          {/* Right Column: Illustration & Summary */}
+          <Grid item xs={12} md={6} display={{ xs: 'none', md: 'flex' }} sx={{ flexDirection: 'column' }}>
             <Box sx={{ 
               height: '100%', 
               display: 'flex', 
+              flexDirection: 'column', 
               alignItems: 'center', 
               justifyContent: 'center',
-              minHeight: { md: 400, lg: 500 }
+              minHeight: { md: 400, lg: 500 },
+              p: 3,
+              position: 'sticky',
+              top: 20
             }}>
               <QuizImage />
+              
+              <Paper elevation={2} sx={{ 
+                  p: 3, 
+                  mt: 3, 
+                  width: '100%',
+                  border: theme => `1px solid ${theme.palette.divider}`,
+                  borderRadius: '16px',
+                  background: theme => `linear-gradient(145deg, ${theme.palette.background.paper}, ${theme.palette.background.default})`
+              }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+                  Quiz Summary
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                <Grid container spacing={1.5}>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Title:</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" fontWeight="medium">{form.title || 'Not set'}</Typography>
+                  </Grid>
+
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Questions:</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" fontWeight="medium">{form.no_of_questions || 'Not set'}</Typography>
+                  </Grid>
+
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Question Type:</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" fontWeight="medium">{form.quiz_type || 'Not set'}</Typography>
+                  </Grid>
+
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Complexity:</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" fontWeight="medium">{form.complexity || 'Not set'}</Typography>
+                  </Grid>
+
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Passing Score:</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" fontWeight="medium">{form.passing_score ? `${form.passing_score}%` : 'Not set'}</Typography>
+                  </Grid>
+                  
+                  {hasPdf && form.page_ranges && (
+                    <>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">PDF Page Ranges:</Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" fontWeight="medium">{form.page_ranges}</Typography>
+                      </Grid>
+                    </>
+                  )}
+                </Grid>
+              </Paper>
             </Box>
           </Grid>
         </Grid>

@@ -18,6 +18,7 @@ import StudentReportSection from './components/results/StudentReportSection'; //
 import FullLayout from './components/FullLayout';
 import { SnackbarProvider } from './contexts/SnackbarContext';
 import apiService from './api';
+import PageLoader from './common/PageLoader';
 
 // New authentication components
 import TeacherDashboard, { TeacherLayout } from './components/dashboards/TeacherDashboard';
@@ -58,7 +59,7 @@ function App() {
     const checkAuthAndLoadResources = async () => {
       try {
         // Add any initial data loading here if needed
-        await new Promise(resolve => setTimeout(resolve, 500)); // Simulated delay
+        await new Promise(resolve => setTimeout(resolve, 200)); // Reduced delay for faster loading
       } catch (error) {
         console.error("Error during app initialization:", error);
       } finally {
@@ -72,18 +73,11 @@ function App() {
   if (loading) {
     return (
       <CustomThemeProvider>
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column',
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          height: '100vh'
-        }}>
-          <CircularProgress size={60} thickness={4} />
-          <Box sx={{ mt: 2, color: 'text.secondary', fontWeight: 500 }}>
-            Loading application...
-          </Box>
-        </Box>
+        <PageLoader 
+          loading={loading}
+          message="Initializing Quiz Application..."
+          showProgress={true}
+        />
       </CustomThemeProvider>
     );
   }

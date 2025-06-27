@@ -30,7 +30,8 @@ import {
   Close as CloseIcon,
   Class as ClassIcon,
   BookmarkBorder as BookmarkBorderIcon,
-  Tag as TagIcon
+  Tag as TagIcon,
+  Group as GroupIcon
 } from '@mui/icons-material';
 import { PageHeader, EmptyState } from '../common';
 import SummaryCard from '../common/SummaryCard';
@@ -57,6 +58,9 @@ const DepartmentSection = () => {
   const [selectedDept, setSelectedDept] = useState(null);
   const [openFormDialog, setOpenFormDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Detail dialog state
+  const [detailDept, setDetailDept] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -233,6 +237,7 @@ const DepartmentSection = () => {
                           style={{ height: '100%' }}
                         >
                           <Paper 
+                            onClick={() => setDetailDept(dept)}
                             sx={{ 
                               borderRadius: 3, 
                               height: '100%', 
@@ -270,12 +275,12 @@ const DepartmentSection = () => {
                               </Box>
                               <Box>
                                 <Tooltip title="Edit">
-                                  <IconButton size="small" onClick={() => { setSelectedDept(dept); setOpenFormDialog(true); }}>
+                                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); setSelectedDept(dept); setOpenFormDialog(true); }}>
                                     <EditIcon fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Delete">
-                                  <IconButton size="small" onClick={() => { setSelectedDept(dept); setOpenDeleteDialog(true); }}>
+                                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); setSelectedDept(dept); setOpenDeleteDialog(true); }}>
                                     <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
                                   </IconButton>
                                 </Tooltip>
@@ -326,6 +331,57 @@ const DepartmentSection = () => {
         <DialogActions>
           <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
           <Button onClick={handleDelete} color="error">Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Detail View Dialog */}
+      <Dialog open={Boolean(detailDept)} onClose={() => setDetailDept(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <GroupIcon /> {detailDept?.name || 'Subject Details'}
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          {detailDept ? (
+            <>
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>Teachers</Typography>
+              {Array.isArray(detailDept.teachers) && detailDept.teachers.length > 0 ? (
+                <List dense>
+                  {detailDept.teachers.map((t) => (
+                    <ListItem key={t.teacher_id ?? t.id}>
+                      <ListItemAvatar><Avatar><PersonIcon /></Avatar></ListItemAvatar>
+                      <ListItemText primary={t.name} secondary={t.email} />
+                    </ListItem>
+                  ))}
+                </List>
+              ) : (
+                <Typography variant="body2" color="text.secondary">No teachers assigned.</Typography>
+              )}
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>Students</Typography>
+              {Array.isArray(detailDept.students) && detailDept.students.length > 0 ? (
+                <List dense>
+                  {detailDept.students.map((s) => (
+                    <ListItem key={s.student_id ?? s.id}>
+                      <ListItemAvatar><Avatar><PersonIcon /></Avatar></ListItemAvatar>
+                      <ListItemText primary={s.name} secondary={s.email} />
+                    </ListItem>
+                  ))}
+                </List>
+              ) : (
+                <Typography variant="body2" color="text.secondary">No students assigned.</Typography>
+              )}
+            </>
+          ) : (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailDept(null)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Container>

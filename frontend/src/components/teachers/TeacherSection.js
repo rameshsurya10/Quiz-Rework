@@ -85,9 +85,44 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
 
       const teachersData = teachersRes.data?.results || (Array.isArray(teachersRes.data) ? teachersRes.data : []);
       const deptData = deptsRes.data?.results || (Array.isArray(deptsRes.data) ? deptsRes.data : []);
+      
+      console.log('[TeacherSection] Available departments:', deptData.map(d => ({ id: d.department_id, name: d.name })));
 
       const processedTeachers = teachersData.map(teacher => {
         const userData = teacher.user || teacher;
+        
+        // Debug log to see the raw teacher data
+        console.log('[TeacherSection] Processing teacher:', {
+          name: teacher.name,
+          teacher_id: teacher.teacher_id,
+          departments: teacher.departments,
+          department_ids: teacher.department_ids
+        });
+        
+        // If departments array is empty but department_ids exist, create departments from available data
+        let departments = Array.isArray(teacher.departments) ? teacher.departments : [];
+        
+        // If departments array is empty but we have department_ids, try to match with departments data
+        if (departments.length === 0 && teacher.department_ids && teacher.department_ids.length > 0) {
+          departments = teacher.department_ids.map(deptId => {
+            // Try to find the department in the departments list we fetched
+            const foundDept = deptData.find(d => d.department_id === deptId);
+            if (foundDept) {
+              return {
+                department_id: foundDept.department_id,
+                name: foundDept.name,
+                code: foundDept.code
+              };
+            }
+            // Fallback if department not found
+            return {
+              department_id: deptId,
+              name: `Department ${deptId}`,
+              code: `DEPT${deptId}`
+            };
+          });
+        }
+        
         return {
           id: teacher.id,
           uuid: teacher.uuid,
@@ -95,12 +130,19 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
           name: teacher.name || `${userData.first_name || ''} ${userData.last_name || ''}`.trim(),
           email: userData.email || '',
           phone: userData.phone || userData.phone_number || '',
-          departments: Array.isArray(teacher.departments) ? teacher.departments : [],
+          departments: departments,
           created_at: teacher.created_at || userData.date_joined,
           avatar: userData.profile?.avatar,
           student_count: teacher.student_count || 0,
         };
       });
+      
+      console.log('[TeacherSection] Processed teachers with departments:', 
+        processedTeachers.map(t => ({ 
+          name: t.name, 
+          departments: t.departments.map(d => d.name) 
+        }))
+      );
 
       setTeacherData(processedTeachers);
       setDepartments(deptData);
@@ -346,12 +388,21 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                           </Typography>
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 0.5, mt: 1, mb: 1, minHeight: '24px' }}>
                             {teacher.departments && teacher.departments.length > 0 ? (
-                              teacher.departments.map(dept => (
-                                <Chip key={dept.department_id} label={dept.name} size="small" />
-                              ))
+                              teacher.departments.map((dept, index) => {
+                                console.log('[TeacherCard] Rendering department:', dept, 'for teacher:', teacher.name);
+                                return (
+                                  <Chip 
+                                    key={dept.department_id || `dept-${index}`} 
+                                    label={dept.name || `Dept ${dept.department_id}`} 
+                                    size="small" 
+                                    variant="outlined"
+                                    sx={{ margin: 0.25 }}
+                                  />
+                                );
+                              })
                             ) : (
                               <Typography variant="body2" color="text.secondary">
-                                No Department PUBLISHed
+                                No Department Assigned
                               </Typography>
                             )}
                           </Box>
@@ -477,7 +528,12 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                     {viewTeacher.name ? viewTeacher.name.split(' ').map(n => n[0]).join('').toUpperCase() : ''}
                   </TeacherAvatar>
                   <Typography variant="h6" fontWeight="bold">{viewTeacher.name}</Typography>
-                  <Typography variant="body1" color="text.secondary">{viewTeacher.department}</Typography>
+                  <Typography variant="body1" color="text.secondary">
+                    {viewTeacher.departments && viewTeacher.departments.length > 0 
+                      ? viewTeacher.departments.map(dept => dept.name).join(', ')
+                      : 'No Department Assigned'
+                    }
+                  </Typography>
                 </Box>
                 <List dense>
                   <ListItem>
@@ -496,7 +552,14 @@ const TeacherSection = ({ initialOpenDialog = false }) => {
                     <ListItemAvatar>
                       <Avatar><BusinessIcon /></Avatar>
                     </ListItemAvatar>
-                    <ListItemText primary="Department" secondary={viewTeacher.department || 'N/A'} />
+                    <ListItemText 
+                      primary="Department" 
+                      secondary={
+                        viewTeacher.departments && viewTeacher.departments.length > 0 
+                          ? viewTeacher.departments.map(dept => dept.name).join(', ')
+                          : 'No Department Assigned'
+                      } 
+                    />
                   </ListItem>
                   <ListItem>
                     <ListItemAvatar>

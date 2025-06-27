@@ -14,19 +14,53 @@ import {
   CircularProgress,
   Typography,
   Checkbox,
-  ListItemText
+  ListItemText,
+  InputAdornment
 } from '@mui/material';
 import { departmentApi, teacherApi } from '../../services/api';
 import { getUserFromToken } from '../../utils/auth';
 
-// Simple country list; extend as needed
+// Helper to get user's timezone from settings
+const getUserTimezone = () => {
+  try {
+    const savedSettings = localStorage.getItem('appSettings');
+    if (savedSettings) {
+      const parsed = JSON.parse(savedSettings);
+      if (parsed.timezone) {
+        return parsed.timezone;
+      }
+    }
+  } catch (e) {
+    console.error("Failed to parse appSettings from localStorage", e);
+  }
+  // Fallback to browser's timezone
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+};
+
+// Country list with phone number formats
 const COUNTRY_OPTIONS = [
-  { code: '+91', name: 'India' },
-  { code: '+1', name: 'United States' },
-  { code: '+44', name: 'United Kingdom' },
-  { code: '+61', name: 'Australia' },
-  { code: '+81', name: 'Japan' },
+  { code: '+91', name: 'India', length: 10, placeholder: '10 digits (e.g., 9876543210)' },
+  { code: '+1', name: 'United States', length: 10, placeholder: '10 digits (e.g., 2345678901)' },
+  { code: '+44', name: 'United Kingdom', length: 10, placeholder: '10 digits (e.g., 7911123456)' },
+  { code: '+61', name: 'Australia', length: 9, placeholder: '9 digits (e.g., 412345678)' },
+  { code: '+81', name: 'Japan', length: 10, placeholder: '10 digits (e.g., 9012345678)' },
 ];
+
+// Helper to get country info
+const getCountryInfo = (countryCode) => {
+  return COUNTRY_OPTIONS.find(c => c.code === countryCode) || null;
+};
+
+// Helper to format phone number based on country
+const formatPhoneNumber = (phone, countryCode) => {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  const country = getCountryInfo(countryCode);
+  if (!country) return digits;
+
+  // Return just the digits for now - you can add specific formatting per country if needed
+  return digits;
+};
 
 const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
   const isEditMode = Boolean(teacher && teacher.teacher_id);
@@ -132,25 +166,42 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
   // Effect to populate form when in edit mode or reset for create mode
   useEffect(() => {
     if (isEditMode && teacher) {
+      // Logic for edit mode remains the same for join_date and join_time,
+      // as they are already stored in UTC and displayed.
+      // Any conversion should have been handled on creation.
+      const teacherJoinDate = teacher.join_date ? new Date(teacher.join_date) : (teacher.created_at ? new Date(teacher.created_at) : null);
+
       setFormData({
         name: teacher.name || '',
         email: teacher.email || '',
         phone: teacher.phone || '',
         country_code: teacher.country_code || '',
         country: teacher.country || '',
-        // The teacher object from the list may not have a full 'departments' array.
-        // It might just have a `departmentId`. We need to handle this gracefully.
-        // The `teacher` object passed to the form should have the full departments array.
         department_ids: teacher.departments?.map(dept => dept.department_id).filter(id => id != null) || [],
-        join_date: teacher.join_date ? teacher.join_date.split('T')[0] : (teacher.created_at ? teacher.created_at.split('T')[0] : ''),
-        join_time: teacher.join_date ? teacher.join_date.split('T')[1]?.slice(0,5) : '',
+        join_date: teacherJoinDate ? teacherJoinDate.toISOString().split('T')[0] : '',
+        join_time: teacherJoinDate ? teacherJoinDate.toISOString().split('T')[1].slice(0, 5) : '',
       });
     } else {
-      // Reset form for create mode with current UTC defaults
+      // For create mode, use the user's selected timezone
+      const userTimezone = getUserTimezone();
       const now = new Date();
-      const isoDate = now.toISOString(); // e.g., 2025-06-19T09:25:30.123Z
-      const today = isoDate.split('T')[0];
-      const timePart = isoDate.split('T')[1].slice(0,5); // HH:MM
+
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: userTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      const timeFormatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: userTimezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+
+      const today = formatter.format(now);
+      const timePart = timeFormatter.format(now);
+
       setFormData({
         name: '',
         email: '',
@@ -166,9 +217,22 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors(prev => { const newErrors = { ...prev }; delete newErrors[name]; return newErrors; });
+    
+    if (name === 'phone') {
+      const numericValue = value.replace(/\D/g, '');
+      const country = getCountryInfo(formData.country_code);
+      const maxLen = country ? country.length : 15;
+      const validDigits = numericValue.slice(0, maxLen);
+      setFormData(prev => ({ ...prev, phone: validDigits }));
+      if (errors.phone) {
+        setErrors(prev => { const newErrors = { ...prev }; delete newErrors.phone; return newErrors; });
+      }
+      return;
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+      if (errors[name]) {
+        setErrors(prev => { const newErrors = { ...prev }; delete newErrors[name]; return newErrors; });
+      }
     }
   };
 
@@ -191,13 +255,23 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Enter a valid email address';
     }
+    
+    // Phone validation based on country code
     if (!formData.phone.trim()) {
-        newErrors.phone = 'Phone number is required';
-    } else if (!/^\+?[1-9]\d{1,14}$/.test(formData.phone.replace(/\s+/g, ''))) {
-        newErrors.phone = 'Enter a valid phone number (e.g., +1234567890)';
+      newErrors.phone = 'Phone number is required';
+    } else if (formData.country_code) {
+      const country = getCountryInfo(formData.country_code);
+      if (country && formData.phone.length !== country.length) {
+        newErrors.phone = `Phone number must be exactly ${country.length} digits`;
+      }
+    } else {
+      newErrors.phone = 'Please select a country code first';
     }
+
+    if (!formData.country_code) newErrors.country_code = 'Country code is required';
     if (!formData.join_date) newErrors.join_date = 'Join date is required';
     if (!formData.join_time) newErrors.join_time = 'Join time is required';
+    
     // Prevent past datetime
     if (formData.join_date && formData.join_time) {
       const selectedDT = new Date(`${formData.join_date}T${formData.join_time}`);
@@ -218,14 +292,28 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
     setIsLoading(true);
     setErrors(prev => { const newErrors = { ...prev }; delete newErrors.form; return newErrors; });
 
+    const userTimezone = getUserTimezone();
+    const dateString = `${formData.join_date}T${formData.join_time}:00`;
+
+    // Create a date object from the form inputs. This will be in the browser's local timezone.
+    const localDate = new Date(dateString);
+
+    // To convert this to UTC from the user's selected timezone, we calculate the offset
+    // for the *selected date* to account for things like Daylight Saving Time.
+    const utcDate = new Date(localDate.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const userTzDate = new Date(localDate.toLocaleString('en-US', { timeZone: userTimezone }));
+    const offset = userTzDate.getTime() - utcDate.getTime();
+
+    // Apply the offset to the localDate
+    const finalDate = new Date(localDate.getTime() - offset);
+    
     const basePayload = {
       name: formData.name,
       email: formData.email,
       phone: formData.phone,
       country_code: formData.country_code,
       country: formData.country,
-      // Combine date & time, assume local then convert to UTC ISO
-      join_date: new Date(`${formData.join_date}T${formData.join_time}`).toISOString(),
+      join_date: finalDate.toISOString(),
     };
 
     const finalPayload = {
@@ -287,11 +375,8 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
         <Grid item xs={12} sm={6}>
           <TextField fullWidth label="Email Address" name="email" type="email" value={formData.email} onChange={handleInputChange} error={!!errors.email} helperText={errors.email} required />
         </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField fullWidth label="Phone Number" name="phone" value={formData.phone} onChange={handleInputChange} error={!!errors.phone} helperText={errors.phone} required />
-        </Grid>
         <Grid item xs={12} sm={3}>
-          <FormControl fullWidth>
+          <FormControl fullWidth error={!!errors.country_code} required>
             <InputLabel id="country-code-label">Country Code</InputLabel>
             <Select
               labelId="country-code-label"
@@ -305,6 +390,7 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
                   ...prev,
                   country_code: selectedCode,
                   country: match ? match.name : prev.country,
+                  phone: '' // Clear phone when changing country code
                 }));
               }}
             >
@@ -312,9 +398,33 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
                 <MenuItem key={c.code} value={c.code}>{c.code} — {c.name}</MenuItem>
               ))}
             </Select>
+            {errors.country_code && <FormHelperText>{errors.country_code}</FormHelperText>}
           </FormControl>
         </Grid>
         <Grid item xs={12} sm={3}>
+          <TextField
+            fullWidth
+            label="Phone Number"
+            name="phone"
+            value={formData.phone}
+            onChange={handleInputChange}
+            error={!!errors.phone}
+            helperText={errors.phone || (formData.country_code && getCountryInfo(formData.country_code)?.placeholder)}
+            required
+            InputProps={{
+              startAdornment: formData.country_code && (
+                <InputAdornment position="start" sx={{ pointerEvents: 'none', userSelect: 'none', color: 'text.secondary' }}>
+                  {formData.country_code}
+                </InputAdornment>
+              ),
+            }}
+            inputProps={{
+              inputMode: 'numeric',
+              pattern: '[0-9]*'
+            }}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
           <TextField fullWidth label="Country" name="country" value={formData.country} onChange={handleInputChange} />
         </Grid>
         <Grid item xs={12} sm={3}>

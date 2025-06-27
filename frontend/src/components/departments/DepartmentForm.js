@@ -9,7 +9,9 @@ import {
   MenuItem,
   FormHelperText,
   CircularProgress,
-  Typography
+  Typography,
+  OutlinedInput,
+  Chip
 } from '@mui/material';
 import { teacherApi } from '../../services/api'; // Assuming teacherApi is set up for /api/teachers/
 
@@ -19,7 +21,7 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
     code: '',
     description: '',
   });
-  const [selectedTeacherId, setSelectedTeacherId] = useState(''); // For HOD
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState([]); // Multiple teacher IDs
   const [teachers, setTeachers] = useState([]);
   const [loadingTeachers, setLoadingTeachers] = useState(true);
   const [errors, setErrors] = useState({});
@@ -50,10 +52,14 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
       });
       // If editing, and department has HOD info (e.g., department.teacher_id), set it
       // This part depends on how HOD info is passed for an existing department
-      setSelectedTeacherId(department.teacher_id || ''); 
+      if (Array.isArray(department.teachers)) {
+        setSelectedTeacherIds(department.teachers.map((t) => t.teacher_id ?? t.id));
+      } else {
+        setSelectedTeacherIds(department.teacher_ids || []);
+      }
     } else {
       setFormData({ name: '', code: '', description: '' });
-      setSelectedTeacherId('');
+      setSelectedTeacherIds([]);
     }
   }, [department]);
 
@@ -63,7 +69,11 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
   };
 
   const handleTeacherSelectChange = (event) => {
-    setSelectedTeacherId(event.target.value);
+    const {
+      target: { value },
+    } = event;
+    // On autofill we get a stringified value
+    setSelectedTeacherIds(typeof value === 'string' ? value.split(',') : value);
   };
 
   const validate = () => {
@@ -83,8 +93,8 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
         code: formData.code.trim(),
         description: formData.description.trim(),
       };
-      if (selectedTeacherId) {
-        payload.teacher_id = parseInt(selectedTeacherId, 10); // Ensure it's an integer
+      if (selectedTeacherIds && selectedTeacherIds.length > 0) {
+        payload.teacher_ids = selectedTeacherIds.map((id) => parseInt(id, 10));
       }
       onSubmit(payload); // This will be departmentApi.create(payload) from the parent
     }
@@ -131,17 +141,23 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
         variant="outlined"
       />
       <FormControl fullWidth margin="normal" variant="outlined" error={!!errors.teachers}>
-        <InputLabel id="hod-select-label">Teacher (Optional)</InputLabel>
+        <InputLabel id="teacher-multi-select-label">Teachers (Optional)</InputLabel>
         <Select
-          labelId="hod-select-label"
-          id="hod-select"
-          value={selectedTeacherId}
+          labelId="teacher-multi-select-label"
+          id="teacher-multi-select"
+          multiple
+          value={selectedTeacherIds}
           onChange={handleTeacherSelectChange}
-          label="Teacher (Optional)"
+          input={<OutlinedInput label="Teachers (Optional)" />}
+          renderValue={(selected) => (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {selected.map((value) => {
+                const teacherObj = teachers.find((t) => (t.teacher_id ?? t.id) === value);
+                return <Chip key={value} label={teacherObj?.name || value} />;
+              })}
+            </Box>
+          )}
         >
-          <MenuItem value="">
-            <em>None</em>
-          </MenuItem>
           {loadingTeachers ? (
             <MenuItem disabled value="">
               <CircularProgress size={20} sx={{ mr: 1 }} /> Loading teachers...
@@ -151,12 +167,14 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
               No teachers available.
             </MenuItem>
           ) : (
-            teachers.map((teacher) => (
-              // Ensure teacher object has teacher_id (PK) and name
-              <MenuItem key={teacher.teacher_id} value={teacher.teacher_id}>
-                {teacher.name} {teacher.email ? `(${teacher.email})` : ''}
-              </MenuItem>
-            ))
+            teachers.map((teacher) => {
+              const tId = teacher.teacher_id ?? teacher.id;
+              return (
+                <MenuItem key={tId} value={tId}>
+                  {teacher.name} {teacher.email ? `(${teacher.email})` : ''}
+                </MenuItem>
+              );
+            })
           )}
         </Select>
         {errors.teachers && <FormHelperText>{errors.teachers}</FormHelperText>}

@@ -187,8 +187,10 @@ export const userApi = {
   // Teacher-specific endpoints
   getAllTeachers: (params) => api.get('/api/teacher/teachers/', { params }),
 
-  // Profile specific endpoints for the current authenticated user
-  getProfile: () => api.get('/api/accounts/profile/'), // Updated to match the correct endpoint
+  // Fetches the current authenticated user's details, including nested profile information
+  // This endpoint returns core user fields (first_name, last_name, email, role, etc.) and embeds
+  // the UserProfile data inside a "profile" object, which is required by various components.
+  getProfile: () => api.get('/api/accounts/me/'),
   updateProfile: (data) => api.put('/api/accounts/profile/', data), // Updated to match the correct endpoint
   changePassword: (data) => api.post('/api/accounts/change-password/', data),
   uploadProfilePicture: (data) => api.post('/api/accounts/profile/avatar/', data), // Updated avatar endpoint

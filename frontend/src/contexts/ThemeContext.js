@@ -27,6 +27,11 @@ export const CustomThemeProvider = ({ children }) => {
 
   useEffect(() => {
     localStorage.setItem('themeMode', mode);
+    if (mode === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
   }, [mode]);
 
   useEffect(() => {

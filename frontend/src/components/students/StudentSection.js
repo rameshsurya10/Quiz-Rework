@@ -301,7 +301,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
                 <TableCell>Name</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>Department</TableCell>
-                <TableCell>Mobile No.</TableCell>
+                <TableCell>Mobile No</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>

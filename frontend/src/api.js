@@ -515,7 +515,7 @@ const userApi = {
   // Get current user profile
   getProfile: async () => {
     try {
-      const response = await api.get('/api/accounts/profile/');
+      const response = await api.get('/api/accounts/me/');
       return { data: response.data };
     } catch (error) {
       console.error('Error fetching user profile:', error);

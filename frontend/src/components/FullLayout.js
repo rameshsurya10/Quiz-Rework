@@ -70,9 +70,16 @@ const FullLayout = ({ children, hideToolbar = false }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [open, setOpen] = useState(!isMobile);
-    const [anchorElUser, setAnchorElUser] = useState(null);
-    const [userName, setUserName] = useState('Guest');
+  const [anchorElUser, setAnchorElUser] = useState(null);
+  const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('');
+
+  // Helper to derive a clean display name from profile data
+  const getDisplayName = (data) => {
+    if (!data) return '';
+    const combined = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+    return (data.full_name && data.full_name.trim()) || combined || (data.email ? data.email.split('@')[0] : '');
+  };
 
   // Handle drawer toggle for both mobile and desktop
   const handleDrawerToggle = () => {
@@ -113,14 +120,14 @@ const FullLayout = ({ children, hideToolbar = false }) => {
         const userData = profileResponse.data || profileResponse;
         
         if (userData) {
-          setUserName(userData.full_name || userData.first_name || (userData.email ? userData.email.split('@')[0] : 'Guest'));
+          setUserName(getDisplayName(userData));
           setUserRole(userData.role || '');
         }
       } catch (error) {
         console.error('Failed to fetch user profile for layout:', error);
         const localUser = apiService.getCurrentUser();
         if (localUser) {
-          setUserName(localUser.full_name || localUser.first_name || (localUser.email ? localUser.email.split('@')[0] : 'Guest'));
+          setUserName(getDisplayName(localUser));
           setUserRole(localUser.role || '');
         }
       }

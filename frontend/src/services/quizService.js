@@ -335,7 +335,7 @@ export const quizService = {
         ...(response.data.upcoming_quizzes || [])
       ];
 
-      // Normalize quiz data
+      // Normalize quiz data - preserve null/undefined for pages and passing_score
       return allQuizzes.map(quiz => ({
         quiz_id: quiz.quiz_id || quiz.id,
         title: quiz.title || 'Untitled Quiz',
@@ -343,7 +343,8 @@ export const quizService = {
         is_published: quiz.is_published || false,
         no_of_questions: quiz.no_of_questions || 0,
         time_limit_minutes: quiz.time_limit_minutes || 30,
-        passing_score: quiz.passing_score || 60,
+        passing_score: quiz.passing_score, // Don't provide fallback - preserve actual value
+        pages: quiz.pages, // Don't provide fallback - preserve actual value
         metadata: quiz.metadata || {},
         department_id: quiz.department_id || (quiz.department && quiz.department.id),
         department_name: quiz.department_name || (quiz.department && quiz.department.name) || 'Not assigned',
@@ -388,7 +389,8 @@ export const quizService = {
         is_published: quiz.is_published || false,
         no_of_questions: quiz.no_of_questions || 0,
         time_limit_minutes: quiz.time_limit_minutes || 30,
-        passing_score: quiz.passing_score || 60,
+        passing_score: quiz.passing_score, // Preserve actual value from backend
+        pages: quiz.pages, // Preserve actual value from backend
         metadata: quiz.metadata || {},
         department_id: quiz.department_id || (quiz.department && quiz.department.id),
         department_name: quiz.department_name || (quiz.department && quiz.department.name) || 'Not assigned',

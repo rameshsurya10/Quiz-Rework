@@ -84,6 +84,10 @@ const SettingsPage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
 
+  // Hide read-only duplicates of first/last name and email in the General Settings form.
+  // If you ever need them back, flip this flag to true.
+  const showBasicReadonlyFields = false;
+
   // Fetch user data from API
   useEffect(() => {
     const fetchUserData = async () => {
@@ -900,98 +904,89 @@ const SettingsPage = () => {
                           </Box>
 
                           <Grid container spacing={2}>
-                            <Grid item xs={12} sm={6}>
-                              <TextField
-                                fullWidth
-                                label="First Name"
-                                name="firstName"
-                                value={settings.firstName}
-                                variant="outlined"
-                                margin="normal"
-                                size={isMobile ? "small" : "medium"}
-                                InputProps={{
-                                  readOnly: true,
-                                }}
-                                sx={{
-                                  '& .MuiOutlinedInput-root': {
-                                    '& fieldset': {
-                                      borderColor: theme.palette.divider,
-                                    },
-                                    '&:hover fieldset': {
-                                      borderColor: theme.palette.divider,
-                                    },
-                                    '&.Mui-focused fieldset': {
-                                      borderColor: theme.palette.divider,
-                                      borderWidth: 1,
-                                    },
-                                    backgroundColor: alpha(theme.palette.action.disabledBackground, 0.1),
-                                  },
-                                }}
-                              />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <TextField
-                                fullWidth
-                                label="Last Name"
-                                name="lastName"
-                                value={settings.lastName}
-                                variant="outlined"
-                                margin="normal"
-                                size={isMobile ? "small" : "medium"}
-                                InputProps={{
-                                  readOnly: true,
-                                }}
-                                sx={{
-                                  '& .MuiOutlinedInput-root': {
-                                    '& fieldset': {
-                                      borderColor: theme.palette.divider,
-                                    },
-                                    '&:hover fieldset': {
-                                      borderColor: theme.palette.divider,
-                                    },
-                                    '&.Mui-focused fieldset': {
-                                      borderColor: theme.palette.divider,
-                                      borderWidth: 1,
-                                    },
-                                    backgroundColor: alpha(theme.palette.action.disabledBackground, 0.1),
-                                  },
-                                }}
-                              />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <TextField
-                                fullWidth
-                                label="Email"
-                                name="email"
-                                value={settings.email}
-                                variant="outlined"
-                                margin="normal"
-                                size={isMobile ? "small" : "medium"}
-                                InputProps={{
-                                  readOnly: true,
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <EmailIcon fontSize="small" color="action" />
-                                    </InputAdornment>
-                                  ),
-                                }}
-                                sx={{
-                                  '& .MuiOutlinedInput-root': {
-                                    '& fieldset': {
-                                      borderColor: theme.palette.divider,
-                                    },
-                                    '&:hover fieldset': {
-                                      borderColor: theme.palette.divider,
-                                    },
-                                    '&.Mui-focused fieldset': {
-                                      borderColor: theme.palette.divider,
-                                      borderWidth: 1,
-                                    },
-                                    backgroundColor: alpha(theme.palette.action.disabledBackground, 0.1),
-                                  },
-                                }}
-                              />
-                            </Grid>
+                            {showBasicReadonlyFields && (
+                              <>
+                                {/* Read-only First Name */}
+                                <Grid item xs={12} sm={6}>
+                                  <TextField
+                                    fullWidth
+                                    label="First Name"
+                                    name="firstName"
+                                    value={settings.firstName}
+                                    variant="outlined"
+                                    margin="normal"
+                                    size={isMobile ? "small" : "medium"}
+                                    InputProps={{ readOnly: true }}
+                                    sx={{
+                                      '& .MuiOutlinedInput-root': {
+                                        '& fieldset': { borderColor: theme.palette.divider },
+                                        '&:hover fieldset': { borderColor: theme.palette.divider },
+                                        '&.Mui-focused fieldset': {
+                                          borderColor: theme.palette.divider,
+                                          borderWidth: 1,
+                                        },
+                                        backgroundColor: alpha(theme.palette.action.disabledBackground, 0.1),
+                                      },
+                                    }}
+                                  />
+                                </Grid>
+                                {/* Read-only Last Name */}
+                                <Grid item xs={12} sm={6}>
+                                  <TextField
+                                    fullWidth
+                                    label="Last Name"
+                                    name="lastName"
+                                    value={settings.lastName}
+                                    variant="outlined"
+                                    margin="normal"
+                                    size={isMobile ? "small" : "medium"}
+                                    InputProps={{ readOnly: true }}
+                                    sx={{
+                                      '& .MuiOutlinedInput-root': {
+                                        '& fieldset': { borderColor: theme.palette.divider },
+                                        '&:hover fieldset': { borderColor: theme.palette.divider },
+                                        '&.Mui-focused fieldset': {
+                                          borderColor: theme.palette.divider,
+                                          borderWidth: 1,
+                                        },
+                                        backgroundColor: alpha(theme.palette.action.disabledBackground, 0.1),
+                                      },
+                                    }}
+                                  />
+                                </Grid>
+                                {/* Read-only Email */}
+                                <Grid item xs={12} sm={6}>
+                                  <TextField
+                                    fullWidth
+                                    label="Email"
+                                    name="email"
+                                    value={settings.email}
+                                    variant="outlined"
+                                    margin="normal"
+                                    size={isMobile ? "small" : "medium"}
+                                    InputProps={{
+                                      readOnly: true,
+                                      startAdornment: (
+                                        <InputAdornment position="start">
+                                          <EmailIcon fontSize="small" color="action" />
+                                        </InputAdornment>
+                                      ),
+                                    }}
+                                    sx={{
+                                      '& .MuiOutlinedInput-root': {
+                                        '& fieldset': { borderColor: theme.palette.divider },
+                                        '&:hover fieldset': { borderColor: theme.palette.divider },
+                                        '&.Mui-focused fieldset': {
+                                          borderColor: theme.palette.divider,
+                                          borderWidth: 1,
+                                        },
+                                        backgroundColor: alpha(theme.palette.action.disabledBackground, 0.1),
+                                      },
+                                    }}
+                                  />
+                                </Grid>
+                              </>
+                            )}
                             <Grid item xs={12} sm={6}>
                               <TextField
                                 fullWidth

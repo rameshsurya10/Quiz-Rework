@@ -85,7 +85,7 @@ const StudentDetailsDashboard = ({ student, onClose }) => {
           </Avatar>
           <Box>
             <Typography variant="h4" component="h1" fontWeight="bold">{student?.name || 'Student Name'}</Typography>
-            <Typography variant="subtitle1" color="text.secondary">{student?.department?.name || 'Department'} | ID: {student?.student_id || 'N/A'}</Typography>
+            <Typography variant="subtitle1" color="text.secondary">{student?.department?.name || student?.department_name || 'No Department Assigned'} | ID: {student?.student_id || 'N/A'}</Typography>
           </Box>
         </Box>
         <Button variant="outlined" onClick={onClose}>Close</Button>

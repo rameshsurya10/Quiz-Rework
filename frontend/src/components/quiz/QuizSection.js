@@ -131,8 +131,7 @@ const QuizSection = () => {
       // Use the quizService method for creating quiz with files
       const result = await quizService.createQuizWithFiles(formData, onUploadProgress);
       
-      // Refresh quiz list and reset state
-      fetchQuizzes();
+      // Reset state - useEffect will handle refreshing the quiz list
       setIsCreating(false);
       
       // Show success message
@@ -300,16 +299,30 @@ const QuizSection = () => {
   };
 
   const renderQuizCard = (quiz, index) => {
-    // Helper function to display page ranges from various sources
+    // Helper function to display page ranges from backend data only
     const getPageRanges = (quiz) => {
-      // Check multiple possible locations for page ranges
-      if (quiz.metadata && quiz.metadata.page_ranges_str) {
-        return quiz.metadata.page_ranges_str;
-      } else if (quiz.pages && quiz.pages.length > 0) {
+      console.log('[QuizSection] Quiz pages data:', {
+        quiz_id: quiz.quiz_id,
+        title: quiz.title,
+        pages: quiz.pages,
+        pages_type: typeof quiz.pages,
+        pages_length: quiz.pages?.length
+      });
+      
+      // Use only the backend pages field - no fallbacks to mock data
+      if (quiz.pages && Array.isArray(quiz.pages) && quiz.pages.length > 0) {
+        // If pages is an array of numbers, join them
+        if (typeof quiz.pages[0] === 'number') {
+          return quiz.pages.join(', ');
+        }
+        // If pages is an array of objects with start/end, format them
+        if (typeof quiz.pages[0] === 'object' && quiz.pages[0].start && quiz.pages[0].end) {
+          return quiz.pages.map(range => `${range.start}-${range.end}`).join(', ');
+        }
+        // If pages is an array of strings, join them
         return quiz.pages.join(', ');
-      } else if (quiz.page_ranges) {
-        return quiz.page_ranges;
       }
+      // Only show "All pages" if no specific pages are defined
       return 'All pages';
     };
 
@@ -326,18 +339,22 @@ const QuizSection = () => {
       return 'Not assigned';
     };
     
-    // Get passing score from multiple possible sources
+    // Get passing score from backend data only
     const getPassingScore = (quiz) => {
-      // Check different locations for passing score with strict type checking
-      const passingScore = quiz.passing_score !== undefined && quiz.passing_score !== null
-        ? quiz.passing_score
-        : quiz.metadata?.passing_score;
-
-      if (passingScore !== undefined && passingScore !== null) {
-        return `${passingScore}%`;
+      console.log('[QuizSection] Quiz passing score data:', {
+        quiz_id: quiz.quiz_id,
+        title: quiz.title,
+        passing_score: quiz.passing_score,
+        passing_score_type: typeof quiz.passing_score
+      });
+      
+      // Use only the backend passing_score field - no fallbacks to mock data
+      if (quiz.passing_score !== undefined && quiz.passing_score !== null) {
+        return `${quiz.passing_score}%`;
       }
       
-      return '60%'; // Default passing score
+      // Return empty or indicate not set instead of mock data
+      return 'Not set';
     };
 
     return (
