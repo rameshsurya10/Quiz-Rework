@@ -7,7 +7,7 @@ class Student(models.Model):
     student_id = models.AutoField(primary_key=True)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     name = models.CharField(max_length=255)
-    email = models.EmailField(unique=True)
+    email = models.EmailField(max_length=255, null=False)
     phone = models.CharField(max_length=20, null=True, blank=True)
     department_id = models.IntegerField(null=True, blank=True, db_column='department_id')
     is_verified = models.BooleanField(default=False)

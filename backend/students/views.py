@@ -22,6 +22,7 @@ from django.core.mail import send_mail
 from accounts.permissions import IsOwnerOrAdminOrReadOnly, IsTeacherOrAdmin
 from django.utils import timezone
 from datetime import timedelta
+import json
 
 
 
@@ -32,12 +33,14 @@ class StudentViewSet(viewsets.ModelViewSet):
     serializer_class = StudentSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = 'student_id'
-
     queryset = Student.objects.filter(is_deleted=False)
-    serializer_class = StudentSerializer
-    permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=['post'], url_path='bulk-upload')
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='bulk_upload',
+        permission_classes=[IsAuthenticated, IsTeacherOrAdmin]  # ✅ Apply here
+    )
     def bulk_upload(self, request):
         serializer = StudentBulkUploadSerializer(
             data=request.data,
@@ -181,7 +184,7 @@ class StudentViewSet(viewsets.ModelViewSet):
                 'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class StudentListCreateView(generics.ListCreateAPIView):
+class StudentListView(generics.ListCreateAPIView):
     """
     View for listing all students or creating a new student.
     """
@@ -383,13 +386,19 @@ class SubmitQuizAttemptView(APIView):
                 continue
 
             try:
-                # Fetch the base Question object (with all sub-questions inside JSON)
                 question_obj = Question.objects.get(question_id=question_id)
-                all_subquestions = question_obj.question  # Assuming this is a JSONField list
+                subquestions = question_obj.question
 
-                # Find the matching sub-question by question_number
+                # ✅ Ensure subquestions is a list
+                if isinstance(subquestions, str):
+                    subquestions = json.loads(subquestions)
+
+                if not isinstance(subquestions, list):
+                    continue
+
+                # ✅ Match subquestion by question_number (ensure type consistency)
                 matched = next(
-                    (subq for subq in all_subquestions if subq.get("question_number") == question_number),
+                    (subq for subq in subquestions if int(subq.get("question_number", -1)) == int(question_number)),
                     None
                 )
 
@@ -397,13 +406,12 @@ class SubmitQuizAttemptView(APIView):
                     continue
 
                 correct_answer = str(matched.get("correct_answer", "")).strip().lower()
-                print("correct_answer:",correct_answer)
                 submitted_answer = str(answer).strip().lower()
-                print("submitted_answer:",submitted_answer)
 
                 is_correct = (correct_answer == submitted_answer)
                 if is_correct:
                     score += 1
+
                 total += 1
 
                 stored_answers.append({
@@ -413,7 +421,8 @@ class SubmitQuizAttemptView(APIView):
                     "is_correct": is_correct
                 })
 
-            except Question.DoesNotExist:
+            except Exception as e:
+                print(f"[ERROR] While processing question {question_id} - {e}")
                 continue
 
         passing_score = quiz.passing_score or (quiz.no_of_questions * 0.5)
@@ -548,21 +557,32 @@ class ListStudentQuizResultsView(APIView):
         role = getattr(user, "role", None)
 
         if role == "ADMIN":
-            attempts = QuizAttempt.objects.select_related('quiz', 'student').order_by('-created_at')
+            attempts = QuizAttempt.objects.select_related('quiz', 'student')\
+                .filter(quiz__isnull=False)\
+                .order_by('-created_at')
 
         elif role == "TEACHER":
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
             if not teacher:
                 return Response({"error": "Teacher not found"}, status=status.HTTP_404_NOT_FOUND)
 
+            # Only quizzes created by this teacher
+            # teacher_full_name = teacher.name.strip()
             attempts = QuizAttempt.objects.filter(
                 quiz__is_deleted=False  # or use quiz__creator=teacher.get_full_name()
             ).select_related('quiz', 'student').order_by('-created_at')
+            # attempts = QuizAttempt.objects.select_related('quiz', 'student')\
+            #     .filter(quiz__is_deleted=False, quiz__created_by=teacher_full_name)\
+            #     .order_by('-created_at')
+
         elif role == "STUDENT":
             student = Student.objects.filter(email=user.email, is_deleted=False).first()
             if not student:
                 return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
-            attempts = QuizAttempt.objects.filter(student=student).select_related('quiz').order_by('-created_at')
+
+            attempts = QuizAttempt.objects.select_related('quiz')\
+                .filter(student=student, quiz__isnull=False)\
+                .order_by('-created_at')
 
         else:
             return Response({"error": "Invalid role"}, status=status.HTTP_403_FORBIDDEN)
@@ -570,21 +590,34 @@ class ListStudentQuizResultsView(APIView):
         result_data = []
 
         for attempt in attempts:
+            if not attempt.quiz:
+                continue  # skip broken data
+
             quiz_id = attempt.quiz.quiz_id
 
-            # Calculate rank only if result is "pass"
+            # Calculate rank only if result is pass
             rank = None
             if attempt.result.lower() == "pass":
-                all_quiz_attempts = QuizAttempt.objects.filter(quiz__quiz_id=quiz_id, result__iexact="pass").order_by('-score', 'created_at')
+                all_quiz_attempts = QuizAttempt.objects.filter(
+                    quiz__quiz_id=quiz_id,
+                    result__iexact="pass"
+                ).order_by('-score', 'created_at')
+
                 for idx, a in enumerate(all_quiz_attempts, start=1):
                     if a.student_id == attempt.student_id:
                         rank = idx
                         break
 
-            # Total questions for percentage
+            # Total questions from any one question_id inside question_answer
             try:
-                question_obj = Question.objects.get(question_id=attempt.question_answer[0]["question_id"])
-                total_questions = len(question_obj.question)
+                question_entry = attempt.question_answer[0]
+                question_obj = Question.objects.get(question_id=question_entry["question_id"])
+                question_list = question_obj.question
+                if isinstance(question_list, str):
+                    import json
+                    question_list = json.loads(question_list)
+                total_questions = len(question_list)
+                print("total_questions:",total_questions)
             except:
                 total_questions = 0
 
@@ -597,7 +630,8 @@ class ListStudentQuizResultsView(APIView):
                 "percentage": round(percentage, 2),
                 "rank": rank,
                 "result": attempt.result,
-                "attempted_at": attempt.created_at
+                "attempted_at": attempt.created_at,
+                "total_questions" : total_questions
             }
 
             if role in ["ADMIN", "TEACHER"]:

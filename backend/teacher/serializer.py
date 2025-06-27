@@ -14,6 +14,8 @@ class TeacherSerializer(serializers.ModelSerializer):
         model = Teacher
         fields = [
             "teacher_id", "uuid", "name",
+            "country_code",
+            "country",
             "department_ids",        # ← stored field in model
             "departments",           # ← computed via IDs
             "students",
@@ -46,9 +48,16 @@ class TeacherSerializer(serializers.ModelSerializer):
         return valid_ids
 
     def get_departments(self, obj):
-        valid_ids = self.get_valid_department_ids_with_students(obj.department_ids)
-        departments = Department.objects.filter(department_id__in=valid_ids)
-        return [{"department_id": d.department_id, "name": d.name, "code" :d.code} for d in departments]
+        dept_ids = obj.department_ids
+        departments = Department.objects.filter(department_id__in=dept_ids)
+        return [
+            {
+                "department_id": dept.department_id,
+                "name": dept.name,
+                "code": dept.code
+            }
+            for dept in departments
+        ]
 
     def get_students(self, obj):
         valid_ids = self.get_valid_department_ids_with_students(obj.department_ids)
