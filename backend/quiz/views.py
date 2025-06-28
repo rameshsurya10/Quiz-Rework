@@ -29,6 +29,7 @@ from documents.utils import extract_text_from_file
 import logging
 from .serializers import QuizSerializer, QuestionSerializer,SlimQuestionSerializer
 from accounts.models import User
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +242,10 @@ class QuizFileUploadView(APIView):
             # Add question_number to each
             for idx, q in enumerate(questions, start=1):
                 q['question_number'] = idx
+
+             # Split questions
+            current_questions = questions[:quiz.no_of_questions]
+            additional_questions = questions[quiz.no_of_questions:]
 
             # Save as grouped JSON
             Question.objects.create(
@@ -581,84 +586,115 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         return context
     
     def retrieve(self, request, *args, **kwargs):
-        """Override retrieve to include questions in the response"""
+        """Retrieve quiz with limited questions and show extra ones in additional_question_list"""
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         data = serializer.data
-        
-        # Get questions for this quiz
-        questions = Question.objects.filter(quiz=instance)
-        
-        # Process the questions
-        processed_questions = []
-        
-        for question in questions:
-            if question.question_type == 'mixed' or question.question_type == 'true_false' or question.question_type == 'mcq':
+
+        all_questions = Question.objects.filter(quiz=instance).order_by('question_id')
+        total_questions_count = all_questions.count()
+        max_questions = instance.no_of_questions or 0
+
+        def serialize_question(q):
+            if q.question_type in ['mixed', 'true_false', 'mcq']:
                 try:
-                    # Try to parse the JSON for mixed question types
-                    parsed_json = json.loads(question.question)
-                    
-                    # Check if the parsed result is a list or a single object
-                    if isinstance(parsed_json, list):
-                        # Add the parsed questions to the processed_questions list
-                        # Include the full quiz data with the questions
-                        data['questions'] = parsed_json
-                        return Response(data)
-                    else:
-                        # If it's a single object, wrap it in a list
-                        data['questions'] = [parsed_json]
-                        return Response(data)
+                    parsed = json.loads(q.question)
+                    if isinstance(parsed, list):
+                        return parsed
+                    return [parsed]
                 except (json.JSONDecodeError, TypeError):
-                    # If parsing fails, add the raw question
-                    question_data = {
-                        "question_id": question.question_id,
-                        "question_type": question.question_type,
-                        "question": question.question
-                    }
-                    processed_questions.append(question_data)
-            else:
-                # For non-mixed questions, include all fields
-                question_data = {
-                    "question_id": question.question_id,
-                    "question_type": question.question_type,
-                    "question": question.question,
-                    "options": question.options,
-                    "correct_answer": question.correct_answer,
-                    "explanation": question.explanation
-                }
-                processed_questions.append(question_data)
-        
-        # Add the processed questions to the response
-        if not data.get('questions'):
-            data['questions'] = processed_questions
-        
+                    return [{
+                        "question_id": q.question_id,
+                        "question_type": q.question_type,
+                        "question": q.question
+                    }]
+            return [{
+                "question_id": q.question_id,
+                "question_type": q.question_type,
+                "question": q.question,
+                "options": q.options,
+                "correct_answer": q.correct_answer,
+                "explanation": q.explanation
+            }]
+
+        # Collect all serialized questions
+        all_serialized_questions = []
+        for q in all_questions:
+            all_serialized_questions.extend(serialize_question(q))
+
+        # Split based on required number
+        current_questions = all_serialized_questions[:max_questions]
+        additional_questions = all_serialized_questions[max_questions:]
+
+        # Build response
+        data['current_questions'] = current_questions
+        data['total_questions'] = total_questions_count
+        data['returned_questions'] = len(current_questions)
+        data['balance_questions'] = len(additional_questions)
+        data['additional_question_list'] = additional_questions
+
+        # Clean up any previously present 'questions'
+        data.pop('questions', None)
+
         return Response(data)
         
     def update(self, request, *args, **kwargs):
+        """
+        API endpoint to update a quiz.
+        
+        Allows updating of quiz metadata and questions. 
+        Questions are expected to be in the "questions" key of the request data.
+        Each question is expected to be a dictionary with the following keys:
+        - question (text)
+        - question_type (string, one of 'multiple_choice', 'true_false', 'mixed')
+        - options (dict, optional)
+        - correct_answer (string, optional)
+        - explanation (string, optional)
+        
+        Returns the updated quiz object in the response if successful.
+        """
         instance = self.get_object()
         data = request.data.copy()
 
-        # Handle is_published and published_at
+        # Update published time if needed
         if data.get('is_published') and not instance.published_at:
             data['published_at'] = timezone.now()
 
-        # Set last_modified_by to current user
+        # Track last modified user
         data['last_modified_by'] = request.user.id
 
-        # Get serializer with context
+        # Extract and remove questions from main payload
+        questions_data = data.pop('questions', [])
+
+        # Validate and update quiz
         serializer = self.get_serializer(instance, data=data, partial=kwargs.get('partial', False))
         serializer.is_valid(raise_exception=True)
 
         try:
-            self.perform_update(serializer)
-            updated_instance = self.get_queryset().get(pk=instance.pk)
-            return Response(QuizSerializer(updated_instance).data)
+            with transaction.atomic():
+                self.perform_update(serializer)
+                updated_instance = self.get_queryset().get(pk=instance.pk)
+
+                # Clear old questions (optional: filter by quiz)
+                Question.objects.filter(quiz=updated_instance).delete()
+
+                # Create new questions
+                question_objs = []
+                for q in questions_data:
+                    question_objs.append(Question(
+                        quiz=updated_instance,
+                        question_type=q.get('type', '').lower(),  # ensure lowercase consistency
+                        question=q.get('question'),
+                        options=q.get('options') or {},  # default to empty dict
+                        correct_answer=q.get('correct_answer'),
+                        explanation=q.get('explanation')
+                    ))
+                if question_objs:
+                    Question.objects.bulk_create(question_objs)
+
+                return Response(QuizSerializer(updated_instance).data)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
-    def perform_update(self, serializer):
-        """Update the quiz instance"""
-        serializer.save()
     
     def destroy(self, request, *args, **kwargs):
         """
@@ -759,7 +795,7 @@ class QuizPublishView(APIView):
 
                 # ✅ Generate URL and save in model
                 domain = get_current_site(request).domain
-                full_url = f"http://{domain}/quiz/{quiz.quiz_id}/join/"
+                full_url = f"http://{domain}/student/quiz/{quiz.quiz_id}/join/"
                 # test_path = reverse('quiz-join', kwargs={'quiz_id': quiz.quiz_id})
                 # full_url = f"http://{domain}{test_path}"
                 quiz.url_link = full_url
@@ -1896,6 +1932,101 @@ class QuizShareView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+def ensure_list(data):
+    """
+    Converts a stringified list or actual list into a valid list of dicts.
+    """
+    if isinstance(data, list):
+        return data
+    if isinstance(data, str):
+        try:
+            loaded = json.loads(data)
+            if isinstance(loaded, list):
+                return loaded
+        except json.JSONDecodeError:
+            pass
+    return []
+
+
+class ReplaceQuizQuestionAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, quiz_id):
+        payload = request.data  # Full question object with question_number
+
+        if not isinstance(payload, dict):
+            return Response({"error": "Payload must be a JSON object."}, status=400)
+
+        question_number_to_remove = payload.get("question_number")
+        if question_number_to_remove is None:
+            return Response({"error": "question_number is required in the payload."}, status=400)
+
+        quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
+
+        # ✅ Step 1: Get reference question list
+        raw_questions = getattr(quiz, "questions", [])
+        reference_questions = ensure_list(raw_questions)
+
+        # ✅ Step 2: Try to find the question with matching question_number
+        try:
+            question_number_to_remove = int(question_number_to_remove)
+        except (TypeError, ValueError):
+            return Response({"error": "question_number must be an integer."}, status=400)
+
+        ref_q = next(
+            (q for q in reference_questions if int(q.get("question_number", -1)) == question_number_to_remove),
+            None
+        )
+
+        if not ref_q:
+            return Response({
+                "error": f"No reference question with number {question_number_to_remove}.",
+                "debug_reference_questions": reference_questions
+            }, status=404)
+
+        # ✅ Step 3: Find DB question that matches text (safely using .strip())
+        ref_question_text = ref_q.get("question", "").strip()
+        db_question = Question.objects.filter(
+            quiz=quiz,
+            question__iexact=ref_question_text  # case-insensitive match
+        ).first()
+
+        if not db_question:
+            return Response({
+                "error": f"No matching question found in DB for number {question_number_to_remove}.",
+                "reference_question_text": ref_question_text
+            }, status=404)
+
+        db_question.delete()
+
+        # ✅ Step 4: Replace with one from additional_question_list
+        additional_questions = ensure_list(getattr(quiz, "additional_question_list", []))
+        if not additional_questions:
+            return Response({"error": "No additional questions available to replace."}, status=400)
+
+        new_q = additional_questions.pop(0)
+
+        # ✅ Step 5: Create new DB question
+        new_question_obj = Question.objects.create(
+            quiz=quiz,
+            question=new_q.get("question", ""),
+            correct_answer=new_q.get("correct_answer", ""),
+            explanation=new_q.get("explanation", ""),
+            options=new_q.get("options", {}),
+            question_type=new_q.get("type", "")
+        )
+
+        # ✅ Step 6: Save the updated additional list
+        quiz.additional_question_list = additional_questions
+        quiz.save()
+
+        return Response({
+            "message": "Question replaced successfully.",
+            "removed_question": ref_question_text,
+            "added_question": new_question_obj.question,
+            "additional_questions_remaining": len(additional_questions)
+        }, status=200)
 
 # class TamilImageUploadView(APIView):
 #     parser_classes = (MultiPartParser, FormParser, JSONParser)

@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
-from .views import QuizViewSet
+from .views import *
 from .views import StudentQuestionView
 
 
@@ -18,7 +18,7 @@ urlpatterns = [
     path('<int:quiz_id>/publish/', views.QuizPublishView.as_view(), name='quiz-publish'),
     path('<int:quiz_id>/share/', views.QuizShareView.as_view(), name='quiz-share'),
     path('question_shuffle/<int:quiz_id>/', StudentQuestionView.as_view(), name='question_"shuffle'),
-
+    path('replace_question/<int:quiz_id>/', ReplaceQuizQuestionAPIView.as_view(), name='replace_question'),
    
     # File management endpoints
     path('<int:quiz_id>/files/upload/', views.QuizFileUploadView.as_view(), name='quiz-file-upload'),
