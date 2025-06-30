@@ -11,16 +11,22 @@ import {
 } from '@chakra-ui/react';
 import { SearchIcon, EditIcon, RepeatIcon } from '@chakra-ui/icons';
 import quizService from '../../services/quizService';
+import QuizQuestionManager from './QuizQuestionManager';
 
-const QuizQuestionsView = () => {
-  const { quizId } = useParams();
-  const navigate = useNavigate();
-  const toast = useToast();
+// Alias for normalizing question structures
+const processQuestions = quizService.normalizeQuestions;
+
+const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
+  // Retrieve quizId from URL params if not provided via props
+  const { quizId: paramQuizId } = useParams();
+  const resolvedQuizId = quizId || paramQuizId;
+
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const toast = useToast();
+  const navigate = useNavigate();
 
   const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
-  const [pageAnalytics, setPageAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pageFilter, setPageFilter] = useState('');
   const [complexity, setComplexity] = useState('');
@@ -34,93 +40,25 @@ const QuizQuestionsView = () => {
     page_end: '',
   });
 
-  // Helper function to process questions
-  const processQuestions = (questions) => {
-    return questions.map((question) => {
-      console.log('Processing question:', {
-        question: question.question,
-        type: question.type,
-        correct_answer: question.correct_answer,
-        options: question.options
-      });
-      
-      const processedQuestion = {
-        ...question,
-        question_text: question.question_text || question.question,
-        question_type: question.question_type || question.type || 'mcq'
-      };
-
-      // Handle MCQ questions with options object
-      if (question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
-        // Convert options object to array format for display
-        processedQuestion.options = Object.entries(question.options).map(([key, text]) => {
-          // Extract the correct answer key from "B: Patrick Hitler" format
-          let correctKey = question.correct_answer;
-          if (correctKey && correctKey.includes(':')) {
-            correctKey = correctKey.split(':')[0].trim();
-          }
-          
-          return {
-            option_text: text,
-            is_correct: key === correctKey,
-            id: key
-          };
-        });
-        processedQuestion.question_type = 'multiple_choice';
-        
-        console.log('Processed MCQ options:', processedQuestion.options);
-      } else if (Array.isArray(question.options)) {
-        // Already in correct format
-        processedQuestion.options = question.options;
-      } else {
-        processedQuestion.options = [];
-      }
-
-      // For non-MCQ questions, ensure correct_answer is properly set
-      if (question.type !== 'mcq' && question.correct_answer) {
-        // Clean up the correct answer (remove prefix if it exists)
-        let cleanAnswer = question.correct_answer;
-        if (cleanAnswer.includes(':')) {
-          cleanAnswer = cleanAnswer.split(':')[1]?.trim() || cleanAnswer;
-        }
-        processedQuestion.correct_answer = cleanAnswer;
-      }
-
-      console.log('Final processed question:', processedQuestion);
-      return processedQuestion;
-    });
-  };
-
   // Fetch quiz details
   useEffect(() => {
     const fetchQuizData = async () => {
       try {
         setLoading(true);
-        const quizData = await quizService.getQuizDetails(quizId);
+        console.log('Fetching quiz data for ID:', resolvedQuizId);
+        
+        const quizData = await quizService.getQuizDetails(resolvedQuizId);
+        console.log('Quiz data received:', quizData);
+        
+        // Set quiz data
         setQuiz(quizData);
         
-        // Fetch questions
-        const questionData = await quizService.getQuizQuestions(quizId);
-        let questions = questionData.questions || [];
+        // Only use the current questions
+        const currentQuestions = quizData.current_questions || [];
+        setQuestions(currentQuestions);
         
-        // Process questions to normalize the data structure
-        questions = processQuestions(questions);
-        
-        setQuestions(questions);
-        
-        // Fetch page analytics
-        const analyticsData = await quizService.getQuizPageAnalytics(quizId);
-        setPageAnalytics(analyticsData);
-        
-        // Set regeneration default options
-        if (quizData.question_batch) {
-          setRegenerateOptions(prev => ({
-            ...prev,
-            complexity: quizData.question_batch.difficulty,
-            num_questions: questions.length,
-          }));
-        }
       } catch (error) {
+        console.error('Error in fetchQuizData:', error);
         toast({
           title: 'Error loading quiz data',
           description: error.message,
@@ -134,7 +72,7 @@ const QuizQuestionsView = () => {
     };
 
     fetchQuizData();
-  }, [quizId, toast]);
+  }, [resolvedQuizId, toast]);
 
   // Handle page filter change
   const handlePageFilterChange = async (e) => {
@@ -144,7 +82,7 @@ const QuizQuestionsView = () => {
     try {
       setLoading(true);
       const questionData = await quizService.getQuizQuestions(
-        quizId, 
+        resolvedQuizId, 
         value || null,
         complexity || null
       );
@@ -175,7 +113,7 @@ const QuizQuestionsView = () => {
     try {
       setLoading(true);
       const questionData = await quizService.getQuizQuestions(
-        quizId, 
+        resolvedQuizId, 
         pageFilter || null,
         value || null
       );
@@ -202,7 +140,7 @@ const QuizQuestionsView = () => {
   const handlePublish = async () => {
     try {
       setLoading(true);
-      await quizService.publishQuiz(quizId);
+      await quizService.publishQuiz(resolvedQuizId);
       
       // Update quiz in state
       setQuiz(prev => ({ ...prev, is_published: true, status: 'published' }));
@@ -251,13 +189,13 @@ const QuizQuestionsView = () => {
           parseInt(regenerateOptions.page_end) : undefined,
       };
 
-      const response = await quizService.regenerateQuizQuestions(quizId, dataToSubmit);
+      const response = await quizService.regenerateQuizQuestions(resolvedQuizId, dataToSubmit);
       
       // Refresh the questions and quiz data
-      const updatedQuizData = await quizService.getQuizDetails(quizId);
+      const updatedQuizData = await quizService.getQuizDetails(resolvedQuizId);
       setQuiz(updatedQuizData);
       
-      const questionData = await quizService.getQuizQuestions(quizId);
+      const questionData = await quizService.getQuizQuestions(resolvedQuizId);
       let questions = questionData.questions || [];
       
       // Process questions to normalize the data structure
@@ -285,13 +223,82 @@ const QuizQuestionsView = () => {
     }
   };
 
-  // Pagination controls
+  // Pagination controls (for student view)
   const questionsPerPage = 5;
   const totalPages = Math.ceil(questions.length / questionsPerPage);
-  const currentQuestions = questions.slice(
+  const paginatedQuestions = questions.slice(
     (currentPage - 1) * questionsPerPage,
     currentPage * questionsPerPage
   );
+
+  // Update the rendering part to handle the question types correctly
+  const renderQuestion = (question, index) => {
+    return (
+      <Card key={question.question_number || index} variant="outline">
+        <CardHeader bg="blue.50" py={3}>
+          <Heading size="sm">Question {question.question_number || (index + 1)}</Heading>
+        </CardHeader>
+        <CardBody>
+          <Text fontWeight="bold">{question.question}</Text>
+          
+          {question.type === 'mcq' && question.options && (
+            <VStack align="stretch" mt={3} spacing={2}>
+              {Object.entries(question.options).map(([key, value]) => (
+                <Box 
+                  key={key} 
+                  p={2} 
+                  borderRadius="md" 
+                  border="1px solid" 
+                  borderColor="gray.200"
+                  bg={question.correct_answer === key ? "green.50" : "white"}
+                >
+                  <Text>{key}. {value}</Text>
+                </Box>
+              ))}
+            </VStack>
+          )}
+          
+          {(question.type === 'fill' || question.type === 'oneline') && (
+            <Box mt={3} p={2} borderRadius="md" border="1px dashed" borderColor="gray.300">
+              <Text color="gray.600">Answer: {question.correct_answer}</Text>
+            </Box>
+          )}
+          
+          {question.type === 'truefalse' && (
+            <Box mt={3}>
+              <HStack spacing={4}>
+                <Box 
+                  p={2} 
+                  borderRadius="md" 
+                  border="1px solid" 
+                  borderColor="gray.200"
+                  bg={question.correct_answer === "True" ? "green.50" : "white"}
+                >
+                  <Text>True</Text>
+                </Box>
+                <Box 
+                  p={2} 
+                  borderRadius="md" 
+                  border="1px solid" 
+                  borderColor="gray.200"
+                  bg={question.correct_answer === "False" ? "green.50" : "white"}
+                >
+                  <Text>False</Text>
+                </Box>
+              </HStack>
+            </Box>
+          )}
+          
+          {question.explanation && (
+            <Box mt={3} p={2} bg="yellow.50" borderRadius="md">
+              <Text fontWeight="bold">Explanation:</Text>
+              <Text>{question.explanation}</Text>
+            </Box>
+          )}
+        </CardBody>
+      </Card>
+    );
+  };
 
   // If loading, show spinner
   if (loading && !quiz) {
@@ -313,6 +320,31 @@ const QuizQuestionsView = () => {
     );
   }
 
+  // For student view, show a simplified version
+  if (!isAdmin && !isTeacher) {
+    return (
+      <Box p={4}>
+        <Heading size="md" mb={4}>Quiz Questions</Heading>
+        {loading ? (
+          <Box textAlign="center" py={5}>
+            <Spinner />
+            <Text mt={2}>Loading questions...</Text>
+          </Box>
+        ) : questions.length === 0 ? (
+          <Alert status="info">
+            <AlertIcon />
+            No questions found for this quiz.
+          </Alert>
+        ) : (
+          <VStack spacing={4} align="stretch">
+            {paginatedQuestions.map((question, index) => renderQuestion(question, index))}
+          </VStack>
+        )}
+      </Box>
+    );
+  }
+
+  // For admin/teacher view, show the full manager
   return (
     <Box>
       <HStack justify="space-between" mb={4}>
@@ -328,13 +360,6 @@ const QuizQuestionsView = () => {
               Publish Quiz
             </Button>
           )}
-          <Button 
-            colorScheme="blue" 
-            leftIcon={<RepeatIcon />}
-            onClick={onOpen}
-          >
-            Regenerate Questions
-          </Button>
         </HStack>
       </HStack>
 
@@ -359,263 +384,28 @@ const QuizQuestionsView = () => {
               <Text>{quiz.time_limit_minutes} minutes</Text>
             </Box>
             <Box>
-              <Text fontWeight="bold">Passing Score:</Text>
-              <Text>{quiz.passing_score}%</Text>
-            </Box>
-            <Box>
-              <Text fontWeight="bold">Question Count:</Text>
-              <Text>{questions.length}</Text>
-            </Box>
-            <Box>
-              <Text fontWeight="bold">Complexity:</Text>
-              <Text>{quiz.question_batch?.difficulty || 'Unknown'}</Text>
+              <Text fontWeight="bold">Question Type:</Text>
+              <Text>{quiz.question_type}</Text>
             </Box>
           </SimpleGrid>
         </CardBody>
       </Card>
 
-      <Tabs variant="enclosed" colorScheme="blue">
-        <TabList>
-          <Tab>Questions</Tab>
-          <Tab>Page Analytics</Tab>
-        </TabList>
-        <TabPanels>
-          <TabPanel>
-            <Box mb={4}>
-              <Heading size="md" mb={3}>Filter Questions</Heading>
-              <HStack>
-                <InputGroup maxW="xs">
-                  <Input 
-                    placeholder="Filter by page (e.g. 5 or 5-10)" 
-                    value={pageFilter}
-                    onChange={handlePageFilterChange}
-                  />
-                  <InputRightElement>
-                    <SearchIcon color="gray.500" />
-                  </InputRightElement>
-                </InputGroup>
-                
-                <Select 
-                  placeholder="Filter by complexity" 
-                  value={complexity}
-                  onChange={handleComplexityChange}
-                  maxW="xs"
-                >
-                  <option value="">All Complexity Levels</option>
-                  <option value="lite">Lite</option>
-                  <option value="medium">Medium</option>
-                  <option value="expert">Expert</option>
-                </Select>
-              </HStack>
-            </Box>
-
-            {loading ? (
-              <Box textAlign="center" py={5}>
-                <Spinner />
-                <Text mt={2}>Loading questions...</Text>
-              </Box>
-            ) : currentQuestions.length === 0 ? (
-              <Alert status="info">
-                <AlertIcon />
-                No questions match your filters.
-              </Alert>
-            ) : (
-              <>
-                <VStack spacing={4} align="stretch">
-                  {currentQuestions.map((question, index) => (
-                    <Card key={question.id} variant="outline" className="glass-effect">
-                      <CardHeader bg="blue.50" py={3}>
-                        <Flex justify="space-between" align="center">
-                          <Heading size="sm">
-                            Question {(currentPage - 1) * questionsPerPage + index + 1}
-                          </Heading>
-                          <HStack>
-                            <Badge colorScheme={
-                              question.difficulty === 'lite' ? 'green' :
-                              question.difficulty === 'medium' ? 'blue' :
-                              question.difficulty === 'expert' ? 'red' : 'purple'
-                            }>
-                              {question.difficulty}
-                            </Badge>
-                            {question.source_page && (
-                              <Tag size="sm" colorScheme="gray">
-                                Page {question.source_page}
-                              </Tag>
-                            )}
-                          </HStack>
-                        </Flex>
-                      </CardHeader>
-                      <CardBody>
-                        <Text fontWeight="bold" mb={2}>{question.question_text}</Text>
-                        
-                        {/* Multiple choice options */}
-                        {(question.question_type === 'multiple_choice' || (question.options && question.options.length > 0)) && (
-                          <VStack align="stretch" mt={3} spacing={2}>
-                            {question.options.map((option, i) => (
-                              <HStack key={i} p={2} bg={option.is_correct ? 'green.50' : 'white'} borderRadius="md">
-                                <Text fontWeight={option.is_correct ? 'bold' : 'normal'}>
-                                  {String.fromCharCode(65 + i)}. {option.option_text}
-                                </Text>
-                                {option.is_correct && (
-                                  <Badge colorScheme="green" ml="auto">
-                                    Correct
-                                  </Badge>
-                                )}
-                              </HStack>
-                            ))}
-                          </VStack>
-                        )}
-                        
-                        {/* True/False, Fill, or One-line answer types */}
-                        {((question.type === 'truefalse' || question.type === 'fill' || question.type === 'oneline') ||
-                          (question.question_type !== 'multiple_choice' && (!question.options || question.options.length === 0))) && (
-                          <Box mt={2} p={3} bg="green.50" borderRadius="md" border="1px solid" borderColor="green.200">
-                            <Text fontWeight="bold" color="green.700">
-                              Correct Answer: {question.correct_answer}
-                            </Text>
-                          </Box>
-                        )}
-                        
-                        {question.explanation && (
-                          <Box mt={3} p={3} bg="gray.50" borderRadius="md">
-                            <Text fontWeight="bold">Explanation:</Text>
-                            <Text>{question.explanation}</Text>
-                          </Box>
-                        )}
-                      </CardBody>
-                    </Card>
-                  ))}
-                </VStack>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <HStack justify="center" mt={6}>
-                    <Button
-                      disabled={currentPage === 1}
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    >
-                      Previous
-                    </Button>
-                    <Text mx={3}>
-                      Page {currentPage} of {totalPages}
-                    </Text>
-                    <Button
-                      disabled={currentPage === totalPages}
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    >
-                      Next
-                    </Button>
-                  </HStack>
-                )}
-              </>
-            )}
-          </TabPanel>
-          
-          <TabPanel>
-            <Heading size="md" mb={4}>Question Distribution by Page</Heading>
-            
-            {!pageAnalytics ? (
-              <Spinner />
-            ) : (
-              <Box>
-                <Text mb={4}>Total Questions: {pageAnalytics.total_questions}</Text>
-                
-                <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
-                  {pageAnalytics.page_distribution.map((item) => (
-                    <Card key={item.page} variant="outline">
-                      <CardBody>
-                        <Heading size="sm">
-                          {item.page === 'unknown' ? 'Unknown Page' : `Page ${item.page}`}
-                        </Heading>
-                        <Text>Questions: {item.count}</Text>
-                        <Text>Percentage: {item.percentage.toFixed(1)}%</Text>
-                      </CardBody>
-                    </Card>
-                  ))}
-                </SimpleGrid>
-              </Box>
-            )}
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
-
-      {/* Regenerate Questions Modal */}
-      <Modal isOpen={isOpen} onClose={onClose}>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Regenerate Quiz Questions</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <VStack spacing={4} align="stretch">
-              <Text>
-                This will generate new questions for this quiz. The existing questions will be
-                preserved in the database but no longer associated with this quiz.
-              </Text>
-              
-              <Box>
-                <FormLabel>Complexity Level</FormLabel>
-                <Select
-                  name="complexity"
-                  value={regenerateOptions.complexity}
-                  onChange={handleRegenerateOptionChange}
-                >
-                  <option value="lite">Lite</option>
-                  <option value="medium">Medium</option>
-                  <option value="expert">Expert</option>
-                  <option value="mixed">Mixed</option>
-                </Select>
-              </Box>
-              
-              <Box>
-                <FormLabel>Number of Questions</FormLabel>
-                <Input
-                  type="number"
-                  name="num_questions"
-                  value={regenerateOptions.num_questions}
-                  onChange={handleRegenerateOptionChange}
-                  min={1}
-                  max={50}
-                />
-              </Box>
-              
-              <Box>
-                <FormLabel>Page Range (Optional)</FormLabel>
-                <Flex gap={2}>
-                  <Input
-                    type="number"
-                    name="page_start"
-                    placeholder="Start Page"
-                    value={regenerateOptions.page_start}
-                    onChange={handleRegenerateOptionChange}
-                    min={1}
-                  />
-                  <Input
-                    type="number"
-                    name="page_end"
-                    placeholder="End Page"
-                    value={regenerateOptions.page_end}
-                    onChange={handleRegenerateOptionChange}
-                    min={regenerateOptions.page_start || 1}
-                  />
-                </Flex>
-              </Box>
-            </VStack>
-          </ModalBody>
-
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onClose}>
-              Cancel
-            </Button>
-            <Button 
-              colorScheme="blue" 
-              onClick={handleRegenerateQuestions}
-              isLoading={loading}
-            >
-              Regenerate
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      {loading ? (
+        <Box textAlign="center" py={5}>
+          <Spinner />
+          <Text mt={2}>Loading questions...</Text>
+        </Box>
+      ) : !questions.length ? (
+        <Alert status="info">
+          <AlertIcon />
+          No questions available for this quiz.
+        </Alert>
+      ) : (
+        <VStack spacing={4} align="stretch">
+          {questions.map((question, index) => renderQuestion(question, index))}
+        </VStack>
+      )}
     </Box>
   );
 };

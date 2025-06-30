@@ -33,7 +33,7 @@ import {
   Tag as TagIcon,
   Group as GroupIcon
 } from '@mui/icons-material';
-import { PageHeader, EmptyState } from '../common';
+import { PageHeader, EmptyState } from '../../common';
 import SummaryCard from '../common/SummaryCard';
 import { departmentApi } from '../../services/api';
 import { useSnackbar } from '../../contexts/SnackbarContext';

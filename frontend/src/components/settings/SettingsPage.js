@@ -3,7 +3,7 @@ import FullLayout from '../FullLayout';
 import {
   Container, Box, Typography, Paper, Grid, Switch, FormControlLabel, FormGroup, Button, Divider, useTheme, Tabs, Tab, TextField, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Select, MenuItem, InputLabel, FormControl, RadioGroup, Radio, Card, CardContent, CardActions, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Link, alpha, useMediaQuery, Avatar, CircularProgress, InputAdornment, IconButton, Alert
 } from '@mui/material';
-import { PageHeader } from '../common';
+import { PageHeader } from '../../common';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import PaletteIcon from '@mui/icons-material/Palette';
 import SaveIcon from '@mui/icons-material/Save';

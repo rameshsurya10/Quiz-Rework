@@ -747,6 +747,26 @@ const Login = () => {
                   }
                 </Typography>
             </Box>
+            
+            {/* Student Portal Link */}
+            <Box sx={{ textAlign: 'center', mt: 3 }}>
+              <Button
+                variant="text"
+                onClick={() => window.location.href = '/student-login'}
+                sx={{
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  fontSize: '0.85rem',
+                  textTransform: 'none',
+                  textDecoration: 'underline',
+                  '&:hover': {
+                    color: '#4ecdc4',
+                    background: 'transparent',
+                  }
+                }}
+              >
+                🎓 Student Portal - Quick Quiz Access
+              </Button>
+            </Box>
           </Box>
         </Box>
       </Container>

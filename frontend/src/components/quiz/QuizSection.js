@@ -16,7 +16,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import FullLayout from '../FullLayout';
 import PageHeader from '../../common/PageHeader';
 import QuizFormModern from './QuizFormModern';
-import ConfirmationDialog from '../ConfirmationDialog';
+import { ConfirmationDialog } from '../../common';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { quizApi, departmentApi } from '../../services/api';
 import { quizService } from '../../services/quizService';
@@ -206,78 +206,40 @@ const QuizSection = () => {
       
       console.log('Raw quiz data from backend:', quizData);
       
-      // Normalize questions structure if needed
-      if (quizData.questions) {
-        try {
-          // Handle array of question objects with direct structure
-          if (Array.isArray(quizData.questions) && quizData.questions.length > 0) {
-            quizData.questions = quizData.questions.map((q) => {
-              console.log('Processing question:', {
-                question: q.question,
-                type: q.type,
-                correct_answer: q.correct_answer,
-                options: q.options
-              });
-              
-              // If question is already in the correct format
-              if (q.question_text) {
-                return q;
-              }
-              
-              // Convert from API format to display format
-              const processedQuestion = {
-                question_text: q.question,
-                explanation: q.explanation || '',
-                type: q.type || 'mcq',
-                correct_answer: q.correct_answer
-              };
-
-              // Handle MCQ questions with options object
-              if (q.options && typeof q.options === 'object' && !Array.isArray(q.options)) {
-                // Convert options object to array format for display
-                processedQuestion.options = Object.entries(q.options).map(([key, text]) => {
-                  // Extract the correct answer key from "B: Patrick Hitler" format
-                  let correctKey = q.correct_answer;
-                  if (correctKey && correctKey.includes(':')) {
-                    correctKey = correctKey.split(':')[0].trim();
-                  }
-                  
-                  return {
-                    option_text: text,
-                    is_correct: key === correctKey,
-                    id: key
-                  };
-                });
-                
-                console.log('Processed MCQ options:', processedQuestion.options);
-              } else if (Array.isArray(q.options)) {
-                // Already in correct format
-                processedQuestion.options = q.options;
-              } else {
-                processedQuestion.options = [];
-              }
-
-              // For non-MCQ questions, ensure correct_answer is properly set
-              if (q.type !== 'mcq' && q.correct_answer) {
-                // Clean up the correct answer (remove prefix if it exists)
-                let cleanAnswer = q.correct_answer;
-                if (cleanAnswer.includes(':')) {
-                  cleanAnswer = cleanAnswer.split(':')[1]?.trim() || cleanAnswer;
-                }
-                processedQuestion.correct_answer = cleanAnswer;
-              }
-
-              console.log('Final processed question:', processedQuestion);
-              return processedQuestion;
-            });
-          }
-        } catch (e) {
-          console.error('Failed to normalize questions:', e);
-        }
-      }
+      // Explicitly use current_questions for the admin preview
+      const questionsToDisplay = quizData.current_questions || [];
       
-      console.log("Final processed quiz data:", quizData);
-      setSelectedQuiz(quizData);
+      // Process questions for display
+      const processedQuestions = questionsToDisplay.map((q) => {
+        const processed = {
+          question_text: q.question,
+          explanation: q.explanation || '',
+          type: q.type || 'mcq',
+          correct_answer: q.correct_answer,
+          options: []
+        };
+
+        if (q.options && typeof q.options === 'object' && !Array.isArray(q.options)) {
+          let correctKey = q.correct_answer;
+          if (correctKey && correctKey.includes(':')) {
+            correctKey = correctKey.split(':')[0].trim();
+          }
+          
+          processed.options = Object.entries(q.options).map(([key, text]) => ({
+            option_text: text,
+            is_correct: key === correctKey,
+            id: key
+          }));
+        }
+        
+        return processed;
+      });
+
+      setSelectedQuiz({
+        ...quizData,
+        questions: processedQuestions
+      });
+
     } catch (error) {
       console.error('Failed to fetch quiz details:', error);
       showSnackbar('Failed to load quiz questions. Please try again.', 'error');
@@ -509,89 +471,66 @@ const QuizSection = () => {
         />
 
         <Dialog open={isViewModalOpen} onClose={closeViewModal} fullWidth maxWidth="md" scroll="paper">
-          <DialogTitle>{selectedQuiz?.title || 'Loading...'}</DialogTitle>
+          <DialogTitle sx={{ 
+            background: 'linear-gradient(135deg, #44a08d 0%, #093637 100%)',
+            color: 'white',
+          }}>
+            {selectedQuiz?.title}
+          </DialogTitle>
           <DialogContent dividers>
             {isQuestionsLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}><CircularProgress /></Box>
-            ) : selectedQuiz && selectedQuiz.questions && selectedQuiz.questions.length > 0 ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : selectedQuiz?.questions?.length > 0 ? (
               <List>
                 {selectedQuiz.questions.map((question, index) => (
-                  <ListItem key={question.id || index} sx={{ flexDirection: 'column', alignItems: 'flex-start', mb: 2, border: 1, borderColor: 'divider', borderRadius: 2, p: 2 }}>
-                    <Box sx={{ display: 'flex', width: '100%', justifyContent: 'space-between', mb: 1 }}>
-                      <ListItemText 
-                        primary={`${index + 1}. ${question.question_text || question.question}`} 
-                        primaryTypographyProps={{ fontWeight: 'bold' }} 
-                      />
-                      <Chip 
-                        label={question.type || 'mcq'} 
-                        size="small" 
-                        color={
-                          question.type === 'mcq' ? 'primary' : 
-                          question.type === 'truefalse' ? 'secondary' : 
-                          question.type === 'fill' ? 'info' : 'default'
-                        } 
-                        sx={{ ml: 1 }} 
-                      />
-                    </Box>
+                  <ListItem key={index} sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                      {index + 1}. {question.question_text}
+                      <Chip label={question.type} size="small" sx={{ ml: 1, backgroundColor: '#093637', color: 'white' }} />
+                    </Typography>
                     
-                    {/* Multiple choice options */}
-                    {(question.type === 'mcq' || (question.options && Object.keys(question.options).length > 0)) && (
-                      <List sx={{ width: '100%' }}>
-                        {question.options && typeof question.options === 'object' ? (
-                          // Handle options as object (API format)
-                          Object.entries(question.options).map(([key, value], idx) => (
-                            <ListItem key={idx} sx={{ 
-                              bgcolor: key === question.correct_answer ? alpha(theme.palette.success.main, 0.1) : 'transparent', 
-                              borderRadius: 1,
-                              mb: 0.5
-                            }}>
-                              <ListItemIcon sx={{ minWidth: 32 }}>
-                                {key === question.correct_answer && <CheckCircleIcon color="success" fontSize="small" />}
-                              </ListItemIcon>
-                              <ListItemText primary={`${key}: ${value}`} />
-                            </ListItem>
-                          ))
-                        ) : (
-                          // Handle options as array (normalized format)
-                          (question.options || []).map((option) => (
-                            <ListItem key={option.id} sx={{ 
-                              bgcolor: option.is_correct ? alpha(theme.palette.success.main, 0.1) : 'transparent', 
-                              borderRadius: 1,
-                              mb: 0.5
-                            }}>
-                              <ListItemIcon sx={{ minWidth: 32 }}>
-                                {option.is_correct && <CheckCircleIcon color="success" fontSize="small" />}
-                              </ListItemIcon>
-                              <ListItemText primary={option.option_text} />
-                            </ListItem>
-                          ))
-                        )}
-                      </List>
-                    )}
-                    
-                    {/* True/False, Fill, or One-line answer types */}
-                    {(question.type === 'truefalse' || question.type === 'fill' || question.type === 'oneline') && (
-                      <Box sx={{ width: '100%', mt: 1, mb: 1, p: 1, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: 1 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                          Correct Answer: {question.correct_answer}
+                    {question.type === 'mcq' && question.options.map((option, optIndex) => (
+                      <Box key={optIndex} sx={{
+                        pl: 2,
+                        py: 1,
+                        my: 0.5,
+                        width: '100%',
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: option.is_correct ? 'success.main' : 'divider',
+                        backgroundColor: option.is_correct ? alpha(theme.palette.success.light, 0.1) : 'transparent',
+                      }}>
+                        <Typography variant="body2" sx={{ color: option.is_correct ? 'success.dark' : 'text.primary' }}>
+                          {String.fromCharCode(65 + optIndex)}. {option.option_text}
+                        </Typography>
+                      </Box>
+                    ))}
+
+                    {(question.type === 'fill' || question.type === 'truefalse' || question.type === 'oneline') && (
+                       <Box sx={{
+                        pl: 2, py: 1, my: 0.5, width: '100%', borderRadius: 1,
+                        backgroundColor: alpha(theme.palette.success.light, 0.1),
+                      }}>
+                         <Typography variant="body2">
+                          <strong>Correct Answer: </strong>{question.correct_answer}
                         </Typography>
                       </Box>
                     )}
                     
-                    {/* Explanation for all question types */}
                     {question.explanation && (
-                      <Box sx={{ p: 1, mt: 1, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1, width: '100%' }}>
-                        <Typography variant="caption" sx={{ fontWeight: 'bold' }}>Explanation:</Typography>
-                        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{question.explanation}</Typography>
+                      <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.200',color: 'black', borderRadius: 1, width: '100%' }}>
+                        <Typography variant="body2">
+                          <strong>Explanation: </strong>{question.explanation}
+                        </Typography>
                       </Box>
                     )}
                   </ListItem>
                 ))}
               </List>
-            ) : selectedQuiz ? (
-              <Typography sx={{ textAlign: 'center', my: 4 }}>No questions found for this quiz.</Typography>
             ) : (
-              <Typography sx={{ textAlign: 'center', my: 4 }}>Failed to load quiz details.</Typography>
+              <Typography sx={{ textAlign: 'center', my: 4 }}>No questions found for this quiz.</Typography>
             )}
           </DialogContent>
           <DialogActions>

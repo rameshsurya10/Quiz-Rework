@@ -23,8 +23,14 @@ import PageLoader from './common/PageLoader';
 // New authentication components
 import TeacherDashboard, { TeacherLayout } from './components/dashboards/TeacherDashboard';
 import StudentDashboard from './components/dashboards/StudentDashboard';
+import SimpleStudentDashboard from './components/dashboards/SimpleStudentDashboard';
 // Add OTP Verification component import
 import OTPVerification from './components/auth/OTPVerification';
+// Student-specific components
+import StudentLogin from './components/auth/StudentLogin';
+import StudentQuizView from './components/quiz/StudentQuizView';
+import QuizTestComponent from './components/quiz/QuizTestComponent';
+import DirectQuizAccess from './components/quiz/DirectQuizAccess';
 
 // Protected route component
 const ProtectedRoute = ({ children }) => {
@@ -93,8 +99,12 @@ function App() {
           {/* Login route */}
           <Route path="/login" element={<Login />} />
           
+          {/* Student Login route */}
+          <Route path="/student-login" element={<StudentLogin />} />
+          
           {/* CRITICAL: Add the missing OTP verification route */}
           <Route path="/verify-otp/:role" element={<OTPVerification />} />
+          <Route path="/auth/otp/:role" element={<OTPVerification />} />
           
           {/* Role-specific dashboards */}
           <Route path="/teacher-dashboard" element={
@@ -104,9 +114,24 @@ function App() {
           } />
           <Route path="/student-dashboard" element={
             <ProtectedRoute>
-              <StudentDashboard />
+              <SimpleStudentDashboard />
             </ProtectedRoute>
           } />
+          
+          {/* Student Quiz Taking */}
+          <Route path="/quiz/take/:quizId" element={
+            <ProtectedRoute>
+              <StudentQuizView />
+            </ProtectedRoute>
+          } />
+          
+          {/* Direct Quiz Access Routes */}
+          <Route path="/quiz/:quizId/join" element={<DirectQuizAccess />} />
+          <Route path="/quiz/:quizId/join/" element={<DirectQuizAccess />} />
+          <Route path="/quiz/:quizId" element={<DirectQuizAccess />} />
+          
+          {/* Test Component - Remove in production */}
+          <Route path="/test-quiz-api" element={<QuizTestComponent />} />
 
           {/* Teacher-specific routes with TeacherLayout */}
           <Route path="/teacher/quiz" element={

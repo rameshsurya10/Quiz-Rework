@@ -20,7 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import QuizFormModern from './QuizFormModern';
-import ConfirmationDialog from '../ConfirmationDialog';
+import { ConfirmationDialog } from '../../common';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { quizApi, departmentApi } from '../../services/api';
 import { quizService } from '../../services/quizService';
@@ -211,9 +211,10 @@ const TeacherQuizSection = () => {
         throw new Error('Quiz not found');
       }
       
-      let questions = quizDetails.questions || [];
+      // Use only current questions for the preview modal
+      let questions = quizDetails.current_questions || [];
       
-      console.log('Raw questions from backend:', questions);
+      console.log('Raw questions from backend (current only):', questions);
       
       // Process questions to normalize the data structure
       questions = questions.map((question, qIndex) => {

@@ -5,7 +5,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, TableSortLabel, IconButton,
   useTheme, alpha, TextField, Grid, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
-import { PageHeader, EmptyState } from '../common';
+import { PageHeader, EmptyState } from '../../common';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -16,7 +16,7 @@ import GroupIcon from '@mui/icons-material/Group';
 import { motion } from 'framer-motion';
 import { visuallyHidden } from '@mui/utils';
 import CreateUserDialog from './CreateUserDialog';
-import ConfirmationDialog from '../ConfirmationDialog';
+import { ConfirmationDialog } from '../../common';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { userApi } from '../../services/api';
 

@@ -22,13 +22,15 @@ import {
   Visibility as VisibilityIcon,
   Close as CloseIcon,
   Class as ClassIcon,
-  People as PeopleIcon
+  People as PeopleIcon,
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import { studentApi, departmentApi, teacherApi } from '../../services/api';
 import { format, parseISO } from 'date-fns';
 import StudentForm from './StudentForm';
 import SummaryCard from '../common/SummaryCard';
 import StudentDetailsDashboard from './StudentDetailsDashboard';
+import BulkUploadDialog from './BulkUploadDialog';
 
 // Styled Components
 const DashboardStyledCard = styled(Card)(({ theme }) => ({
@@ -78,6 +80,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
   const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
   const [studentToDelete, setStudentToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [openBulkUpload, setOpenBulkUpload] = useState(false);
 
   const showMessage = (message, severity = 'success') => {
     setSnackbar({ open: true, message, severity });
@@ -214,6 +217,12 @@ const StudentSection = ({ initialOpenDialog = false }) => {
     }
   };
 
+  const handleBulkUploadSuccess = (results) => {
+    showMessage(`Bulk upload completed: ${results.success_count} students imported successfully`, 'success');
+    fetchData(); // Refresh the student list
+    setOpenBulkUpload(false);
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     try {
@@ -281,13 +290,37 @@ const StudentSection = ({ initialOpenDialog = false }) => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={4} sx={{ textAlign: { md: 'right' } }}>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleDialogOpen()}
-              >
-                Add Student
-              </Button>
+              <Box sx={{ 
+                display: 'flex', 
+                gap: 1.5, 
+                justifyContent: { xs: 'flex-start', md: 'flex-end' },
+                flexWrap: { xs: 'wrap', sm: 'nowrap' }
+              }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<UploadIcon />}
+                  onClick={() => setOpenBulkUpload(true)}
+                  sx={{ 
+                    flexShrink: 0,
+                    minWidth: { xs: '120px', sm: 'auto' },
+                    fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                  }}
+                >
+                  Bulk Upload
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => handleDialogOpen()}
+                  sx={{ 
+                    flexShrink: 0,
+                    minWidth: { xs: '120px', sm: 'auto' },
+                    fontSize: { xs: '0.8rem', sm: '0.875rem' }
+                  }}
+                >
+                  Add Student
+                </Button>
+              </Box>
             </Grid>
           </Grid>
         </CardContent>
@@ -384,6 +417,14 @@ const StudentSection = ({ initialOpenDialog = false }) => {
           <StudentDetailsDashboard student={viewingStudent} onClose={handleCloseViewDialog} />
         }
       </Dialog>
+
+      {/* Bulk Upload Dialog */}
+      <BulkUploadDialog
+        open={openBulkUpload}
+        onClose={() => setOpenBulkUpload(false)}
+        onSuccess={handleBulkUploadSuccess}
+        departments={departments}
+      />
 
       {/* Old View Dialog - Commented out */}
       {/* {viewingStudent && (

@@ -132,6 +132,8 @@ export const studentApi = {
   update: (id, data) => api.put(`/api/students/${id}/`, data),
   delete: (id) => api.delete(`/api/students/${id}/`),
   bulkCreate: (data) => api.post('/api/students/create_student/', data),
+  bulkUpload: (formData) => api.post('/api/students/bulk_upload/', formData),
+  // Note: downloadTemplate now uses static files from /template/ folder
   // Add a test endpoint to check connectivity
   test: () => api.get('/api/students/'),
 };
@@ -152,6 +154,8 @@ export const departmentApi = {
   create: (data) => api.post('/api/departments/', data),
   update: (id, data) => api.put(`/api/departments/${id}/`, data),
   delete: (id) => api.delete(`/api/departments/${id}/`),
+  bulkUploadStudents: (departmentId, formData) => api.post(`/api/departments/${departmentId}/bulk-upload-students/`, formData),
+  bulkDeleteStudents: (departmentId, data) => api.post(`/api/departments/${departmentId}/bulk-delete-students/`, data),
 };
 
 export const quizApi = {
@@ -165,6 +169,21 @@ export const quizApi = {
   uploadFile: (quizId, fileData, config = {}) => {
     return api.post(`/api/quiz/${quizId}/files/upload/`, fileData, config);
   },
+  
+  // New question management endpoints
+  questions: {
+    update: (quizId, questionNumber, data) => 
+      api.patch(`/api/quiz/${quizId}/questions/${questionNumber}/`, data),
+    delete: (quizId, questionNumber) => 
+      api.delete(`/api/quiz/${quizId}/questions/${questionNumber}/`),
+    exchange: (quizId, questionNumber, newQuestionNumber) =>
+      api.post(`/api/quiz/${quizId}/questions/exchange/`, {
+        current_question: questionNumber,
+        new_question: newQuestionNumber
+      }),
+    add: (quizId, data) =>
+      api.post(`/api/quiz/${quizId}/questions/`, data),
+  }
 };
 
 export const userApi = {

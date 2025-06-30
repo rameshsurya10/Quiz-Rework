@@ -25,12 +25,14 @@ import {
   ViewModule as GridViewIcon,
   ViewList as ListViewIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { studentApi, departmentApi } from '../../services/api';
 import StudentForm from './StudentForm';
+import BulkUploadDialog from './BulkUploadDialog';
 
 const TeacherStudentSection = () => {
   const theme = useTheme();
@@ -58,6 +60,7 @@ const TeacherStudentSection = () => {
   const [deletingStudent, setDeletingStudent] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -179,6 +182,12 @@ const TeacherStudentSection = () => {
 
   const handleAddError = (message) => {
     showSnackbar(message, 'error');
+  };
+
+  const handleBulkUploadSuccess = (results) => {
+    showSnackbar(`Bulk upload completed: ${results.success_count} students imported successfully`, 'success');
+    loadData(); // Refresh the student list
+    setBulkUploadOpen(false);
   };
 
   const sortStudents = (studentsToSort) => {
@@ -751,6 +760,20 @@ const TeacherStudentSection = () => {
                 </IconButton>
               </Tooltip>
               
+              <Tooltip title="Bulk Upload Students">
+                <IconButton
+                  onClick={() => setBulkUploadOpen(true)}
+                  sx={{
+                    color: theme.palette.info.main,
+                    '&:hover': {
+                      background: alpha(theme.palette.info.main, 0.08),
+                    }
+                  }}
+                >
+                  <UploadIcon />
+                </IconButton>
+              </Tooltip>
+              
               <Tooltip title="Download Report">
                 <IconButton
                   sx={{
@@ -1096,6 +1119,14 @@ const TeacherStudentSection = () => {
           <AddIcon />
         </Fab>
       </Zoom>
+
+      {/* Bulk Upload Dialog */}
+      <BulkUploadDialog
+        open={bulkUploadOpen}
+        onClose={() => setBulkUploadOpen(false)}
+        onSuccess={handleBulkUploadSuccess}
+        departments={departments}
+      />
     </Container>
   );
 };

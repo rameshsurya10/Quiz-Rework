@@ -437,22 +437,24 @@ export const quizService = {
       });
   },
 
-  // Get quiz questions with optional page filtering
-  getQuizQuestions: async (quizId, pageFilter = null, complexityFilter = null) => {
+  // Get questions for a specific quiz
+  getQuizQuestions: async (quizId, pageFilter = null, complexity = null) => {
     try {
-      let url = `${API_BASE_URL}/api/quiz/${quizId}/questions/`;
+      const params = {};
+      if (pageFilter) params.page = pageFilter;
+      if (complexity) params.complexity = complexity;
       
-      // Add query parameters if provided
-      const params = new URLSearchParams();
-      if (pageFilter) params.append('page', pageFilter);
-      if (complexityFilter) params.append('complexity', complexityFilter);
+      const response = await axios.get(
+        `${API_BASE_URL}/api/quiz/${quizId}/questions/`,
+        {
+          ...getAuthHeaders(),
+          params
+        }
+      );
       
-      if (params.toString()) {
-        url = `${url}?${params.toString()}`;
-      }
-      
-      const response = await axios.get(url, getAuthHeaders());
-      return response.data;
+      // Process and normalize the questions
+      const questions = normalizeQuestions(response.data.questions || []);
+      return { questions };
     } catch (error) {
       console.error('Error fetching quiz questions:', error);
       throw error;

@@ -9,7 +9,7 @@ import {
   Chip, TextField, FormControl, InputLabel, Select, MenuItem, alpha,
   Switch, FormGroup, FormControlLabel, FormHelperText
 } from '@mui/material';
-import { PageHeader, EmptyState } from '../common';
+import { PageHeader, EmptyState } from '../../common';
 import EditIcon from '@mui/icons-material/Edit';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import EmailIcon from '@mui/icons-material/Email';
@@ -27,7 +27,7 @@ import { visuallyHidden } from '@mui/utils';
 import EditProfileDialog from './EditProfileDialog';
 import ChangePasswordDialog from './ChangePasswordDialog';
 import CreateUserDialog from '../usermanagement/CreateUserDialog';
-import ConfirmationDialog from '../ConfirmationDialog';
+import { ConfirmationDialog } from '../../common';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { userApi } from '../../services/api';
 
