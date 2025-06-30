@@ -80,11 +80,12 @@ class Question(models.Model):
     quiz = models.ForeignKey(
         Quiz,
         on_delete=models.CASCADE,
-        related_name='questions',
+        related_name='db_questions',
         db_column='quiz_id'
     )
     # question = models.TextField()
-    question = models.JSONField()
+    # question = models.JSONField()
+    question = models.TextField(blank=True, null=True) 
     question_type = models.CharField(max_length=50)
     difficulty = models.CharField(max_length=50)
     options = models.JSONField(null=True, blank=True)
@@ -98,7 +99,7 @@ class Question(models.Model):
     document = models.ForeignKey(
         'documents.Document',
         on_delete=models.SET_NULL,
-        related_name='questions',
+        related_name='db_questions',
         null=True,
         blank=True,
         db_column='document_id'

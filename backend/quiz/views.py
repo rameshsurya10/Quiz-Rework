@@ -30,6 +30,9 @@ import logging
 from .serializers import QuizSerializer, QuestionSerializer,SlimQuestionSerializer
 from accounts.models import User
 from django.db import transaction
+import json
+from rest_framework.response import Response
+
 from documents.services import DocumentProcessingService
 
 logger = logging.getLogger(__name__)
@@ -1791,80 +1794,78 @@ class ReplaceQuizQuestionAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, quiz_id):
-        payload = request.data  # Full question object with question_number
+        payload = request.data
 
-        if not isinstance(payload, dict):
-            return Response({"error": "Payload must be a JSON object."}, status=400)
-
+        # Step 1: Validate input
         question_number_to_remove = payload.get("question_number")
-        if question_number_to_remove is None:
-            return Response({"error": "question_number is required in the payload."}, status=400)
-
-        quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
-
-        # ✅ Step 1: Get reference question list
-        raw_questions = getattr(quiz, "questions", [])
-        reference_questions = ensure_list(raw_questions)
-
-        # ✅ Step 2: Try to find the question with matching question_number
         try:
             question_number_to_remove = int(question_number_to_remove)
         except (TypeError, ValueError):
             return Response({"error": "question_number must be an integer."}, status=400)
 
-        ref_q = next(
-            (q for q in reference_questions if int(q.get("question_number", -1)) == question_number_to_remove),
-            None
-        )
+        # Step 2: Get quiz
+        quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
 
-        if not ref_q:
+        # Step 3: Get the Question object that holds the question list
+        question_obj = Question.objects.filter(quiz=quiz).first()
+        if not question_obj:
+            return Response({"error": "No question data found in DB for this quiz."}, status=404)
+
+        # Step 4: Safely parse the question list
+        try:
+            raw = question_obj.question
+            question_list = json.loads(raw)
+
+            # If it's double-encoded, decode again
+            if isinstance(question_list, str):
+                question_list = json.loads(question_list)
+
+            # If it's a dict, convert to list of values
+            if isinstance(question_list, dict):
+                question_list = list(question_list.values())
+
+        except Exception as e:
+            print("Decoding error:", str(e))
+            return Response({"error": "Failed to decode question data."}, status=500)
+
+        if not isinstance(question_list, list):
+            return Response({"error": "Stored question data is not a list."}, status=500)
+
+        # Step 5: Remove the target question
+        original_len = len(question_list)
+        question_list = [
+            q for q in question_list
+            if int(q.get("question_number", -1)) != question_number_to_remove
+        ]
+        if len(question_list) == original_len:
             return Response({
-                "error": f"No reference question with number {question_number_to_remove}.",
-                "debug_reference_questions": reference_questions
+                "error": f"Question number {question_number_to_remove} not found in stored question list."
             }, status=404)
 
-        # ✅ Step 3: Find DB question that matches text (safely using .strip())
-        ref_question_text = ref_q.get("question", "").strip()
-        db_question = Question.objects.filter(
-            quiz=quiz,
-            question__iexact=ref_question_text  # case-insensitive match
-        ).first()
+        # Step 6: Save updated list to the Question model
+        question_obj.question = json.dumps(question_list)
+        question_obj.save()
 
-        if not db_question:
-            return Response({
-                "error": f"No matching question found in DB for number {question_number_to_remove}.",
-                "reference_question_text": ref_question_text
-            }, status=404)
+        # Step 7: Also update the quiz.questions field if it's a list
+        try:
+            quiz_data = json.loads(quiz.questions)
+            if isinstance(quiz_data, str):
+                quiz_data = json.loads(quiz_data)
+            if isinstance(quiz_data, dict):
+                quiz_data = list(quiz_data.values())
+        except Exception:
+            quiz_data = []
 
-        db_question.delete()
+        if isinstance(quiz_data, list):
+            quiz_data = [
+                q for q in quiz_data
+                if int(q.get("question_number", -1)) != question_number_to_remove
+            ]
+            quiz.questions = json.dumps(quiz_data)
+            quiz.save()
 
-        # ✅ Step 4: Replace with one from additional_question_list
-        additional_questions = ensure_list(getattr(quiz, "additional_question_list", []))
-        if not additional_questions:
-            return Response({"error": "No additional questions available to replace."}, status=400)
+        return Response(question_list, status=200)
 
-        new_q = additional_questions.pop(0)
-
-        # ✅ Step 5: Create new DB question
-        new_question_obj = Question.objects.create(
-            quiz=quiz,
-            question=new_q.get("question", ""),
-            correct_answer=new_q.get("correct_answer", ""),
-            explanation=new_q.get("explanation", ""),
-            options=new_q.get("options", {}),
-            question_type=new_q.get("type", "")
-        )
-
-        # ✅ Step 6: Save the updated additional list
-        quiz.additional_question_list = additional_questions
-        quiz.save()
-
-        return Response({
-            "message": "Question replaced successfully.",
-            "removed_question": ref_question_text,
-            "added_question": new_question_obj.question,
-            "additional_questions_remaining": len(additional_questions)
-        }, status=200)
 
 # class TamilImageUploadView(APIView):
 #     parser_classes = (MultiPartParser, FormParser, JSONParser)
