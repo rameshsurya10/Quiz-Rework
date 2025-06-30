@@ -214,12 +214,13 @@ const QuizSection = () => {
         const processed = {
           question_text: q.question,
           explanation: q.explanation || '',
-          type: q.type || 'mcq',
+          type: q.question_type || q.type || 'mcq',
           correct_answer: q.correct_answer,
           options: []
         };
 
-        if (q.options && typeof q.options === 'object' && !Array.isArray(q.options)) {
+        // Handle MCQ options
+        if (processed.type === 'mcq' && q.options && typeof q.options === 'object' && !Array.isArray(q.options)) {
           let correctKey = q.correct_answer;
           if (correctKey && correctKey.includes(':')) {
             correctKey = correctKey.split(':')[0].trim();
@@ -230,6 +231,14 @@ const QuizSection = () => {
             is_correct: key === correctKey,
             id: key
           }));
+        } else if (processed.type === 'mcq') {
+          // MCQ but no valid options - create default
+          processed.options = [
+            { option_text: 'Option A', is_correct: false, id: 'A' },
+            { option_text: 'Option B', is_correct: true, id: 'B' },
+            { option_text: 'Option C', is_correct: false, id: 'C' },
+            { option_text: 'Option D', is_correct: false, id: 'D' }
+          ];
         }
         
         return processed;
@@ -263,29 +272,15 @@ const QuizSection = () => {
   const renderQuizCard = (quiz, index) => {
     // Helper function to display page ranges from backend data only
     const getPageRanges = (quiz) => {
-      console.log('[QuizSection] Quiz pages data:', {
-        quiz_id: quiz.quiz_id,
-        title: quiz.title,
-        pages: quiz.pages,
-        pages_type: typeof quiz.pages,
-        pages_length: quiz.pages?.length
-      });
-      
-      // Use only the backend pages field - no fallbacks to mock data
       if (quiz.pages && Array.isArray(quiz.pages) && quiz.pages.length > 0) {
-        // If pages is an array of numbers, join them
-        if (typeof quiz.pages[0] === 'number') {
-          return quiz.pages.join(', ');
-        }
-        // If pages is an array of objects with start/end, format them
-        if (typeof quiz.pages[0] === 'object' && quiz.pages[0].start && quiz.pages[0].end) {
-          return quiz.pages.map(range => `${range.start}-${range.end}`).join(', ');
-        }
-        // If pages is an array of strings, join them
-        return quiz.pages.join(', ');
+        return quiz.pages.map(p => {
+          if (typeof p === 'object' && p.filename) {
+            return `${p.filename} (${p.page_range || 'All'})`;
+          }
+          return 'Invalid page format';
+        }).join('; ');
       }
-      // Only show "All pages" if no specific pages are defined
-      return 'All pages';
+      return 'Not applicable';
     };
 
     // Get department name from multiple possible sources
@@ -338,20 +333,41 @@ const QuizSection = () => {
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, minHeight: '40px' }}>
                 {quiz.description || 'No description available.'}
               </Typography>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'text.secondary', mb: 1 }}>
-                <Typography variant="caption">{quiz.no_of_questions || 0} Questions</Typography>
-                <Typography variant="caption">{quiz.time_limit_minutes || 'N/A'} min limit</Typography>
-              </Box>
-              <Typography variant="caption" color="text.secondary">
-                Dept: {getDepartmentName(quiz)} | Type: {quiz.quiz_type || 'Normal'}
-              </Typography>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'text.secondary', mt: 1 }}>
-                <Typography variant="caption">Type: {quiz.question_type || 'Mixed'}</Typography>
-                <Typography variant="caption">Pass Score: {getPassingScore(quiz)}</Typography>
-              </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                Pages: {getPageRanges(quiz)}
-              </Typography>
+              
+              <Grid container spacing={1} sx={{ color: 'text.secondary', mb: 1 }}>
+                <Grid item xs={6}>
+                  <Typography variant="caption">{quiz.no_of_questions || 0} Questions</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption">{quiz.time_limit_minutes || 'N/A'} min limit</Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="caption">
+                    Dept: {getDepartmentName(quiz)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption">
+                    Difficulty: {quiz.quiz_type || 'Normal'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption">
+                    Type: {quiz.question_type || 'Mixed'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                    <Typography variant="caption">
+                        Pass Score: {getPassingScore(quiz)}
+                    </Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="caption" sx={{ display: 'block' }}>
+                    Pages: {getPageRanges(quiz)}
+                  </Typography>
+                </Grid>
+              </Grid>
+
             </CardContent>
             <CardActions sx={{ justifyContent: 'space-between', p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
               <Box>
@@ -397,7 +413,15 @@ const QuizSection = () => {
     <FullLayout>
       <Container maxWidth={false} sx={{ mt: 4, mb: 4 }}>
         {isCreating ? (
-          <QuizFormModern onSave={handleCreateQuiz} className="glass-effect" onCancel={handleCancelCreate} departments={departments} />
+          <QuizFormModern 
+            onSave={{ 
+              createQuiz: quizService.createQuiz, 
+              uploadFile: quizService.uploadFileForQuiz 
+            }} 
+            className="glass-effect" 
+            onCancel={handleCancelCreate} 
+            departments={departments} 
+          />
         ) : (
           <>
             <PageHeader

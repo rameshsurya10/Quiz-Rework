@@ -33,22 +33,24 @@ import FileUpload from './FileUpload';
 
 import CreatingQuizLoader from './CreatingQuizLoader';
 import api from '../../services/api';
+import { useSnackbar } from '../../contexts/SnackbarContext';
 
 const initialFormState = {
   title: '',
   description: '',
   files: [],
+  filesData: [],
   no_of_questions: '',
   time_limit_minutes: '',
   complexity: '',
   quiz_type: '',
   department: '',
   passing_score: '',
-  quiz_date: '',
-  page_ranges: ''
+  quiz_date: ''
 };
 
 const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) => {
+  const { showSnackbar } = useSnackbar();
   // Add constants for limits
   const MAX_FILE_SIZE = 60; // 60MB
   const MAX_QUESTIONS = 35;
@@ -97,24 +99,28 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
     }));
   }, []);
   
-  const handlePageRangesChange = useCallback((pageRanges) => {
-    // Only update if the value has actually changed
-    if (form.page_ranges !== pageRanges) {
+  const handleFilesDataChange = useCallback((filesData) => {
+    // Update form with structured files data
       setForm(prev => ({
         ...prev,
-        page_ranges: pageRanges
-      }));
+      filesData: filesData,
+      files: filesData.map(fd => fd.file)
+    }));
+    
+    // Check if at least one PDF file is included
+    const containsPdf = filesData.some(fd => fd.is_pdf);
+    setHasPdf(containsPdf);
       
-      // Clear any existing page range errors when the value changes
-      if (errors.page_ranges) {
+    // Clear any existing file-related errors
+    if (errors.files || errors.page_ranges) {
         setErrors(prev => {
           const newErrors = { ...prev };
+        delete newErrors.files;
           delete newErrors.page_ranges;
           return newErrors;
         });
       }
-    }
-  }, [form.page_ranges, errors.page_ranges]);
+  }, [errors.files, errors.page_ranges]);
 
   const validate = () => {
     const errs = {};
@@ -122,19 +128,15 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       if (!form[field]) errs[field] = 'Required';
     });
     if (!form.department) errs.department = 'Please select a subject';
-    if (!form.quiz_date) errs.quiz_date = 'Quiz date is required';
     
-    // Validate files - make sure they exist and are not empty
-    if (!form.files || form.files.length === 0) {
-      errs.files = 'At least one file must be uploaded to generate quiz questions';
-    } else {
-      // Check if any files are empty (0 bytes)
+    // Files are now optional for initial creation, so we remove the validation for their presence.
+    // We can still validate for empty or oversized files if they are selected.
+    if (form.files && form.files.length > 0) {
       const emptyFiles = form.files.filter(file => file.size === 0);
       if (emptyFiles.length > 0) {
         errs.files = `The following files are empty: ${emptyFiles.map(f => f.name).join(', ')}`;
       }
       
-      // Check if any files are too large
       const oversizedFiles = form.files.filter(file => file.size > MAX_FILE_SIZE * 1024 * 1024);
       if (oversizedFiles.length > 0) {
         errs.files = `The following files exceed the size limit: ${oversizedFiles.map(f => f.name).join(', ')}`;
@@ -146,28 +148,32 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       errs.no_of_questions = `Maximum ${MAX_QUESTIONS} questions allowed`;
     }
     
-    // Validate page ranges if provided
-    if (form.page_ranges) {
+    if (form.filesData) {
+      for (const fileData of form.filesData) {
+        if (fileData.is_pdf && fileData.page_range) {
       const pattern = /^(\d+(-\d+)?)(,\d+(-\d+)?)*$/;
-      if (!pattern.test(form.page_ranges)) {
-        errs.page_ranges = 'Invalid page range format';
+          if (!pattern.test(fileData.page_range)) {
+            errs.page_ranges = `Invalid page range format for ${fileData.filename}`;
+            break;
       } else {
-        // Check that ranges are valid (start <= end)
-        const rangeParts = form.page_ranges.split(',');
+            const rangeParts = fileData.page_range.split(',');
         for (const part of rangeParts) {
           if (part.includes('-')) {
             const [start, end] = part.split('-').map(Number);
             if (start > end) {
-              errs.page_ranges = `Invalid range: ${start}-${end}. Start must be <= end.`;
+                  errs.page_ranges = `Invalid range: ${start}-${end} in ${fileData.filename}. Start must be <= end.`;
               break;
             }
             if (start <= 0) {
-              errs.page_ranges = "Page numbers must be positive";
+                  errs.page_ranges = `Page numbers must be positive in ${fileData.filename}`;
               break;
             }
           } else if (parseInt(part) <= 0) {
-            errs.page_ranges = "Page numbers must be positive";
+                errs.page_ranges = `Page numbers must be positive in ${fileData.filename}`;
             break;
+              }
+            }
+            if (errs.page_ranges) break;
           }
         }
       }
@@ -198,13 +204,10 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       'Hard': 'hard',
       'Mixed': 'mixed'
     };
-    try {
-      // Simulate initial preparation
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setUploadProgress(5);
 
-      // Create a clean payload with proper field mapping
-      const payload = {
+    try {
+      // Step 1: Create the Quiz with JSON data
+      const quizPayload = {
         title: form.title,
         description: form.description,
         no_of_questions: form.no_of_questions ? parseInt(form.no_of_questions, 10) : undefined,
@@ -212,101 +215,80 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
         quiz_date: form.quiz_date || undefined,
         question_type: questionTypeMapping[form.quiz_type] || form.quiz_type,
         quiz_type: complexityMapping[form.complexity] || form.complexity,
-        files: form.files,
-        page_ranges: form.page_ranges
+        department_id: form.department || undefined,
+        passing_score: form.passing_score ? parseInt(form.passing_score, 10) : null,
+        pages: form.filesData
+            ? form.filesData.map(fd => ({
+                filename: fd.filename,
+                page_range: fd.page_range
+              }))
+            : []
       };
 
-      // Add department if selected
-      if (form.department) {
-        payload.department_id = form.department;
+      console.log('Step 1: Creating quiz with payload:', quizPayload);
+      setUploadProgress(10); // Initial progress
+      
+      const createdQuiz = await onSave.createQuiz(quizPayload);
+      const quizId = createdQuiz.quiz_id;
+
+      if (!quizId) {
+        throw new Error('Failed to get quiz_id after creation.');
       }
       
-      // Add passing score if provided
-      if (form.passing_score) {
-        payload.passing_score = parseInt(form.passing_score, 10);
+      console.log(`Step 1 successful. Quiz created with ID: ${quizId}`);
+      setUploadProgress(30);
+
+      // Step 2: Upload files if they exist
+      const filesToUpload = form.files || [];
+      if (filesToUpload.length > 0) {
+        console.log(`Step 2: Uploading ${filesToUpload.length} files...`);
+        const totalFiles = filesToUpload.length;
+        let filesUploaded = 0;
+
+        for (const file of filesToUpload) {
+          try {
+            // Find the page range for this specific file
+            const fileData = form.filesData?.find(fd => fd.file === file);
+            const pageRange = fileData?.page_range || null;
+            
+            console.log(`Uploading ${file.name} with page range: ${pageRange}`);
+            await onSave.uploadFile(quizId, file, pageRange);
+            filesUploaded++;
+            // Update progress based on number of files uploaded
+            const fileProgress = (filesUploaded / totalFiles) * 60; // Files upload takes 60% of progress
+            setUploadProgress(30 + fileProgress);
+          } catch (uploadError) {
+            console.error(`Failed to upload ${file.name}:`, uploadError);
+            // Decide if you want to continue or stop on first file error
+          }
+        }
+      } else {
+          // If no files, just jump progress to near completion
+          setUploadProgress(90);
       }
 
-      console.log('Submitting quiz payload:', payload);
+      console.log('All steps completed successfully!');
+      setUploadProgress(100);
+      
+      // Use the snackbar from context for success message
+      showSnackbar('Quiz created successfully!', 'success');
 
-      // Simulate progress stages with actual progress tracking
-      const simulateProgress = (currentProgress, targetProgress, duration) => {
-        return new Promise((resolve) => {
-          const increment = (targetProgress - currentProgress) / (duration / 100);
-          let progress = currentProgress;
-          
-          const interval = setInterval(() => {
-            progress += increment;
-            if (progress >= targetProgress) {
-              progress = targetProgress;
-              setUploadProgress(progress);
-              clearInterval(interval);
-              resolve();
-            } else {
-              setUploadProgress(Math.round(progress));
-            }
-          }, 100);
-        });
-      };
-
-      // Stage 1: Preparing (0-10%)
-      await simulateProgress(5, 10, 1000);
-
-      // Call the actual onSave function with custom progress handler
-      await onSave(payload, (progressData) => {
-        // Handle different progress data formats
-        let progress = 0;
-        
-        if (progressData.lengthComputable) {
-          // XMLHttpRequest format
-          progress = Math.round((100 * progressData.loaded) / progressData.total);
-        } else if (progressData.loaded !== undefined && progressData.total !== undefined) {
-          // Custom format from quizService
-          progress = Math.round((progressData.loaded * 90) / 100); // Map to 0-90% range
-        } else if (typeof progressData === 'number') {
-          // Direct number
-          progress = Math.round(progressData * 0.9); // Map to 0-90% range
-        }
-        
-        // Map upload progress to 10-90% range (leaving 10% for prep and 10% for completion)
-        const mappedProgress = 10 + Math.min(80, progress * 0.8);
-        setUploadProgress(Math.round(mappedProgress));
-        console.log(`Progress update: ${progress}% (raw) -> ${mappedProgress}% (mapped)`);
-      });
-
-      // Stage 3: Finalizing (90-100%)
-      await simulateProgress(90, 100, 1000);
-
-      // Hold at 100% for 0.5s, then fade out
+      // Hold at 100% for a bit, then fade out and redirect
       setTimeout(() => {
         setIsFadingOut(true);
         setTimeout(() => {
           setLoading(false);
-        }, 500); // Corresponds to fade-out animation duration
-      }, 500); // 0.5s hold
+          onCancel(); // Call onCancel to go back to the list view
+        }, 500);
+      }, 1000); // Hold for 1 second to show completion
 
     } catch (err) {
-      console.error('Upload failed:', err);
-      setLoading(false); // Hide loader on error
-      
-      // Check for limit error responses
-      if (err.response && err.response.data) {
-        const { title, message } = err.response.data;
-        if (title && message) {
-          // Show error dialog with the server's message
-          setErrorDialog({
-            open: true,
-            title: title,
-            message: message
-          });
-          return;
-        }
-      }
-      
-      // Generic error handling
+      console.error('Quiz creation process failed:', err);
+      setLoading(false);
       setErrorDialog({
         open: true,
         title: 'Error',
-        message: err.message || 'Failed to create quiz. Please try again.'
+        message: err.message || 'An unexpected error occurred.'
       });
     }
   };
@@ -357,7 +339,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
               <Grid item xs={12}>
                 <FileUpload 
                   onFilesSelect={handleFilesSelect} 
-                  onPageRangesChange={handlePageRangesChange}
+                  onFilesDataChange={handleFilesDataChange}
                 />
                 
                 {errors.files && (
@@ -368,10 +350,15 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   </Box>
                 )}
                 
-                {form.page_ranges && (
+                {form.filesData && form.filesData.some(fd => fd.page_range) && (
                   <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(25, 118, 210, 0.08)', borderRadius: 1 }}>
                     <Typography variant="caption" color="primary">
-                      <strong>Selected Pages:</strong> {form.page_ranges}
+                      <strong>Page Selections:</strong>
+                      {form.filesData.filter(fd => fd.page_range).map(fd => (
+                        <div key={fd.file_id}>
+                          {fd.filename}: {fd.page_range}
+                        </div>
+                      ))}
                     </Typography>
                   </Box>
                 )}
@@ -464,7 +451,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   }}
                   InputLabelProps={{ shrink: true }}
                   error={!!errors.quiz_date}
-                  helperText={errors.quiz_date}
+                  helperText={errors.quiz_date || "Optional - defaults to current time if not set"}
                   sx={{
                     '& .MuiInputBase-input': {
                       fontSize: { xs: '0.9rem', sm: '1rem' }

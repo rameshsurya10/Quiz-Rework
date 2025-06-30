@@ -60,7 +60,7 @@ urlpatterns = [
     path('api/accounts/', include(('accounts.urls', 'accounts'), namespace='accounts')),  # User and authentication endpoints
     # path('api/accounts/', include('accounts.urls')),
     # path('api/documents/', include('documents.urls')),
-    path('api/quiz/', include('quiz.urls')),
+    path('api/quiz/', include(('quiz.urls', 'quiz'), namespace='quiz')),
     # path('api/ai/', include('ai_processing.urls')),  # Removed as unused
     path('api/departments/', include('departments.urls')),
     path('api/notifications/', include('notifications.urls')),
@@ -77,7 +77,6 @@ urlpatterns = [
 
     # Dashboard endpoints
     path('api/dashboard/', include('dashboard.urls')),
-    path('api/dashboards/', include('dashboard.urls')),  # Add this line for plural form
     
     # Settings endpoints
     path('api/settings/', include('settings.urls')),

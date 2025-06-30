@@ -142,142 +142,17 @@ export const quizService = {
     }
   },
 
-  // Create a new quiz with attached files
-  createQuizWithFiles: async (quizData, onUploadProgress) => {
+  // Create a new quiz with JSON data
+  createQuiz: async (quizData) => {
     try {
-      // Extract files to upload separately
-      const files = quizData.files || [];
-      
-      // Create a clean payload without the files property
-      const { files: removedFiles, ...cleanQuizData } = quizData;
-      
-      // First create the quiz
       const response = await axios.post(
         `${API_BASE_URL}/api/quiz/`,
-        cleanQuizData,
-        getAuthHeaders()
+        quizData,
+        getAuthHeaders() // This will set Content-Type to application/json
       );
-      
-      const quizId = response.data.id || response.data.quiz_id;
-      
-      if (!quizId) {
-        throw new Error('Quiz created but no quiz_id returned from the server');
-      }
-      
-      // If there are files, upload them one by one
-      if (files.length > 0) {
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          
-          // IMPORTANT: Make sure the file is valid and not empty
-          if (!file || file.size === 0) {
-            console.warn(`Skipping empty file at index ${i}`);
-            continue;
-          }
-          
-          // Log file details for debugging
-          console.log(`File ${i + 1} details:`, {
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            lastModified: file.lastModified
-          });
-          
-          try {
-            // Use a direct fetch approach instead of axios
-            const token = localStorage.getItem('token');
-            const url = `${API_BASE_URL}/api/quiz/${quizId}/files/upload/`;
-            
-            // Create a simple FormData with just the file
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            // Add page ranges only for PDF files
-            if (quizData.page_ranges && 
-                (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
-              formData.append('page_ranges', quizData.page_ranges);
-            }
-            
-            console.log(`Uploading file ${i + 1}/${files.length}: ${file.name} to ${url}`);
-            
-            // Use XMLHttpRequest for better progress tracking
-            const xhr = new XMLHttpRequest();
-            
-            // Create a promise to handle the XHR request
-            await new Promise((resolve, reject) => {
-              // Set up progress tracking
-              xhr.upload.onprogress = (event) => {
-                if (event.lengthComputable && onUploadProgress) {
-                  // Calculate file progress percentage
-                  const fileProgress = Math.round((event.loaded / event.total) * 100);
-                  
-                  // Calculate overall progress based on current file and completed files
-                  const overallProgress = Math.round(
-                    ((i * 100) + fileProgress) / files.length
-                  );
-                  
-                  // Update progress in UI with XMLHttpRequest-like format
-                  onUploadProgress({ 
-                    lengthComputable: true,
-                    loaded: overallProgress, 
-                    total: 100 
-                  });
-                  console.log(`Upload progress: ${fileProgress}% (file), ${overallProgress}% (overall)`);
-                }
-              };
-              
-              // Handle completion
-              xhr.onload = () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                  try {
-                    const result = JSON.parse(xhr.responseText);
-                    console.log('File upload successful:', result);
-                    resolve(result);
-                  } catch (e) {
-                    console.log('Upload completed but response parsing failed:', e);
-                    resolve({ success: true });
-                  }
-                } else {
-                  reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.responseText}`));
-                }
-              };
-              
-              // Handle errors
-              xhr.onerror = () => {
-                reject(new Error('Network error during upload'));
-              };
-              
-              // Open and send the request
-              xhr.open('POST', url);
-              xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-              xhr.send(formData);
-            });
-            
-            // Report completion of this file
-            if (onUploadProgress) {
-              const progress = Math.round(((i + 1) * 100) / files.length);
-              onUploadProgress({ 
-                lengthComputable: true,
-                loaded: progress, 
-                total: 100 
-              });
-            }
-          } catch (error) {
-            console.error(`Failed to upload ${file.name}:`, error);
-            throw new Error(`Failed to upload "${file.name}": ${error.message}`);
-          }
-        }
-      }
-      
-      // Fetch and return the updated quiz data
-      const updatedQuiz = await axios.get(
-        `${API_BASE_URL}/api/quiz/${quizId}/`,
-        getAuthHeaders()
-      );
-      
-      return updatedQuiz.data;
+      return response.data;
     } catch (error) {
-      console.error('Error creating quiz with files:', error);
+      console.error('Error creating quiz:', error);
       if (error.response?.data?.detail) {
         throw new Error(error.response.data.detail);
       } else if (error.response?.data?.message) {
@@ -285,8 +160,44 @@ export const quizService = {
       } else if (error.message) {
         throw new Error(error.message);
       } else {
-        throw new Error('Failed to create quiz with files');
+        throw new Error('Failed to create quiz');
       }
+    }
+  },
+
+  // Upload a single file for a quiz
+  uploadFileForQuiz: async (quizId, file, pageRange = null, onUploadProgress) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Add page range if provided
+    if (pageRange) {
+      formData.append('page_range', pageRange);
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const config = {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onUploadProgress) {
+            onUploadProgress(progressEvent);
+      }
+        }
+      };
+
+      const response = await axios.post(
+        `${API_BASE_URL}/api/quiz/${quizId}/upload/`,
+        formData,
+        config
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`Error uploading file ${file.name}:`, error);
+      throw new Error(`Failed to upload file: ${file.name}`);
     }
   },
 

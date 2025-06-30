@@ -30,336 +30,77 @@ import logging
 from .serializers import QuizSerializer, QuestionSerializer,SlimQuestionSerializer
 from accounts.models import User
 from django.db import transaction
+from documents.services import DocumentProcessingService
 
 logger = logging.getLogger(__name__)
 
 
 class QuizFileUploadView(APIView):
     """
-    Upload a document for a quiz, store it in vector DB, and generate questions.
+    Upload a document for a quiz, process it, and generate questions.
     """
-    # parser_classes = (MultiPartParser, FormParser, JSONParser)
-    # permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
     permission_classes = [permissions.IsAuthenticated]
-    parser_classes = [JSONParser, FormParser, MultiPartParser]
-    MAX_FILE_SIZE = 60 * 1024 * 1024  # 60 MB
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_quiz(self, quiz_id):
-        quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
-        self.check_object_permissions(self.request, quiz)
-        return quiz
+        try:
+            return Quiz.objects.get(pk=quiz_id)
+        except Quiz.DoesNotExist:
+            return None
 
     def post(self, request, quiz_id, format=None):
+        logger.info(f"Processing file upload for quiz {quiz_id}")
+        logger.info(f"Request POST data: {dict(request.POST)}")
+        logger.info(f"Request FILES: {list(request.FILES.keys())}")
+        
         quiz = self.get_quiz(quiz_id)
+        if not quiz:
+            return Response({"error": "Quiz not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        uploaded_file = request.FILES.get('file')
-        if not uploaded_file:
-            return Response({"error": "No file provided."}, status=400)
-        if uploaded_file.size > self.MAX_FILE_SIZE:
-            return Response({"error": "File size exceeds 60MB."}, status=400)
+        if 'file' not in request.FILES:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
-        import uuid, pickle, os, json
-        from django.utils.text import slugify
-        from documents.models import Document, DocumentVector
-        from config.vector_db import VectorDB
-        from openai import OpenAI
-
-        doc_uuid = str(uuid.uuid4())
-        ext = os.path.splitext(uploaded_file.name)[1].lower()
-        new_filename = f"{slugify(doc_uuid)}{ext}"
-        db_file_path = f"vector_documents/{new_filename}"
-
-        extracted_text = extract_text_from_file(uploaded_file)
-        if not extracted_text:
-            return Response({"error": "Failed to extract text from file."}, status=500)
-
-        # Clean junk lines
-        cleaned_lines = [
-            line for line in extracted_text.splitlines()
-            if len(line.strip()) > 30 and not any(word in line.lower() for word in ["page", "preparedby", "end of page", "http", "gobustudy"])
-        ]
-        file_text = "\n".join(cleaned_lines[:50])
-
-        # Save document
-        document = Document.objects.create(
-            title=uploaded_file.name,
-            description=f"Uploaded for quiz {quiz_id}",
-            extracted_text=extracted_text,
-            user=request.user,
-            is_processed=True,
-            file_size=uploaded_file.size,
-            storage_type='vector_db',
-            storage_path=db_file_path,
-            file_type=uploaded_file.content_type,
-            quiz=quiz
-        )
-
-        # Vector embedding
+        uploaded_file = request.FILES['file']
+        page_range = request.POST.get('page_range')  # Get page range from request
+        
+        logger.info(f"File: {uploaded_file.name}, Page range: {page_range}")
+        
+        # Use the document processing service to handle the file
+        service = DocumentProcessingService()
         try:
-            metadata = {
-                'title': uploaded_file.name,
-                'quiz_id': quiz.quiz_id,
-                'user_id': str(request.user.id)
-            }
-            vector_db = VectorDB()
-            embedding = vector_db.generate_embedding(extracted_text)
-
-            if embedding:
-                vector_db.upsert_file(doc_uuid, db_file_path, extracted_text, metadata)
-                DocumentVector.objects.create(
-                    document=document,
-                    vector_uuid=uuid.UUID(doc_uuid),
-                    embedding=pickle.dumps(embedding),
-                    is_indexed=True,
-                    metadata=metadata
-                )
-        except Exception as e:
-            logger.error(f"VectorDB error: {e}")
-
-        # Add file reference to quiz
-        quiz.uploadedfiles = quiz.uploadedfiles or []
-        quiz.uploadedfiles.append({
-            'name': uploaded_file.name,
-            'path': db_file_path,
-            'document_id': document.id,
-            'vector_uuid': doc_uuid,
-            'file_size': uploaded_file.size,
-            'file_type': uploaded_file.content_type
-        })
-        quiz.save()
-
-        # === Question Generation ===
-        try:
-            question_type = quiz.question_type.lower()
-            quiz_type = quiz.quiz_type.lower()
-            total_questions = quiz.no_of_questions + 5
-            rotation = ["mcq", "fill", "truefalse", "oneline"] if question_type == "mixed" else [question_type] * total_questions
-
-            base_prompt = f"""
-                You are a quiz generator. Read the content below and generate {total_questions} {quiz_type}-level questions.
-
-                Use this exact sequence of question types: {', '.join(rotation)} repeated in order.
-
-                Content:
-                {file_text[:3000]}
-
-                Each question must follow this format:
-                Question: ...
-                Type: [mcq|fill|truefalse|oneline]
-                A: ... (only for mcq)
-                B: ...
-                C: ...
-                D: ...
-                Answer: ...
-                Explanation: ...
-                """
-
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a quiz generator."},
-                    {"role": "user", "content": base_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=2000
+            processing_result = service.process_single_document(
+                uploaded_file, 
+                quiz, 
+                request.user,
+                page_range=page_range  # Pass page range to the service
             )
-            content = response.choices[0].message.content.strip()
-
-            # === Parse output ===
-            questions, current = [], {}
-            for line in content.splitlines():
-                line = line.strip()
-                if not line:
-                    if 'question' in current:
-                        questions.append(current)
-                        current = {}
-                    continue
-                if line.startswith("Question:"):
-                    current = {'question': line[9:].strip(), 'options': {}}
-                elif line.startswith("Type:"):
-                    current['type'] = line[5:].strip().lower()
-                elif line[:2] in ("A:", "B:", "C:", "D:"):
-                    if 'options' not in current:
-                        current['options'] = {}
-                    current['options'][line[:1]] = line[2:].strip()
-                elif line.startswith("Answer:"):
-                    current['correct_answer'] = line[7:].strip()
-                elif line.startswith("Explanation:"):
-                    current['explanation'] = line[12:].strip()
-            if 'question' in current:
-                questions.append(current)
-
-            # === Fallback if needed ===
-            if len(questions) < total_questions:
-                fallback = []
-                chunks = cleaned_lines[:total_questions]
-                for i in range(total_questions - len(questions)):
-                    line = chunks[i % len(chunks)]
-                    q_type = rotation[i % len(rotation)]
-
-                    if q_type == "mcq":
-                        fallback.append({
-                            "question": f"What is mentioned in the document?",
-                            "type": "mcq",
-                            "options": {
-                                "A": line[:30] + "...",
-                                "B": "Option B",
-                                "C": "Option C",
-                                "D": "Option D"
-                            },
-                            "correct_answer": "A",
-                            "explanation": "Option A is based on document text."
-                        })
-                    elif q_type == "fill":
-                        fallback.append({
-                            "question": f"The document states that [BLANK] is important.",
-                            "type": "fill",
-                            "correct_answer": line.split()[0] if line.split() else "concept",
-                            "explanation": "Word taken from the line.",
-                            "options": {}
-                        })
-                    elif q_type == "truefalse":
-                        fallback.append({
-                            "question": f"The following statement is from the document: {line[:40]}...",
-                            "type": "truefalse",
-                            "correct_answer": "True",
-                            "explanation": "Taken directly from document.",
-                            "options": {}
-                        })
-                    else:  # oneline
-                        fallback.append({
-                            "question": f"What is meant by: {line[:40]}?",
-                            "type": "oneline",
-                            "correct_answer": line[:30],
-                            "explanation": "Interpreted from document text.",
-                            "options": {}
-                        })
-                questions.extend(fallback)
-
-            questions = questions[:total_questions]
-
-            # Add question_number to each
-            for idx, q in enumerate(questions, start=1):
-                q['question_number'] = idx
-
-             # Split questions
-            current_questions = questions[:quiz.no_of_questions]
-            additional_questions = questions[quiz.no_of_questions:]
-
-            # Save as grouped JSON
-            Question.objects.create(
-                quiz=quiz,
-                question=json.dumps(questions, indent=2),
-                question_type=question_type,
-                difficulty=quiz_type,
-                correct_answer=None,
-                explanation=None,
-                options=None,
-                created_by=request.user.email,
-                last_modified_by=request.user.email
-            )
-
-            return Response({
-                "message": "File uploaded and questions generated successfully.",
-                "quiz_id": quiz.quiz_id,
-                "question_count": len(questions),
-                "file": uploaded_file.name
-            }, status=201)
-
-        except Exception as e:
-            return Response({"error": f"Question generation failed: {str(e)}"}, status=500)
-
-
-    def get(self, request, quiz_id, file_id=None, format=None):
-        """
-        List all files for a quiz or get a specific file
-        """
-        quiz = self.get_quiz(quiz_id)
-        
-        if file_id:
-            # Return specific file
-            if not quiz.uploadedfiles:
-                return Response(
-                    {"error": "No files found for this quiz"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-                
-            file_info = next((f for f in quiz.uploadedfiles if f.get('id') == file_id), None)
-            if not file_info:
-                return Response(
-                    {"error": "File not found"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            return Response(file_info)
-        else:
-            # Return all files
-            return Response({
-                "quiz_id": quiz.quiz_id,
-                "files": quiz.uploadedfiles or []
-            })
-    
-    def delete(self, request, quiz_id, file_id, format=None):
-        """
-        Delete a file from a quiz and remove it from the upload folder
-        """
-        quiz = self.get_quiz(quiz_id)
-        
-        if not quiz.uploadedfiles:
-            return Response(
-                {"error": "No files found for this quiz"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Find the file to delete
-        file_to_delete = None
-        updated_files = []
-        
-        for file_info in quiz.uploadedfiles:
-            if str(file_info.get('id')) == str(file_id):
-                file_to_delete = file_info
-            else:
-                updated_files.append(file_info)
-        
-        if not file_to_delete:
-            return Response(
-                {"error": "File not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Delete the file from the filesystem
-        try:
-            # Get the filename from the path (format: upload/filename.pdf)
-            filename = file_to_delete['path'].split('/')[-1]  # Get the filename
-            file_path = os.path.join(settings.BASE_DIR, 'backend', 'upload', filename)
             
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                    
+            if not processing_result:
+                return Response({"error": "Failed to process document"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+            if isinstance(processing_result, dict) and not processing_result.get('success', False):
+                error_message = processing_result.get('error', 'Unknown processing error')
+                return Response({"error": error_message}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            return Response({
+                "message": "File uploaded and processed successfully",
+                "quiz_id": quiz_id,
+                "document_id": processing_result.get('document_id'),
+                "questions_generated": processing_result.get('questions_generated', 0)
+            }, status=status.HTTP_201_CREATED)
+
         except Exception as e:
-            return Response(
-                {"error": f"Error deleting file: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-        # Update the quiz with the remaining files
-        quiz.uploadedfiles = updated_files
-        quiz.save()
-        
-        return Response({
-            "message": "File deleted successfully",
-            "deleted_file": file_to_delete
-        }, status=status.HTTP_200_OK)
+            logger.error(f"Error processing file upload: {str(e)}")
+            # Catch any unexpected errors during processing
+            return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class QuizListCreateView(generics.ListCreateAPIView):
     """API endpoint for listing and creating quizzes"""
-    # permission_classes = [permissions.IsAuthenticated, IsTeacherOrAdmin]
     permission_classes = [permissions.IsAuthenticated]
-    parser_classes = [JSONParser, FormParser, MultiPartParser]
+    parser_classes = [JSONParser]
     pagination_class = None 
 
-    # Maximum number of questions allowed
     MAX_QUESTIONS = 35
 
     def get_queryset(self):
@@ -415,48 +156,65 @@ class QuizListCreateView(generics.ListCreateAPIView):
         return context
         
     def create(self, request, *args, **kwargs):
-        data = request.data.copy()
-        user = request.user
-
-        # ✅ Check quiz creation limit for both TEACHER and ADMIN
-        role = getattr(user, 'role', '').upper()
-        if role in ['TEACHER', 'ADMIN']:
-            # Optional: Validate existence for teacher/admin record if needed
-            if role == 'TEACHER':
-                teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
-                if not teacher:
-                    return Response({"message": "Teacher record not found"}, status=404)
-            elif role == 'ADMIN':
-                admin = User.objects.filter(email=user.email).first()
-                if not admin:
-                    return Response({"message": "Admin record not found"}, status=404)
-
-            # Count how many quizzes this user has created
-            quiz_count = Quiz.objects.filter(created_by=user.email, is_deleted=False).count()
-            if quiz_count >= 5:
-                return Response({
-                    "error": "Quiz creation limit reached",
-                    "message": "You have reached the limit of 5 quizzes. Please subscribe to create more quizzes.",
-                    "title": "Limit Exceeded"
-                }, status=status.HTTP_403_FORBIDDEN)
-
-        # ✅ Validate number of questions
+        import logging
+        logger = logging.getLogger(__name__)
+        
         try:
-            no_of_questions = int(data.get('no_of_questions', 0))
-            if no_of_questions > self.MAX_QUESTIONS:
-                return Response({
-                    "error": f"Number of questions cannot exceed {self.MAX_QUESTIONS}",
-                    "message": f"You've requested {no_of_questions} questions, but the maximum allowed is {self.MAX_QUESTIONS}. Please reduce the number of questions.",
-                    "title": "Question Limit Exceeded"
-                }, status=status.HTTP_400_BAD_REQUEST)
-        except (ValueError, TypeError):
-            pass  # Let the serializer handle invalid inputs
+            logger.info(f"Received quiz creation request")
+            logger.info(f"Request method: {request.method}")
+            logger.info(f"Content type: {request.content_type}")
+            logger.info(f"Request data keys: {list(request.data.keys()) if hasattr(request.data, 'keys') else 'No keys'}")
+            logger.info(f"Request FILES: {list(request.FILES.keys()) if hasattr(request, 'FILES') else 'No FILES'}")
+            
+            data = request.data.copy()
+            user = request.user
+            
+            logger.info(f"User: {user}, Role: {getattr(user, 'role', 'No role')}")
 
-        # ✅ Continue with quiz creation
-        serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
+            # ✅ Check quiz creation limit for both TEACHER and ADMIN
+            role = getattr(user, 'role', '').upper()
+            if role in ['TEACHER', 'ADMIN']:
+                # Optional: Validate existence for teacher/admin record if needed
+                if role == 'TEACHER':
+                    teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+                    if not teacher:
+                        return Response({"message": "Teacher record not found"}, status=404)
+                elif role == 'ADMIN':
+                    admin = User.objects.filter(email=user.email).first()
+                    if not admin:
+                        return Response({"message": "Admin record not found"}, status=404)
 
-        try:
+                # Count how many quizzes this user has created
+                quiz_count = Quiz.objects.filter(created_by=user.email, is_deleted=False).count()
+                if quiz_count >= 5:
+                    return Response({
+                        "error": "Quiz creation limit reached",
+                        "message": "You have reached the limit of 5 quizzes. Please subscribe to create more quizzes.",
+                        "title": "Limit Exceeded"
+                    }, status=status.HTTP_403_FORBIDDEN)
+
+            # ✅ Validate number of questions
+            try:
+                no_of_questions = int(data.get('no_of_questions', 0))
+                if no_of_questions > self.MAX_QUESTIONS:
+                    return Response({
+                        "error": f"Number of questions cannot exceed {self.MAX_QUESTIONS}",
+                        "message": f"You've requested {no_of_questions} questions, but the maximum allowed is {self.MAX_QUESTIONS}. Please reduce the number of questions.",
+                        "title": "Question Limit Exceeded"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            except (ValueError, TypeError):
+                pass  # Let the serializer handle invalid inputs
+
+            logger.info("About to create serializer")
+
+            # ✅ Continue with quiz creation
+            serializer = self.get_serializer(data=data)
+            
+            logger.info("About to validate serializer")
+            serializer.is_valid(raise_exception=True)
+            
+            logger.info("Serializer is valid, about to perform create")
+
             self.perform_create(serializer)
             quiz = Quiz.objects.get(pk=serializer.data['quiz_id'])
 
@@ -467,9 +225,14 @@ class QuizListCreateView(generics.ListCreateAPIView):
             response_data['message'] = "Quiz created successfully"
 
             headers = self.get_success_headers(serializer.data)
+            logger.info("Quiz created successfully")
             return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 
         except Exception as e:
+            logger.error(f"Error in create method: {str(e)}")
+            logger.error(f"Exception type: {type(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_create(self, serializer):
@@ -596,31 +359,106 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         max_questions = instance.no_of_questions or 0
 
         def serialize_question(q):
-            if q.question_type in ['mixed', 'true_false', 'mcq']:
+            # For mixed type questions, the question field contains JSON with multiple questions
+            if q.question_type == 'mixed':
                 try:
                     parsed = json.loads(q.question)
                     if isinstance(parsed, list):
+                        # Ensure each question has all required fields
+                        for question_item in parsed:
+                            # Add missing fields with defaults
+                            if 'question_id' not in question_item:
+                                question_item['question_id'] = q.question_id
+                            if 'question_type' not in question_item and 'type' in question_item:
+                                question_item['question_type'] = question_item['type']
+                            elif 'question_type' not in question_item:
+                                question_item['question_type'] = 'mcq'  # default
+                            
+                            # Ensure the actual question content exists
+                            if 'question' not in question_item:
+                                question_item['question'] = 'Missing question text'
+                            
+                            # Ensure options is properly formatted for MCQ questions
+                            if question_item.get('question_type') == 'mcq' or question_item.get('type') == 'mcq':
+                                if 'options' not in question_item or not question_item['options']:
+                                    question_item['options'] = {
+                                        "A": "Option A",
+                                        "B": "Option B",
+                                        "C": "Option C", 
+                                        "D": "Option D"
+                                    }
+                            else:
+                                question_item['options'] = {}
+                            
+                            # Ensure correct_answer exists
+                            if 'correct_answer' not in question_item:
+                                question_item['correct_answer'] = ''
+                            
+                            # Ensure explanation exists
+                            if 'explanation' not in question_item:
+                                question_item['explanation'] = ''
+                        
                         return parsed
-                    return [parsed]
+                    else:
+                        # Single question object
+                        if 'question_id' not in parsed:
+                            parsed['question_id'] = q.question_id
+                        if 'question_type' not in parsed and 'type' in parsed:
+                            parsed['question_type'] = parsed['type']
+                        elif 'question_type' not in parsed:
+                            parsed['question_type'] = 'mcq'
+                        
+                        # Ensure the actual question content exists
+                        if 'question' not in parsed:
+                            parsed['question'] = 'Missing question text'
+                        
+                        if parsed.get('question_type') == 'mcq' or parsed.get('type') == 'mcq':
+                            if 'options' not in parsed or not parsed['options']:
+                                parsed['options'] = {
+                                    "A": "Option A",
+                                    "B": "Option B",
+                                    "C": "Option C",
+                                    "D": "Option D"
+                                }
+                        else:
+                            parsed['options'] = {}
+                        
+                        if 'correct_answer' not in parsed:
+                            parsed['correct_answer'] = ''
+                        if 'explanation' not in parsed:
+                            parsed['explanation'] = ''
+                        
+                        return [parsed]
                 except (json.JSONDecodeError, TypeError):
+                    # Fallback if JSON parsing fails
                     return [{
                         "question_id": q.question_id,
                         "question_type": q.question_type,
-                        "question": q.question
+                        "question": q.question,
+                        "options": q.options or {},
+                        "correct_answer": q.correct_answer or '',
+                        "explanation": q.explanation or ''
                     }]
-            return [{
-                "question_id": q.question_id,
-                "question_type": q.question_type,
-                "question": q.question,
-                "options": q.options,
-                "correct_answer": q.correct_answer,
-                "explanation": q.explanation
-            }]
+            else:
+                # For non-mixed questions, return standard format
+                return [{
+                    "question_id": q.question_id,
+                    "question_type": q.question_type,
+                    "question": q.question,
+                    "options": q.options or {},
+                    "correct_answer": q.correct_answer or '',
+                    "explanation": q.explanation or ''
+                }]
 
         # Collect all serialized questions
         all_serialized_questions = []
         for q in all_questions:
-            all_serialized_questions.extend(serialize_question(q))
+            serialized_questions = serialize_question(q)
+            all_serialized_questions.extend(serialized_questions)
+
+        # Add question numbers
+        for i, question in enumerate(all_serialized_questions, 1):
+            question['question_no'] = i
 
         # Split based on required number
         current_questions = all_serialized_questions[:max_questions]

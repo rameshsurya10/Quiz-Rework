@@ -221,9 +221,11 @@ class VerifyOTPSerializer(serializers.Serializer):
                 "role": role.upper(),
                 "first_name": user_obj.name.split()[0],
                 "last_name": " ".join(user_obj.name.split()[1:]),
-                "password": User.objects.make_random_password()
             }
         )
+        if created:
+            auth_user.set_unusable_password()
+            auth_user.save()
 
         attrs["user_obj"] = user_obj
         attrs["auth_user"] = auth_user

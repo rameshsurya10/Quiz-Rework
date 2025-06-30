@@ -24,7 +24,7 @@ const InfoIcon = () => (
     </svg>
 );
 
-const FileUpload = ({ onFilesSelect, onPageRangesChange }) => {
+const FileUpload = ({ onFilesSelect, onFilesDataChange }) => {
     const [files, setFiles] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
     const [pageRanges, setPageRanges] = useState({});
@@ -121,15 +121,19 @@ const FileUpload = ({ onFilesSelect, onPageRangesChange }) => {
     }, [files, onFilesSelect]);
 
     useEffect(() => {
-        if(onPageRangesChange) {
-            // Find the first PDF file's page ranges (for now we only support one PDF)
-            const pdfFile = files.find(f => isPdfFile(f.file));
-            const currentPageRanges = pdfFile && pageRanges[pdfFile.id] ? pageRanges[pdfFile.id] : "";
+        if(onFilesDataChange) {
+            // Create structured data with files and their page ranges
+            const filesData = files.map(f => ({
+                file: f.file,
+                page_range: pageRanges[f.id] || '',
+                file_id: f.id,
+                filename: f.file.name,
+                is_pdf: isPdfFile(f.file)
+            }));
             
-            // Only call onPageRangesChange if the value has actually changed
-            onPageRangesChange(currentPageRanges);
+            onFilesDataChange(filesData);
         }
-    }, [pageRanges, files, onPageRangesChange]);
+    }, [pageRanges, files, onFilesDataChange]);
 
     const handleDragEnter = useCallback((e) => {
         e.preventDefault();

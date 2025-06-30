@@ -19,7 +19,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  IconButton
+  IconButton,
+  TextField
 } from '@mui/material';
 import {
   NavigateNext as NextIcon,
@@ -69,12 +70,16 @@ const StudentQuizView = () => {
       const quizData = response.data;
       
       setQuiz(quizData);
-      setQuestions(quizData.questions || []);
+      
+      // Backend returns questions in current_questions field, not questions
+      const questionsData = quizData.current_questions || quizData.questions || [];
+      setQuestions(questionsData);
       
       // Debug: Log the structure of questions to understand the format
       console.log('Quiz data:', quizData);
-      if (quizData.questions && quizData.questions.length > 0) {
-        console.log('First question structure:', quizData.questions[0]);
+      console.log('Questions data:', questionsData);
+      if (questionsData && questionsData.length > 0) {
+        console.log('First question structure:', questionsData[0]);
       }
       
       // Set timer if quiz has time limit
@@ -123,13 +128,13 @@ const StudentQuizView = () => {
       // Convert answers to the format expected by backend
       const questionEntries = [];
       questions.forEach((question, index) => {
-        const questionId = question.question_id;
+        const questionIdentifier = question.question_number || question.question_id || (index + 1);
         const questionNumber = question.question_number || (index + 1);
-        const answer = answers[questionId] || answers[index];
+        const answer = answers[questionIdentifier] || answers[index];
         
         if (answer !== undefined && answer !== null) {
           questionEntries.push({
-            question_id: questionId,
+            question_id: question.question_id || questionIdentifier,
             question_number: questionNumber,
             answer: answer
           });
@@ -180,6 +185,11 @@ const StudentQuizView = () => {
     // Handle different formats of question options
     if (!question) return [];
     
+    // If options is an object (like {A: "option1", B: "option2", ...})
+    if (question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
+      return Object.values(question.options).filter(opt => opt && opt.trim && opt.trim().length > 0);
+    }
+    
     // If options is already an array, return it
     if (Array.isArray(question.options)) {
       return question.options;
@@ -192,6 +202,10 @@ const StudentQuizView = () => {
         const parsed = JSON.parse(question.options);
         if (Array.isArray(parsed)) {
           return parsed;
+        }
+        // If it's an object, extract values
+        if (typeof parsed === 'object') {
+          return Object.values(parsed).filter(opt => opt && opt.trim && opt.trim().length > 0);
         }
       } catch (e) {
         // If JSON parsing fails, try comma-separated
@@ -353,49 +367,97 @@ const StudentQuizView = () => {
         >
           <CardContent sx={{ p: 4 }}>
             <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-              {question.question_text}
+              {question.question || question.question_text}
             </Typography>
 
-                         <FormControl component="fieldset" fullWidth>
-               {getQuestionOptions(question).length > 0 ? (
-                 <RadioGroup
-                   value={answers[question.question_id] || ''}
-                   onChange={(e) => handleAnswerChange(question.question_id, e.target.value)}
-                 >
-                   <Stack spacing={2}>
-                     {getQuestionOptions(question).map((option, index) => (
-                       <FormControlLabel
-                         key={index}
-                         value={option}
-                         control={<Radio />}
-                         label={option}
-                         sx={{
-                           border: `1px solid ${alpha('#45b7d1', 0.2)}`,
-                           borderRadius: 2,
-                           p: 2,
-                           m: 0,
-                           '&:hover': {
-                             backgroundColor: alpha('#45b7d1', 0.05),
-                           },
-                           '& .Mui-checked': {
-                             color: '#45b7d1',
-                           },
-                         }}
-                       />
-                     ))}
-                   </Stack>
-                 </RadioGroup>
-               ) : (
-                 <Box sx={{ textAlign: 'center', py: 4 }}>
-                   <Typography variant="body1" color="text.secondary">
-                     No options available for this question.
-                   </Typography>
-                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                     Please contact your instructor about this issue.
-                   </Typography>
-                 </Box>
-               )}
-             </FormControl>
+            <FormControl component="fieldset" fullWidth>
+              {/* Handle different question types */}
+              {(question.type === 'mcq' || question.question_type === 'mcq') && getQuestionOptions(question).length > 0 ? (
+                <RadioGroup
+                  value={answers[question.question_number || question.question_id] || ''}
+                  onChange={(e) => handleAnswerChange(question.question_number || question.question_id, e.target.value)}
+                >
+                  <Stack spacing={2}>
+                    {getQuestionOptions(question).map((option, index) => (
+                      <FormControlLabel
+                        key={index}
+                        value={option}
+                        control={<Radio />}
+                        label={option}
+                        sx={{
+                          border: `1px solid ${alpha('#45b7d1', 0.2)}`,
+                          borderRadius: 2,
+                          p: 2,
+                          m: 0,
+                          '&:hover': {
+                            backgroundColor: alpha('#45b7d1', 0.05),
+                          },
+                          '& .Mui-checked': {
+                            color: '#45b7d1',
+                          },
+                        }}
+                      />
+                    ))}
+                  </Stack>
+                </RadioGroup>
+              ) : (question.type === 'truefalse' || question.question_type === 'truefalse') ? (
+                <RadioGroup
+                  value={answers[question.question_number || question.question_id] || ''}
+                  onChange={(e) => handleAnswerChange(question.question_number || question.question_id, e.target.value)}
+                >
+                  <Stack spacing={2}>
+                    {['True', 'False'].map((option) => (
+                      <FormControlLabel
+                        key={option}
+                        value={option}
+                        control={<Radio />}
+                        label={option}
+                        sx={{
+                          border: `1px solid ${alpha('#45b7d1', 0.2)}`,
+                          borderRadius: 2,
+                          p: 2,
+                          m: 0,
+                          '&:hover': {
+                            backgroundColor: alpha('#45b7d1', 0.05),
+                          },
+                          '& .Mui-checked': {
+                            color: '#45b7d1',
+                          },
+                        }}
+                      />
+                    ))}
+                  </Stack>
+                </RadioGroup>
+              ) : (question.type === 'fill' || question.question_type === 'fill' || question.type === 'oneline' || question.question_type === 'oneline') ? (
+                <TextField
+                  fullWidth
+                  variant="outlined"
+                  placeholder="Enter your answer here..."
+                  value={answers[question.question_number || question.question_id] || ''}
+                  onChange={(e) => handleAnswerChange(question.question_number || question.question_id, e.target.value)}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderColor: alpha('#45b7d1', 0.2),
+                      '&:hover': {
+                        borderColor: '#45b7d1',
+                      },
+                      '&.Mui-focused': {
+                        borderColor: '#45b7d1',
+                      },
+                    },
+                  }}
+                />
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <Typography variant="body1" color="text.secondary">
+                    Unsupported question type: {question.type || question.question_type}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Please contact your instructor about this issue.
+                  </Typography>
+                </Box>
+              )}
+            </FormControl>
           </CardContent>
         </Card>
       </motion.div>
@@ -432,7 +494,7 @@ const StudentQuizView = () => {
                   height: 12,
                   borderRadius: '50%',
                   backgroundColor: 
-                    answers[questions[index].question_id] ? '#45b7d1' :
+                    answers[questions[index].question_number || questions[index].question_id] ? '#45b7d1' :
                     index === currentQuestion ? '#96c93d' : 
                     alpha('#45b7d1', 0.3),
                   cursor: 'pointer',

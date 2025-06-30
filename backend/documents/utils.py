@@ -138,16 +138,21 @@ def _extract_text_from_pdf_content(file_content, page_ranges=None):
         str: Extracted text
     """
     if not PDF_SUPPORT:
+        logger.error("PDF support not available. Please install PyPDF2")
         return "[PDF support not available. Install PyPDF2]"
         
     try:
+        logger.info("Creating PDF reader from file content")
         pdf = PdfReader(io.BytesIO(file_content))
         total_pages = len(pdf.pages)
+        logger.info(f"PDF has {total_pages} pages")
         text = ""
         
         # Parse page ranges if it's a string
         if isinstance(page_ranges, str):
+            logger.info(f"Parsing page ranges string: {page_ranges}")
             page_ranges = _parse_page_ranges_str(page_ranges)
+            logger.info(f"Parsed page ranges: {page_ranges}")
             
         # Process page ranges if provided
         if page_ranges:
@@ -180,31 +185,53 @@ def _extract_text_from_pdf_content(file_content, page_ranges=None):
             
             # Extract text from selected pages
             for page_num in pages_to_extract:
-                page = pdf.pages[page_num]
-                page_text = page.extract_text()
-                if page_text:
-                    # Add clear page boundary markers
-                    text += f"==================== PAGE {page_num + 1} ====================\n"
-                    text += page_text + "\n"
-                    text += f"==================== END OF PAGE {page_num + 1} ====================\n\n"
-                else:
-                    logger.warning(f"No text extracted from page {page_num + 1}")
+                try:
+                    logger.info(f"Extracting text from page {page_num + 1}")
+                    page = pdf.pages[page_num]
+                    page_text = page.extract_text()
+                    if page_text:
+                        # Add clear page boundary markers
+                        text += f"==================== PAGE {page_num + 1} ====================\n"
+                        text += page_text + "\n"
+                        text += f"==================== END OF PAGE {page_num + 1} ====================\n\n"
+                        logger.info(f"Successfully extracted {len(page_text)} characters from page {page_num + 1}")
+                    else:
+                        logger.warning(f"No text extracted from page {page_num + 1}")
+                except Exception as e:
+                    logger.error(f"Error extracting text from page {page_num + 1}: {str(e)}")
+                    text += f"[Error extracting text from page {page_num + 1}: {str(e)}]\n"
         else:
             # Extract text from all pages (original behavior)
             logger.info(f"Extracting text from all {total_pages} pages")
             for page_num in range(total_pages):
-                page = pdf.pages[page_num]
-                page_text = page.extract_text()
-                if page_text:
-                    # Add page markers even when extracting all pages
-                    text += f"==================== PAGE {page_num + 1} ====================\n"
-                    text += page_text + "\n"
-                    text += f"==================== END OF PAGE {page_num + 1} ====================\n\n"
+                try:
+                    logger.info(f"Extracting text from page {page_num + 1}")
+                    page = pdf.pages[page_num]
+                    page_text = page.extract_text()
+                    if page_text:
+                        # Add page markers even when extracting all pages
+                        text += f"==================== PAGE {page_num + 1} ====================\n"
+                        text += page_text + "\n"
+                        text += f"==================== END OF PAGE {page_num + 1} ====================\n\n"
+                        logger.info(f"Successfully extracted {len(page_text)} characters from page {page_num + 1}")
+                    else:
+                        logger.warning(f"No text extracted from page {page_num + 1}")
+                except Exception as e:
+                    logger.error(f"Error extracting text from page {page_num + 1}: {str(e)}")
+                    text += f"[Error extracting text from page {page_num + 1}: {str(e)}]\n"
         
+        if not text.strip():
+            logger.error("No text was extracted from any page")
+            return "[No text could be extracted from the PDF]"
+            
+        logger.info(f"Successfully extracted a total of {len(text)} characters from the PDF")
         return text.strip()
+        
     except Exception as e:
-        logger.error(f"Error extracting text from PDF: {e}")
-        return f"[Error extracting text from PDF: {str(e)}]"
+        logger.error(f"Error processing PDF: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        return f"[Error processing PDF: {str(e)}]"
 
 def _extract_text_from_text_file(file_content):
     """Extract text from text-based files"""

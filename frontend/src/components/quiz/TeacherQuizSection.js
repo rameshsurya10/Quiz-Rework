@@ -220,7 +220,7 @@ const TeacherQuizSection = () => {
       questions = questions.map((question, qIndex) => {
         console.log(`Processing question ${qIndex + 1}:`, {
           question: question.question,
-          type: question.type,
+          type: question.question_type || question.type,
           correct_answer: question.correct_answer,
           options: question.options,
           options_type: typeof question.options
@@ -229,11 +229,11 @@ const TeacherQuizSection = () => {
         const processedQuestion = {
           ...question,
           question_text: question.question_text || question.question,
-          type: question.type || 'mcq'
+          type: question.question_type || question.type || 'mcq'
         };
 
         // Handle MCQ questions with options object
-        if (question.type === 'mcq' && question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
+        if (processedQuestion.type === 'mcq' && question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
           console.log('Converting MCQ options object to array:', question.options);
           
           // Convert options object to array format for display
@@ -255,21 +255,26 @@ const TeacherQuizSection = () => {
           });
           
           console.log('Final processed MCQ options:', processedQuestion.options);
-        } else if (question.type === 'mcq' && Array.isArray(question.options)) {
+        } else if (processedQuestion.type === 'mcq' && Array.isArray(question.options)) {
           // Already in correct format
           processedQuestion.options = question.options;
           console.log('MCQ options already in array format:', processedQuestion.options);
-        } else if (question.type === 'mcq') {
-          // MCQ but no valid options
-          processedQuestion.options = [];
-          console.log('MCQ question but no valid options found');
+        } else if (processedQuestion.type === 'mcq') {
+          // MCQ but no valid options - create defaults
+          processedQuestion.options = [
+            { option_text: 'Option A', is_correct: false, id: 'A' },
+            { option_text: 'Option B', is_correct: true, id: 'B' },
+            { option_text: 'Option C', is_correct: false, id: 'C' },
+            { option_text: 'Option D', is_correct: false, id: 'D' }
+          ];
+          console.log('MCQ question but no valid options found, using defaults');
         } else {
           // Non-MCQ questions
           processedQuestion.options = [];
         }
 
         // For non-MCQ questions, ensure correct_answer is properly set
-        if (question.type !== 'mcq' && question.correct_answer) {
+        if (processedQuestion.type !== 'mcq' && question.correct_answer) {
           // Clean up the correct answer (remove prefix if it exists)
           let cleanAnswer = question.correct_answer;
           if (cleanAnswer.includes(':')) {
@@ -324,20 +329,15 @@ const TeacherQuizSection = () => {
 
   const renderQuizCard = (quiz, index) => {
     const getPageRanges = (quiz) => {
-      // Use only the backend pages field - no fallbacks to mock data
       if (quiz.pages && Array.isArray(quiz.pages) && quiz.pages.length > 0) {
-        // If pages is an array of numbers, join them
-        if (typeof quiz.pages[0] === 'number') {
-          return quiz.pages.join(', ');
-        }
-        // If pages is an array of objects with start/end, format them
-        if (typeof quiz.pages[0] === 'object' && quiz.pages[0].start && quiz.pages[0].end) {
-          return quiz.pages.map(range => `${range.start}-${range.end}`).join(', ');
-        }
-        // If pages is an array of strings, join them
-        return quiz.pages.join(', ');
+        return quiz.pages.map(p => {
+          if (typeof p === 'object' && p.filename) {
+            return `${p.filename} (${p.page_range || 'All'})`;
+          }
+          return 'Invalid page format';
+        }).join('; ');
       }
-      return 'All Pages';
+      return 'Not applicable';
     };
 
     const getDepartmentName = (quiz) => {
@@ -380,27 +380,36 @@ const TeacherQuizSection = () => {
                 {getStatusChip(quiz.is_published)}
               </Box>
 
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: 'primary.main' }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: 'primary.main', minHeight: '56px' }}>
                 {quiz.title}
               </Typography>
 
-              <Stack spacing={1} sx={{ mb: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Department:</strong> {getDepartmentName(quiz)}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Type:</strong> {quiz.quiz_type?.toUpperCase() || 'DOCUMENT'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Pages:</strong> {getPageRanges(quiz)}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Pass Score:</strong> {getPassingScore(quiz)}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Created:</strong> {new Date(quiz.quiz_date).toLocaleDateString()}
-                </Typography>
-              </Stack>
+              <Grid container spacing={1} sx={{ color: 'text.secondary', mb: 2 }}>
+                <Grid item xs={6}>
+                  <Typography variant="caption">{quiz.no_of_questions || 0} Questions</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption">{quiz.time_limit_minutes || 'N/A'} min limit</Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="caption">Dept: {getDepartmentName(quiz)}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption">Difficulty: {quiz.quiz_type || 'Normal'}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption">Type: {quiz.question_type || 'Mixed'}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption">Pass Score: {getPassingScore(quiz)}</Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="caption">Pages: {getPageRanges(quiz)}</Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="caption">Created: {new Date(quiz.quiz_date).toLocaleDateString()}</Typography>
+                </Grid>
+              </Grid>
             </CardContent>
 
             <Divider />
@@ -481,7 +490,10 @@ const TeacherQuizSection = () => {
     return (
       <Container maxWidth="lg" sx={{ py: 3 }}>
         <QuizFormModern 
-          onSave={handleCreateQuiz} 
+          onSave={{ 
+            createQuiz: quizService.createQuiz, 
+            uploadFile: quizService.uploadFileForQuiz 
+          }} 
           onCancel={handleCancelCreate} 
           departments={departments} 
         />
