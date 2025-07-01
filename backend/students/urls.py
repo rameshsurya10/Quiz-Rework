@@ -17,6 +17,7 @@ urlpatterns = [
     # Additional endpoints - handle both with and without trailing slash
     re_path(r'^create_student$', views.StudentCreateView.as_view(), name='create-student-no-slash'),
     path('quiz_submit/', SubmitQuizAttemptView.as_view(), name='quiz-submit'),
+    path('available-quizzes/', views.AvailableQuizzesView.as_view(), name='available-quizzes'),
     path('quiz_attempt/<int:quiz_id>/', RetrieveQuizAttemptView.as_view(), name='quiz-attempt-detail'),
     path('quiz_attempts/', ListStudentQuizResultsView.as_view(), name='quiz-attempts-list'),
     path('send_reminder/', QuizReminderStudent.as_view(), name='send_quiz_reminders'),

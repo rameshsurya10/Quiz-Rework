@@ -416,7 +416,21 @@ export const quizService = {
   normalizeQuestions: normalizeQuestions,
 
   // Helper function to format questions for display in modals/dialogs
-  formatQuestionsForDisplay: formatQuestionsForDisplay
+  formatQuestionsForDisplay: formatQuestionsForDisplay,
+
+  replaceQuestion: async (quizId, questionNumber) => {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/quiz/${quizId}/replace-question/`, 
+        { question_number: questionNumber },
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error replacing question:', error);
+      throw error;
+    }
+  },
 };
 
 export default quizService;

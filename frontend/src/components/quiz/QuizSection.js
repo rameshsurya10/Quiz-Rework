@@ -7,6 +7,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ReplayIcon from '@mui/icons-material/Replay';
 import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -209,36 +210,28 @@ const QuizSection = () => {
       // Explicitly use current_questions for the admin preview
       const questionsToDisplay = quizData.current_questions || [];
       
-      // Process questions for display
+      // Process questions for display, ensuring all keys are preserved correctly.
       const processedQuestions = questionsToDisplay.map((q) => {
-        const processed = {
-          question_text: q.question,
-          explanation: q.explanation || '',
-          type: q.question_type || q.type || 'mcq',
-          correct_answer: q.correct_answer,
-          options: []
-        };
+        // Start with all properties from the source question object
+        const processed = { ...q };
 
-        // Handle MCQ options
-        if (processed.type === 'mcq' && q.options && typeof q.options === 'object' && !Array.isArray(q.options)) {
-          let correctKey = q.correct_answer;
-          if (correctKey && correctKey.includes(':')) {
-            correctKey = correctKey.split(':')[0].trim();
-          }
-          
+        // Standardize the main question text key
+        processed.question_text = q.question || q.question_text || 'No question text';
+        
+        // Standardize the type
+        processed.type = q.question_type || q.type || 'mcq';
+
+        // Process MCQ options into a consistent format if they exist
+        if (processed.type === 'mcq' && q.options && typeof q.options === 'object') {
+          const correctKey = q.correct_answer?.toString().split(':')[0].trim();
           processed.options = Object.entries(q.options).map(([key, text]) => ({
             option_text: text,
             is_correct: key === correctKey,
             id: key
           }));
-        } else if (processed.type === 'mcq') {
-          // MCQ but no valid options - create default
-          processed.options = [
-            { option_text: 'Option A', is_correct: false, id: 'A' },
-            { option_text: 'Option B', is_correct: true, id: 'B' },
-            { option_text: 'Option C', is_correct: false, id: 'C' },
-            { option_text: 'Option D', is_correct: false, id: 'D' }
-          ];
+        } else {
+          // Ensure options is an empty array for non-MCQ to prevent render errors
+          processed.options = [];
         }
         
         return processed;
@@ -255,6 +248,27 @@ const QuizSection = () => {
       setViewModalOpen(false);
     } finally {
       setQuestionsLoading(false);
+    }
+  };
+
+  const handleReplaceQuestion = async (questionNumber) => {
+    if (!selectedQuiz) return;
+    
+    // Add validation to prevent sending bad requests
+    if (typeof questionNumber === 'undefined' || questionNumber === null) {
+      console.error("Attempted to replace a question with an invalid number:", questionNumber);
+      showSnackbar('Cannot replace question: Invalid question number.', 'error');
+      return;
+    }
+
+    try {
+      await quizService.replaceQuestion(selectedQuiz.quiz_id, questionNumber);
+      showSnackbar('Question replaced successfully!', 'success');
+      // Refresh the view
+      await handleViewQuiz(selectedQuiz.quiz_id);
+    } catch (error) {
+      console.error('Failed to replace question:', error);
+      showSnackbar('Failed to replace question', 'error');
     }
   };
 
@@ -509,40 +523,41 @@ const QuizSection = () => {
             ) : selectedQuiz?.questions?.length > 0 ? (
               <List>
                 {selectedQuiz.questions.map((question, index) => (
-                  <ListItem key={index} sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-                      {index + 1}. {question.question_text}
-                      <Chip label={question.type} size="small" sx={{ ml: 1, backgroundColor: '#093637', color: 'white' }} />
-                    </Typography>
+                  <ListItem key={index} sx={{ display: 'block', mb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold', flexGrow: 1 }}>
+                        {index + 1}. {question.question_text}
+                      </Typography>
+                      <IconButton 
+                        edge="end" 
+                        aria-label="replace" 
+                        onClick={() => handleReplaceQuestion(question.question_number)}
+                      >
+                        <ReplayIcon />
+                      </IconButton>
+                    </Box>
                     
-                    {question.type === 'mcq' && question.options.map((option, optIndex) => (
-                      <Box key={optIndex} sx={{
-                        pl: 2,
-                        py: 1,
-                        my: 0.5,
-                        width: '100%',
-                        borderRadius: 1,
-                        border: '1px solid',
-                        borderColor: option.is_correct ? 'success.main' : 'divider',
-                        backgroundColor: option.is_correct ? alpha(theme.palette.success.light, 0.1) : 'transparent',
-                      }}>
-                        <Typography variant="body2" sx={{ color: option.is_correct ? 'success.dark' : 'text.primary' }}>
-                          {String.fromCharCode(65 + optIndex)}. {option.option_text}
-                        </Typography>
-                      </Box>
-                    ))}
-
-                    {(question.type === 'fill' || question.type === 'truefalse' || question.type === 'oneline') && (
-                       <Box sx={{
-                        pl: 2, py: 1, my: 0.5, width: '100%', borderRadius: 1,
-                        backgroundColor: alpha(theme.palette.success.light, 0.1),
-                      }}>
-                         <Typography variant="body2">
-                          <strong>Correct Answer: </strong>{question.correct_answer}
-                        </Typography>
+                    {/* Options for MCQ */}
+                    {question.type === 'mcq' && question.options && (
+                      <Box sx={{ pl: 2, mt: 1 }}>
+                        {question.options.map(option => (
+                          <Typography 
+                            key={option.id} 
+                            sx={{ color: option.is_correct ? 'success.main' : 'text.secondary' }}
+                          >
+                            {option.id}: {option.option_text}
+                          </Typography>
+                        ))}
                       </Box>
                     )}
-                    
+
+                    {/* Correct Answer for other types */}
+                    {(question.type !== 'mcq') && (
+                      <Typography sx={{ pl: 2, mt: 1, color: 'success.main' }}>
+                        Correct Answer: {question.correct_answer}
+                      </Typography>
+                    )}
+
                     {question.explanation && (
                       <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.200',color: 'black', borderRadius: 1, width: '100%' }}>
                         <Typography variant="body2">

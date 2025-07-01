@@ -39,7 +39,8 @@ import {
   FaCheck, 
   FaTimes,
   FaArrowUp,
-  FaArrowDown
+  FaArrowDown,
+  FaRedo
 } from 'react-icons/fa';
 import apiService from '../../services/api';
 
@@ -224,6 +225,32 @@ const QuizQuestionManager = ({ quizId, initialQuestions, additionalQuestions }) 
     }
   };
 
+  const handleReplace = async (questionNumber) => {
+    try {
+      // Call the replace endpoint
+      await apiService.quizApi.questions.replace(quizId, questionNumber);
+      
+      // Refresh the questions list after replacement
+      const response = await apiService.quizApi.getById(quizId);
+      const updatedQuestions = response.data.current_questions || [];
+      setCurrentQuestions(updatedQuestions);
+      
+      toast({
+        title: "Question Replaced",
+        description: "The question has been successfully replaced.",
+        status: "success",
+        duration: 3000,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to replace the question. Please try again.",
+        status: "error",
+        duration: 3000,
+      });
+    }
+  };
+
   const renderQuestion = (question, index, isExchangeable = false) => (
     <Card key={question.question_number} variant="outline" mb={4} 
           opacity={question.exchanged ? 0.7 : 1}
@@ -255,6 +282,14 @@ const QuizQuestionManager = ({ quizId, initialQuestions, additionalQuestions }) 
                       setExchangeMode(true);
                     }}
                     isDisabled={question.exchanged}
+                  />
+                </Tooltip>
+                <Tooltip label="Replace Question">
+                  <IconButton
+                    icon={<FaRedo />}
+                    size="sm"
+                    colorScheme="teal"
+                    onClick={() => handleReplace(question.question_number)}
                   />
                 </Tooltip>
                 <Tooltip label="Delete Question">

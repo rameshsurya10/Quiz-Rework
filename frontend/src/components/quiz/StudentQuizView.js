@@ -72,14 +72,59 @@ const StudentQuizView = () => {
       setQuiz(quizData);
       
       // Backend returns questions in current_questions field, not questions
-      const questionsData = quizData.current_questions || quizData.questions || [];
-      setQuestions(questionsData);
+      let questionsData = quizData.current_questions || quizData.questions || [];
+      
+      // Attempt to parse if it's a string
+      if (typeof questionsData === 'string') {
+        try {
+          questionsData = JSON.parse(questionsData);
+        } catch (e) {
+          console.error("Failed to parse questions data:", e);
+          // Keep it as a string if parsing fails, so it can be debugged
+        }
+      }
+
+      // Flatten nested question arrays and assign unique identifiers
+      const flattenedQuestions = [];
+      let questionIndex = 0;
+
+      if (Array.isArray(questionsData)) {
+        questionsData.forEach((questionBlock, blockIndex) => {
+          if (Array.isArray(questionBlock)) {
+            // This is a nested array from SlimQuestionSerializer
+            questionBlock.forEach((question, subIndex) => {
+              flattenedQuestions.push({
+                ...question,
+                uniqueId: `${blockIndex}-${subIndex}`,
+                displayIndex: questionIndex++,
+                question_number: question.question_number || (questionIndex),
+                id: question.question_id || `${blockIndex}-${subIndex}`,
+                text: question.question || '',
+                type: question.question_type || question.type || 'mcq'
+              });
+            });
+          } else {
+            // Single question object
+            flattenedQuestions.push({
+              ...questionBlock,
+              uniqueId: `single-${blockIndex}`,
+              displayIndex: questionIndex++,
+              question_number: questionBlock.question_number || (questionIndex),
+              id: questionBlock.question_id || `single-${blockIndex}`,
+              text: questionBlock.question || '',
+              type: questionBlock.question_type || questionBlock.type || 'mcq'
+            });
+          }
+        });
+      }
+
+      setQuestions(flattenedQuestions);
       
       // Debug: Log the structure of questions to understand the format
       console.log('Quiz data:', quizData);
-      console.log('Questions data:', questionsData);
-      if (questionsData && questionsData.length > 0) {
-        console.log('First question structure:', questionsData[0]);
+      console.log('Flattened questions:', flattenedQuestions);
+      if (flattenedQuestions.length > 0) {
+        console.log('First question structure:', flattenedQuestions[0]);
       }
       
       // Set timer if quiz has time limit
@@ -105,6 +150,7 @@ const StudentQuizView = () => {
   };
 
   const handleAnswerChange = (questionId, answer) => {
+    console.log('Answer changed:', questionId, answer);
     setAnswers(prev => ({
       ...prev,
       [questionId]: answer
@@ -124,50 +170,49 @@ const StudentQuizView = () => {
   };
 
   const handleSubmitQuiz = async (autoSubmit = false) => {
+    setShowConfirmDialog(false);
     try {
-      // Convert answers to the format expected by backend
-      const questionEntries = [];
-      questions.forEach((question, index) => {
-        const questionIdentifier = question.question_number || question.question_id || (index + 1);
-        const questionNumber = question.question_number || (index + 1);
-        const answer = answers[questionIdentifier] || answers[index];
-        
-        if (answer !== undefined && answer !== null) {
-          questionEntries.push({
-            question_id: question.question_id || questionIdentifier,
-            question_number: questionNumber,
-            answer: answer
+      // Build the formatted answers for backend submission
+      const formattedAnswers = [];
+      
+      questions.forEach((question) => {
+        const answer = answers[question.uniqueId];
+        if (answer !== undefined && answer !== null && answer !== '') {
+          formattedAnswers.push({
+            question_id: parseInt(question.question_id || question.id, 10),
+            question_number: parseInt(question.question_number, 10),
+            answer: answer,
           });
         }
       });
 
+      console.log('Formatted answers for submission:', formattedAnswers);
+
+      if (formattedAnswers.length === 0 && !autoSubmit) {
+        if (!window.confirm("You haven't answered any questions. Are you sure you want to submit?")) {
+          return;
+        }
+      }
+
       const submissionData = {
-        quiz_id: parseInt(quizId),
-        questions: questionEntries
+        quiz_id: parseInt(quizId, 10),
+        questions: formattedAnswers,
       };
 
       console.log('Submitting quiz with data:', submissionData);
 
-      // Use the correct student quiz submission endpoint
-      const response = await apiService.post('/api/students/quiz_submit/', submissionData);
+      await apiService.post('/api/students/quiz_submit/', submissionData);
       
       setIsSubmitted(true);
-      
-      // Show results or redirect
       alert(autoSubmit ? 'Quiz auto-submitted due to time limit!' : 'Quiz submitted successfully!');
       navigate('/student-dashboard');
       
     } catch (error) {
       console.error('Error submitting quiz:', error);
-      
-      // Show more specific error messages
-      if (error.response?.status === 400) {
-        alert('Invalid submission data. Please check your answers and try again.');
-      } else if (error.response?.status === 403) {
-        alert('You do not have permission to submit this quiz.');
-      } else {
-        alert('Failed to submit quiz. Please try again.');
-      }
+      const errorMessage = error.response?.data 
+        ? JSON.stringify(error.response.data)
+        : 'Failed to submit quiz. Please try again.';
+      alert(`Submission failed: ${errorMessage}`);
     }
   };
 
@@ -367,20 +412,20 @@ const StudentQuizView = () => {
         >
           <CardContent sx={{ p: 4 }}>
             <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-              {question.question || question.question_text}
+              {question.text}
             </Typography>
 
             <FormControl component="fieldset" fullWidth>
               {/* Handle different question types */}
               {(question.type === 'mcq' || question.question_type === 'mcq') && getQuestionOptions(question).length > 0 ? (
                 <RadioGroup
-                  value={answers[question.question_number || question.question_id] || ''}
-                  onChange={(e) => handleAnswerChange(question.question_number || question.question_id, e.target.value)}
+                  value={answers[question.uniqueId] || ''}
+                  onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
                 >
                   <Stack spacing={2}>
-                    {getQuestionOptions(question).map((option, index) => (
+                    {getQuestionOptions(question).map((option, idx) => (
                       <FormControlLabel
-                        key={index}
+                        key={idx}
                         value={option}
                         control={<Radio />}
                         label={option}
@@ -402,41 +447,26 @@ const StudentQuizView = () => {
                 </RadioGroup>
               ) : (question.type === 'truefalse' || question.question_type === 'truefalse') ? (
                 <RadioGroup
-                  value={answers[question.question_number || question.question_id] || ''}
-                  onChange={(e) => handleAnswerChange(question.question_number || question.question_id, e.target.value)}
+                  value={answers[question.uniqueId] || ''}
+                  onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
                 >
                   <Stack spacing={2}>
-                    {['True', 'False'].map((option) => (
-                      <FormControlLabel
-                        key={option}
-                        value={option}
-                        control={<Radio />}
-                        label={option}
-                        sx={{
-                          border: `1px solid ${alpha('#45b7d1', 0.2)}`,
-                          borderRadius: 2,
-                          p: 2,
-                          m: 0,
-                          '&:hover': {
-                            backgroundColor: alpha('#45b7d1', 0.05),
-                          },
-                          '& .Mui-checked': {
-                            color: '#45b7d1',
-                          },
-                        }}
-                      />
-                    ))}
+                    <FormControlLabel value="True" control={<Radio />} label="True" />
+                    <FormControlLabel value="False" control={<Radio />} label="False" />
                   </Stack>
                 </RadioGroup>
               ) : (question.type === 'fill' || question.question_type === 'fill' || question.type === 'oneline' || question.question_type === 'oneline') ? (
                 <TextField
                   fullWidth
+                  multiline
+                  rows={4}
                   variant="outlined"
                   placeholder="Enter your answer here..."
-                  value={answers[question.question_number || question.question_id] || ''}
-                  onChange={(e) => handleAnswerChange(question.question_number || question.question_id, e.target.value)}
+                  value={answers[question.uniqueId] || ''}
+                  onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
                   sx={{
                     '& .MuiOutlinedInput-root': {
+                      backgroundColor: alpha(theme.palette.background.paper, 0.9),
                       borderColor: alpha('#45b7d1', 0.2),
                       '&:hover': {
                         borderColor: '#45b7d1',
@@ -486,15 +516,15 @@ const StudentQuizView = () => {
           </Button>
 
           <Box sx={{ display: 'flex', gap: 1 }}>
-            {questions.map((_, index) => (
+            {questions.map((q, index) => (
               <Box
-                key={index}
+                key={q.uniqueId}
                 sx={{
                   width: 12,
                   height: 12,
                   borderRadius: '50%',
                   backgroundColor: 
-                    answers[questions[index].question_number || questions[index].question_id] ? '#45b7d1' :
+                    answers[q.uniqueId] ? '#45b7d1' :
                     index === currentQuestion ? '#96c93d' : 
                     alpha('#45b7d1', 0.3),
                   cursor: 'pointer',

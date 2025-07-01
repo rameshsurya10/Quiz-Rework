@@ -461,7 +461,7 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
         # Add question numbers
         for i, question in enumerate(all_serialized_questions, 1):
-            question['question_no'] = i
+            question['question_number'] = i
 
         # Split based on required number
         current_questions = all_serialized_questions[:max_questions]
@@ -1797,72 +1797,76 @@ class ReplaceQuizQuestionAPIView(APIView):
         payload = request.data
 
         # Step 1: Validate input
-        question_number_to_remove = payload.get("question_number")
+        question_number_to_remove_str = payload.get("question_number")
+        if question_number_to_remove_str is None:
+            return Response({"error": "question_number is required."}, status=400)
+        
         try:
-            question_number_to_remove = int(question_number_to_remove)
+            question_number_to_remove = int(question_number_to_remove_str)
         except (TypeError, ValueError):
             return Response({"error": "question_number must be an integer."}, status=400)
 
         # Step 2: Get quiz
         quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
 
-        # Step 3: Get the Question object that holds the question list
+        # Step 3: Get the Question object OR load from quiz.questions
         question_obj = Question.objects.filter(quiz=quiz).first()
+        question_list_source = 'model'
+
         if not question_obj:
-            return Response({"error": "No question data found in DB for this quiz."}, status=404)
+            # Fallback to the quiz.questions field if it exists and is not empty
+            if quiz.questions and isinstance(quiz.questions, (str, list, dict)):
+                question_list_source = 'field'
+                raw_data = quiz.questions
+            else:
+                return Response({"error": "No question data found for this quiz."}, status=404)
+        else:
+            raw_data = question_obj.question
+
 
         # Step 4: Safely parse the question list
         try:
-            raw = question_obj.question
-            question_list = json.loads(raw)
+            if isinstance(raw_data, str):
+                question_list = json.loads(raw_data)
+            else:
+                question_list = raw_data
 
-            # If it's double-encoded, decode again
-            if isinstance(question_list, str):
+            if isinstance(question_list, str): # Handle double-encoding
                 question_list = json.loads(question_list)
 
-            # If it's a dict, convert to list of values
-            if isinstance(question_list, dict):
+            if isinstance(question_list, dict): # Handle dict of questions
                 question_list = list(question_list.values())
 
-        except Exception as e:
-            print("Decoding error:", str(e))
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"Error decoding question data for quiz {quiz_id}: {e}")
             return Response({"error": "Failed to decode question data."}, status=500)
 
         if not isinstance(question_list, list):
-            return Response({"error": "Stored question data is not a list."}, status=500)
+            return Response({"error": "Stored question data is not in a valid list format."}, status=500)
 
         # Step 5: Remove the target question
         original_len = len(question_list)
+        # Ensure consistent key access, checking for both 'question_number' and 'id'
         question_list = [
             q for q in question_list
-            if int(q.get("question_number", -1)) != question_number_to_remove
+            if q and int(q.get("question_number", q.get("id", -1))) != question_number_to_remove
         ]
+        
         if len(question_list) == original_len:
             return Response({
-                "error": f"Question number {question_number_to_remove} not found in stored question list."
+                "error": f"Question number {question_number_to_remove} not found in the quiz."
             }, status=404)
 
-        # Step 6: Save updated list to the Question model
-        question_obj.question = json.dumps(question_list)
-        question_obj.save()
+        # Step 6: Save updated list back to the correct source
+        updated_question_json = json.dumps(question_list)
 
-        # Step 7: Also update the quiz.questions field if it's a list
-        try:
-            quiz_data = json.loads(quiz.questions)
-            if isinstance(quiz_data, str):
-                quiz_data = json.loads(quiz_data)
-            if isinstance(quiz_data, dict):
-                quiz_data = list(quiz_data.values())
-        except Exception:
-            quiz_data = []
-
-        if isinstance(quiz_data, list):
-            quiz_data = [
-                q for q in quiz_data
-                if int(q.get("question_number", -1)) != question_number_to_remove
-            ]
-            quiz.questions = json.dumps(quiz_data)
-            quiz.save()
+        if question_list_source == 'model':
+            question_obj.question = updated_question_json
+            question_obj.save()
+        
+        # Always update the quiz.questions field for consistency
+        quiz.questions = updated_question_json
+        quiz.save()
 
         return Response(question_list, status=200)
 

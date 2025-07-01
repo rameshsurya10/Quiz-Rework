@@ -133,6 +133,7 @@ class QuestionSerializer(serializers.ModelSerializer):
 
             # Add shared metadata to each parsed question
             for item in parsed_questions:
+                item['question_id'] = data.get('question_id')
                 item['question_type'] = data.get('question_type')
                 item['explanation'] = item.get('explanation') or data.get('explanation')
 
@@ -236,6 +237,20 @@ class QuizSerializer(serializers.ModelSerializer):
                 except ValueError:
                     raise serializers.ValidationError("Page numbers must be integers")
         return value
+
+class AvailableQuizSerializer(serializers.ModelSerializer):
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    quiz_date = CustomDateTimeField(read_only=True)
+
+    class Meta:
+        model = Quiz
+        fields = [
+            'quiz_id', 'title', 'description', 'no_of_questions',
+            'quiz_type', 'question_type',
+            'department_name',
+            'quiz_date',
+            'time_limit_minutes', 'passing_score',
+        ]
 
 class QuizCreateSerializer(serializers.Serializer):
     """Serializer for quiz creation, handling specific payload keys."""

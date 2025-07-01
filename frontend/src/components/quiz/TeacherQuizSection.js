@@ -15,6 +15,7 @@ import DraftIcon from '@mui/icons-material/Drafts';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import QuizIcon from '@mui/icons-material/Quiz';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ReplayIcon from '@mui/icons-material/Replay';
 import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -299,6 +300,19 @@ const TeacherQuizSection = () => {
       setViewModalOpen(false);
     } finally {
       setQuestionsLoading(false);
+    }
+  };
+
+  const handleReplaceQuestion = async (questionNumber) => {
+    if (!selectedQuiz) return;
+    try {
+      await quizService.replaceQuestion(selectedQuiz.quiz_id, questionNumber);
+      showSnackbar('Question replaced successfully!', 'success');
+      // Refresh the view
+      await handleViewQuiz(selectedQuiz.quiz_id);
+    } catch (error) {
+      console.error('Failed to replace question:', error);
+      showSnackbar('Failed to replace question', 'error');
     }
   };
 
@@ -665,78 +679,62 @@ const TeacherQuizSection = () => {
               <CircularProgress />
             </Box>
           ) : selectedQuiz?.questions?.length > 0 ? (
-            <List sx={{ p: 0 }}>
+            <List disablePadding>
               {selectedQuiz.questions.map((question, index) => (
-                <React.Fragment key={index}>
-                  <ListItem sx={{ py: 2, px: 3, flexDirection: 'column', alignItems: 'flex-start' }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-                      {index + 1}. {question.question_text}
-                    </Typography>
-                    
-                    {/* Debug info */}
-                    <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block' }}>
-                      Debug: Type={question.type}, Options={question.options?.length || 0}
-                    </Typography>
-                    
-                    {question.type === 'mcq' && question.options && question.options.length > 0 && (
-                      <Box sx={{ width: '100%', ml: 2, mb: 2 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, color: 'text.secondary' }}>
-                          Options:
+                <React.Fragment key={question.question_id || index}>
+                  <ListItem sx={{ alignItems: 'flex-start', py: 3 }}>
+                    <ListItemIcon sx={{ mt: 1, minWidth: 40 }}>
+                      <CheckCircleIcon color="primary" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                          {index + 1}. {question.question_text}
                         </Typography>
-                        {question.options.map((option, optIndex) => (
-                          <Box 
-                            key={optIndex} 
-                            sx={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              py: 1,
-                              px: 2,
-                              mb: 0.5,
-                              borderRadius: 1,
-                              bgcolor: option.is_correct ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.grey[500], 0.05),
-                              border: `1px solid ${option.is_correct ? alpha(theme.palette.success.main, 0.3) : alpha(theme.palette.grey[500], 0.2)}`
-                            }}
-                          >
-                            <Typography variant="body2" sx={{ 
-                              fontWeight: option.is_correct ? 600 : 400,
-                              color: option.is_correct ? 'success.main' : 'text.primary'
-                            }}>
-                              {String.fromCharCode(65 + optIndex)}. {option.option_text}
+                      }
+                      secondary={
+                        <Stack spacing={2}>
+                          {question.type === 'mcq' && question.options && (
+                            <Box>
+                              {Object.entries(question.options).map(([key, value]) => (
+                                <Typography 
+                                  key={key} 
+                                  variant="body2"
+                                  sx={{ 
+                                    pl: 2, 
+                                    py: 0.5, 
+                                    borderRadius: 1, 
+                                    bgcolor: question.correct_answer === key ? 'success.light' : 'transparent',
+                                    color: question.correct_answer === key ? 'success.dark' : 'text.secondary'
+                                  }}
+                                >
+                                  <strong>{key}:</strong> {String(value)}
+                                </Typography>
+                              ))}
+                            </Box>
+                          )}
+                          {(question.type !== 'mcq') && (
+                             <Typography variant="body2" sx={{ pl: 2, color: 'text.secondary' }}>
+                                <strong>Answer:</strong> {question.correct_answer}
+                             </Typography>
+                          )}
+                           {question.explanation && (
+                            <Typography variant="body2" sx={{ pl: 2, color: 'text.secondary', fontStyle: 'italic' }}>
+                              <strong>Explanation:</strong> {question.explanation}
                             </Typography>
-                            {option.is_correct && <CheckCircleIcon sx={{ ml: 1, fontSize: 16, color: 'success.main' }} />}
-                          </Box>
-                        ))}
-                      </Box>
-                    )}
-
-                    {/* Show if MCQ but no options processed */}
-                    {question.type === 'mcq' && (!question.options || question.options.length === 0) && (
-                      <Box sx={{ width: '100%', p: 2, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 1, mb: 2 }}>
-                        <Typography variant="body2" sx={{ color: 'error.main' }}>
-                          Debug: MCQ question but no options found. Raw options: {JSON.stringify(question.options)}
-                        </Typography>
-                      </Box>
-                    )}
-
-                    {(question.type === 'truefalse' || question.type === 'fill' || question.type === 'oneline') && (
-                      <Box sx={{ width: '100%', mt: 1, p: 1, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: 1 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
-                          Correct Answer: {question.correct_answer || 'Not available'}
-                        </Typography>
-                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
-                          Debug: Type={question.type}, Answer={question.correct_answer}
-                        </Typography>
-                      </Box>
-                    )}
-                    
-                    {question.explanation && (
-                      <Box sx={{ p: 1, mt: 1, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1, width: '100%' }}>
-                        <Typography variant="caption" sx={{ fontWeight: 600 }}>Explanation:</Typography>
-                        <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>{question.explanation}</Typography>
-                      </Box>
-                    )}
+                          )}
+                        </Stack>
+                      }
+                    />
+                    <IconButton 
+                      edge="end" 
+                      aria-label="replace" 
+                      onClick={() => handleReplaceQuestion(question.question_number)}
+                    >
+                      <ReplayIcon />
+                    </IconButton>
                   </ListItem>
-                  {index < selectedQuiz.questions.length - 1 && <Divider />}
+                  <Divider component="li" />
                 </React.Fragment>
               ))}
             </List>

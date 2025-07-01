@@ -23,6 +23,7 @@ from accounts.permissions import IsOwnerOrAdminOrReadOnly, IsTeacherOrAdmin
 from django.utils import timezone
 from datetime import timedelta
 import json
+from quiz.serializers import AvailableQuizSerializer
 
 
 
@@ -276,84 +277,77 @@ class StudentVerificationView(View):
     def get(self, request, student_id):
         try:
             student = Student.objects.get(student_id=student_id)
-
+            
+            # Check if already verified
             if student.is_verified:
-                return HttpResponse("""
-                    <html>
-                        <body>
-                            <p>You have already verified your enrollment.</p>
-                            <button disabled style="padding: 10px 20px; background-color: #ccc; color: white; border-radius: 5px;">Verified</button>
-                        </body>
-                    </html>
-                """)
+                return HttpResponse(
+                    '<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">'
+                    '<h2>Verification Link Expired</h2>'
+                    '<p>This verification link has already been used or is no longer valid.</p>'
+                    '</div>',
+                    status=410
+                )
 
-            # ✅ 1. Mark student as verified
+            # Mark student as verified
             student.is_verified = True
             student.save()
-
-           # ✅ 2. Get department and teacher
-            department = Department.objects.filter(department_id=student.department_id, is_deleted=False).first()
-            department_name = department.name if department else "Unknown"
-            teacher = Teacher.objects.filter(department_ids__contains=[student.department_id], is_deleted=False).first()
             
-            if teacher:
-                teacher_email = teacher.email
-                subject = f"Student {student.name} Verified"
-                plain_message = (
-                    f"Dear {teacher.name if teacher.name else 'Teacher'},\n\n"
-                    f"The student {student.name} has successfully verified their enrollment in the {department_name} department.\n\n"
-                    f"Details:\n"
-                    f"- Name: {student.name}\n"
-                    f"- Email: {student.email}\n"
-                    f"- Department: {department_name}\n\n"
-                    f"Regards,\nRedlitmus teams"
-                )
+            # Optionally, you can log the user in here
+            # login(request, student.user)  # If you have a user object linked to the student
 
-                html_message = f"""
-                <html>
-                <body style="font-family: Arial, sans-serif; color: #333;">
-                    <p>Dear {teacher.name if teacher.name else "Teacher"},</p>
-                    <p>The student <strong>{student.name}</strong> has successfully 
-                    <strong>verified </strong> their enrollment in the <strong>{department_name}</strong> department.</p>
-
-                    <p><strong>Student Details:</strong></p>
-                    <ul>
-                    <li><strong>Name:</strong> {student.name}</li>
-                    <li><strong>Email:</strong> {student.email}</li>
-                    <li><strong>Department:</strong> {department_name}</li>
-                    </ul>
-
-                    <p>You may now proceed with any onboarding or academic actions required for this student.</p>
-
-                    <p>Best regards,<br>
-                    <em>Redlitmus teams</em></p>
-                </body>
-                </html>
-                """
-
-                send_mail(
-                    subject=subject,
-                    message=plain_message,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[teacher.email],
-                    html_message=html_message 
-                )
-
-            # ✅ 3. Show disabled "Verified" button to student
-            return HttpResponse(f"""
-                <html>
-                    <body>
-                        <p>Thank you {student.name}, you have successfully confirmed your enrollment.</p>
-                        <button disabled style="padding: 10px 15px; background-color: #ccc; 
-                                                color: white; border-radius: 5px;">
-                            Verified
-                        </button>
-                    </body>
-                </html>
-            """)
-
+            return HttpResponse(
+                '<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">'
+                '<h1>Verification Successful!</h1>'
+                '<p>Your account has been successfully verified. You can now log in.</p>'
+                '</div>'
+            )
         except Student.DoesNotExist:
-            return HttpResponse("Invalid or expired verification link.")
+            return HttpResponse(
+                '<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">'
+                '<h2>Invalid Verification Link</h2>'
+                '<p>The verification link is invalid or has expired. Please request a new one.</p>'
+                '</div>',
+                status=404
+            )
+        except Exception as e:
+            # Generic error for any other issues
+            return HttpResponse(
+                f'<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">'
+                f'<h2>Verification Failed</h2>'
+                f'<p>An unexpected error occurred: {str(e)}</p>'
+                f'</div>',
+                status=500
+            )
+
+class AvailableQuizzesView(generics.ListAPIView):
+    """
+    View to list available quizzes for a student.
+    - Quizzes are filtered based on the student's department.
+    - Quizzes that the student has already attempted are excluded.
+    """
+    serializer_class = AvailableQuizSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        try:
+            student = Student.objects.get(email=user.email)
+        except Student.DoesNotExist:
+            return Quiz.objects.none()
+
+        # Get IDs of quizzes already attempted by the student
+        attempted_quiz_ids = QuizAttempt.objects.filter(student=student).values_list('quiz__quiz_id', flat=True)
+
+        # Filter quizzes for the student's department, not yet attempted
+        now = timezone.now()
+        return Quiz.objects.filter(
+            department=student.department,
+            is_published=True,
+            is_deleted=False,
+            quiz_date__lte=now 
+        ).exclude(
+            quiz_id__in=attempted_quiz_ids
+        )
 
 class SubmitQuizAttemptView(APIView):
     permission_classes = [IsAuthenticated]

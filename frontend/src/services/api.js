@@ -183,6 +183,8 @@ export const quizApi = {
       }),
     add: (quizId, data) =>
       api.post(`/api/quiz/${quizId}/questions/`, data),
+    replace: (quizId, questionNumber) =>
+      api.post(`/api/quiz/replace_question/${quizId}/`, { question_number: questionNumber })
   }
 };
 
