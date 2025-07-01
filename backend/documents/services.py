@@ -178,7 +178,8 @@ class DocumentProcessingService:
                         "type": "mcq",
                         "options": {{"A": "Option 1", "B": "Option 2", "C": "Option 3", "D": "Option 4"}},
                         "correct_answer": "A",
-                        "explanation": "Explanation here"
+                        "explanation": "Explanation here",
+                        "question_number": 1
                     }}
                 ]
             }}
@@ -276,7 +277,8 @@ class DocumentProcessingService:
                                     "type": "{'mcq' if question_type == 'mixed' else question_type}", 
                                     "options": {{"A": "opt1", "B": "opt2", "C": "opt3", "D": "opt4"}}, 
                                     "correct_answer": "A", 
-                                    "explanation": "explanation here"
+                                    "explanation": "explanation here",
+                                    "question_number": 1
                                 }}
                             ]
                         }}

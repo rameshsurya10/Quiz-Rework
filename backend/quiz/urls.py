@@ -1,20 +1,8 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import (
-    QuizListCreateView, 
-    QuizRetrieveUpdateDestroyView, 
-    QuizFileUploadView,
-    QuizPublishView,
-    QuizQuestionGenerateView,
-    StudentQuestionView,
-    QuizShareView,
-    QuizQuestionsView,
-    ReplaceQuizQuestionAPIView,
-    QuizQuestionGenerateFromPromptView,
-    QuizQuestionGenerateFromExistingFileView,
-    QuizQuestionGenerateByTypeView,
-    QuizViewSet
-)
+from . import views
+from .views import *
+from .views import StudentQuestionView
 
 app_name = 'quiz'
 
