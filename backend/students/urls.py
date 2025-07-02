@@ -15,13 +15,13 @@ urlpatterns = [
     path('<int:student_id>/', views.StudentDetailView.as_view(), name='student-detail'),
     path('verify/<int:student_id>/', StudentVerificationView.as_view(), name='student-verify'),
     # Additional endpoints - handle both with and without trailing slash
-    re_path(r'^create_student$', views.StudentCreateView.as_view(), name='create-student-no-slash'),
+    re_path('create_student', views.StudentCreateView.as_view(), name='create-student-no-slash'),
     path('quiz_submit/', SubmitQuizAttemptView.as_view(), name='quiz-submit'),
     path('available-quizzes/', views.AvailableQuizzesView.as_view(), name='available-quizzes'),
     path('quiz_attempt/<int:quiz_id>/', RetrieveQuizAttemptView.as_view(), name='quiz-attempt-detail'),
     path('quiz_attempts/', ListStudentQuizResultsView.as_view(), name='quiz-attempts-list'),
     path('send_reminder/', QuizReminderStudent.as_view(), name='send_quiz_reminders'),
-    path('fetch_quiz_attempt/<int:quiz_id>/', FetchQuizAttemptView.as_view(), name='fetch_quiz_attempt'),
+    path('result_view/<int:quiz_id>/', FetchQuizAttemptView.as_view(), name='fetch_quiz_result'),
     path('admin_teacher_view_report/<int:quiz_id>/', AdminTeacherViewReport.as_view(), name='admin_teacher_view_report'),
     # Include router URLs
 ] + router.urls
