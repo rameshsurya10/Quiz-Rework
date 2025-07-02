@@ -355,7 +355,7 @@ class SubmitQuizAttemptView(APIView):
     def post(self, request):
         data = request.data
         quiz_id = data.get("quiz_id")
-        question_entries = data.get("questions")
+        question_entries = data.get("questions")  # List of dicts: question_id, question_number, answer
 
         if not quiz_id or not isinstance(question_entries, list):
             return Response({"error": "Invalid payload"}, status=status.HTTP_400_BAD_REQUEST)
@@ -367,57 +367,50 @@ class SubmitQuizAttemptView(APIView):
         if not student or not quiz:
             return Response({"error": "Invalid student or quiz"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 👉 Build a lookup of submitted answers
+        submitted_answers_map = {
+            (int(q["question_id"]), int(q["question_number"])): q.get("answer")
+            for q in question_entries if q.get("question_id") and q.get("question_number") is not None
+        }
+
         score = 0
-        total = 0
         stored_answers = []
 
-        for q in question_entries:
-            question_id = q.get("question_id")
-            question_number = q.get("question_number")
-            answer = q.get("answer")
+        # 👉 Load all questions from the quiz
+        all_questions = []
+        all_question_objs = Question.objects.filter(quiz=quiz)
 
-            if not question_id or answer is None or question_number is None:
+        for question_obj in all_question_objs:
+            question_id = question_obj.question_id
+            subquestions = question_obj.question
+            if isinstance(subquestions, str):
+                subquestions = json.loads(subquestions)
+            if not isinstance(subquestions, list):
                 continue
 
-            try:
-                question_obj = Question.objects.get(question_id=question_id)
-                subquestions = question_obj.question
+            for q in subquestions:
+                question_number = int(q.get("question_number"))
+                correct_answer = str(q.get("correct_answer", "")).strip().lower()
 
-                # ✅ Ensure subquestions is a list
-                if isinstance(subquestions, str):
-                    subquestions = json.loads(subquestions)
+                key = (question_id, question_number)
+                student_answer = submitted_answers_map.get(key)
 
-                if not isinstance(subquestions, list):
-                    continue
-
-                # ✅ Match subquestion by question_number (ensure type consistency)
-                matched = next(
-                    (subq for subq in subquestions if int(subq.get("question_number", -1)) == int(question_number)),
-                    None
-                )
-
-                if not matched:
-                    continue
-
-                correct_answer = str(matched.get("correct_answer", "")).strip().lower()
-                submitted_answer = str(answer).strip().lower()
-
-                is_correct = (correct_answer == submitted_answer)
-                if is_correct:
-                    score += 1
-
-                total += 1
+                if student_answer is not None:
+                    is_correct = (correct_answer == str(student_answer).strip().lower())
+                    if is_correct:
+                        score += 1
+                else:
+                    student_answer = None
+                    is_correct = False
 
                 stored_answers.append({
                     "question_id": question_id,
                     "question_number": question_number,
-                    "answer": answer,
+                    "answer": student_answer,
                     "is_correct": is_correct
                 })
 
-            except Exception as e:
-                print(f"[ERROR] While processing question {question_id} - {e}")
-                continue
+        total = len(stored_answers)
 
         passing_score = quiz.passing_score or (quiz.no_of_questions * 0.5)
         result = "pass" if score >= passing_score else "fail"
@@ -436,9 +429,10 @@ class SubmitQuizAttemptView(APIView):
             "message": "Quiz submitted successfully",
             "quiz_id": quiz.quiz_id,
             "student_id": student.student_id,
-            "score": score,
+            # "serial_number": student.serial_number,
+            # "score": score,
             "total_questions": total,
-            "result": result
+            # "result": result
         }, status=status.HTTP_201_CREATED)
 
 class RetrieveQuizAttemptView(APIView):
@@ -446,8 +440,9 @@ class RetrieveQuizAttemptView(APIView):
 
     def get(self, request, quiz_id):
         user = request.user
+        print("user:", user)
         student = Student.objects.filter(email=user.email, is_deleted=False).first()
-
+        print("student:", student)
         if not student:
             return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -481,7 +476,7 @@ class RetrieveQuizAttemptView(APIView):
 
             try:
                 question_obj = Question.objects.get(question_id=question_id)
-                sub_questions = question_obj.question
+                sub_questions = json.loads(question_obj.question)  # list of dicts
 
                 matched = next(
                     (q for q in sub_questions if q.get("question_number") == question_number),
@@ -499,26 +494,30 @@ class RetrieveQuizAttemptView(APIView):
                         "explanation": matched.get("explanation", ""),
                         "is_correct": is_correct
                     })
-
             except Question.DoesNotExist:
                 continue
 
+        # Get all question numbers from this quiz
         try:
             question_obj = Question.objects.get(question_id=attempt.question_answer[0]["question_id"])
-            all_questions = question_obj.question
-            all_question_numbers = {q.get("question_number") for q in all_questions}
-        except:
+            all_questions_json = json.loads(question_obj.question)
+            all_question_numbers = {q.get("question_number") for q in all_questions_json}
+        except Exception:
             all_question_numbers = set()
 
         total_questions = len(all_question_numbers)
         attended_questions = len(answered_question_numbers)
         not_answered_questions = total_questions - attended_questions
 
+        # Avoid negative values
+        if not_answered_questions < 0:
+            not_answered_questions = 0
+
         percentage = (attempt.score / total_questions) * 100 if total_questions > 0 else 0
 
-        # 🟡 Only calculate rank if passed
+        # Calculate rank only if result is 'pass'
         rank = None
-        if attempt.result.lower() == "pass":
+        if attempt.result and attempt.result.lower() == "pass":
             all_attempts = QuizAttempt.objects.filter(
                 quiz__quiz_id=quiz_id, result__iexact="pass"
             ).order_by("-score", "created_at")
@@ -528,9 +527,29 @@ class RetrieveQuizAttemptView(APIView):
                     rank = idx
                     break
 
+        # You may have a started_at and ended_at or timer field — this is placeholder
+        attempt_duration = 0  # TODO: Replace with actual duration if you have it
+        # ✅ Duration logic (replace with actual if you store start and end time)
+        if hasattr(attempt, 'started_at') and hasattr(attempt, 'ended_at') and attempt.started_at and attempt.ended_at:
+            attempt_duration = attempt.ended_at - attempt.started_at
+        else:
+            attempt_duration = timedelta(minutes=attempt.quiz.time_limit_minutes)
+
         return Response({
             "attempt_id": attempt.attempt_id,
+            # "student_serial_number": student.student_serial_number if student.student_serial_number else None,
+            # "class_name": student.class_name,
+            # "session" : student.session,
+            "attempt_date": attempt.created_at.date(),
+            "attempt_time": str(attempt.created_at.time()),
+            "attempt_duration": str(attempt_duration),
+            "quiz_duration": attempt.quiz.time_limit_minutes,
+            "total_duration": f"{attempt.quiz.time_limit_minutes} mins",
+            "student_attend_email": student.email,
+            "student_attend_name": student.name,
+            "total_time": attempt.created_at,  # can be replaced with timer/ending timestamp
             "quiz_id": attempt.quiz.quiz_id,
+            "quiz_name": attempt.quiz.title,
             "score": attempt.score,
             "result": attempt.result,
             "total_questions": total_questions,
@@ -560,14 +579,9 @@ class ListStudentQuizResultsView(APIView):
             if not teacher:
                 return Response({"error": "Teacher not found"}, status=status.HTTP_404_NOT_FOUND)
 
-            # Only quizzes created by this teacher
-            # teacher_full_name = teacher.name.strip()
             attempts = QuizAttempt.objects.filter(
-                quiz__is_deleted=False  # or use quiz__creator=teacher.get_full_name()
+                quiz__is_deleted=False
             ).select_related('quiz', 'student').order_by('-created_at')
-            # attempts = QuizAttempt.objects.select_related('quiz', 'student')\
-            #     .filter(quiz__is_deleted=False, quiz__created_by=teacher_full_name)\
-            #     .order_by('-created_at')
 
         elif role == "STUDENT":
             student = Student.objects.filter(email=user.email, is_deleted=False).first()
@@ -585,55 +599,298 @@ class ListStudentQuizResultsView(APIView):
 
         for attempt in attempts:
             if not attempt.quiz:
-                continue  # skip broken data
+                continue
 
-            quiz_id = attempt.quiz.quiz_id
+            answered_question_numbers = set()
+            correct_answer_count = 0
+            wrong_answer_count = 0
 
-            # Calculate rank only if result is pass
+            for item in attempt.question_answer:
+                question_number = item.get("question_number")
+                is_correct = item.get("is_correct", False)
+                if question_number is not None:
+                    answered_question_numbers.add(question_number)
+                if is_correct:
+                    correct_answer_count += 1
+                else:
+                    wrong_answer_count += 1
+
+            # total questions
+            try:
+                question_id = attempt.question_answer[0]["question_id"]
+                question_obj = Question.objects.get(question_id=question_id)
+                question_data = json.loads(question_obj.question) if isinstance(question_obj.question, str) else question_obj.question
+                total_questions = len(question_data)
+            except Exception:
+                total_questions = 0
+
+            attended_questions = len(answered_question_numbers)
+            not_answered_questions = max(total_questions - attended_questions, 0)
+            percentage = (attempt.score / total_questions) * 100 if total_questions else 0
+
+            # Calculate rank
             rank = None
-            if attempt.result.lower() == "pass":
-                all_quiz_attempts = QuizAttempt.objects.filter(
+            if attempt.result and attempt.result.lower() == "pass":
+                quiz_id = attempt.quiz.quiz_id
+                passed_attempts = QuizAttempt.objects.filter(
                     quiz__quiz_id=quiz_id,
                     result__iexact="pass"
-                ).order_by('-score', 'created_at')
+                ).order_by("-score", "created_at")
 
-                for idx, a in enumerate(all_quiz_attempts, start=1):
+                for idx, a in enumerate(passed_attempts, start=1):
                     if a.student_id == attempt.student_id:
                         rank = idx
                         break
 
-            # Total questions from any one question_id inside question_answer
-            try:
-                question_entry = attempt.question_answer[0]
-                question_obj = Question.objects.get(question_id=question_entry["question_id"])
-                question_list = question_obj.question
-                if isinstance(question_list, str):
-                    import json
-                    question_list = json.loads(question_list)
-                total_questions = len(question_list)
-                print("total_questions:",total_questions)
-            except:
-                total_questions = 0
-
-            percentage = (attempt.score / total_questions) * 100 if total_questions else 0
+            # Duration
+            if hasattr(attempt, 'started_at') and hasattr(attempt, 'ended_at') and attempt.started_at and attempt.ended_at:
+                attempt_duration = attempt.ended_at - attempt.started_at
+            else:
+                attempt_duration = timedelta(minutes=attempt.quiz.time_limit_minutes)
+            
+            # ✅ Conditionally show result only after quiz ends
+            quiz_end_time = datetime.combine(attempt.quiz.quiz_date, datetime.min.time()) + timedelta(minutes=attempt.quiz.time_limit_minutes)
+            show_result = attempt.created_at >= quiz_end_time
 
             data = {
-                "quiz_id": quiz_id,
+                "quiz_id": attempt.quiz.quiz_id,
                 "quiz_title": attempt.quiz.title,
                 "score": attempt.score,
                 "percentage": round(percentage, 2),
                 "rank": rank,
                 "result": attempt.result,
                 "attempted_at": attempt.created_at,
-                "total_questions" : total_questions
+                "total_questions": total_questions,
+                "attended_questions": attended_questions,
+                "not_answered_questions": not_answered_questions,
+                "correct_answer_count": correct_answer_count,
+                "wrong_answer_count": wrong_answer_count,
+                "quiz_duration": attempt.quiz.time_limit_minutes,
+                "attempt_duration": str(attempt_duration),
+                "total_duration": f"{attempt.quiz.time_limit_minutes} mins",
+                "attempt_time": str(attempt.created_at.time()),
+                "attempt_date": attempt.created_at.date(),
+                "total_time": attempt.created_at,
             }
 
             if role in ["ADMIN", "TEACHER"]:
                 data["student_name"] = attempt.student.name
+                # data["class_name"] = attempt.student.class_name
+                # data["session"] = attempt.student.session
+                # data["department"] = attempt.student.department
+                # data["serial_number"] = attempt.student.serial_number
+            if show_result:
+                result_data.append(data)
+            else:
+                result_data.append({
+                    "quiz_id": attempt.quiz.quiz_id,
+                    "quiz_title": attempt.quiz.title,
+                    "message": "The quiz time is not finished. Result will be available after quiz end time."
+                })
 
-            result_data.append(data)
+            # result_data.append(data)
 
         return Response(result_data, status=status.HTTP_200_OK)
+
+class AdminTeacherViewReport(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, quiz_id):
+        user = request.user
+        role = getattr(user, 'role', None)
+
+        if role not in ("ADMIN", "TEACHER"):
+            return Response({"error": "Access denied. Only Admin and Teacher allowed."}, status=status.HTTP_403_FORBIDDEN)
+
+        student_id = request.query_params.get("student_id")
+        if not student_id:
+            return Response({"error": "student_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        student = Student.objects.filter(student_id=student_id, is_deleted=False).first()
+        if not student:
+            return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        attempt = QuizAttempt.objects.filter(student=student, quiz__quiz_id=quiz_id).order_by("-created_at").first()
+        if not attempt:
+            return Response({"error": "No attempt found for this quiz"}, status=status.HTTP_404_NOT_FOUND)
+
+        detailed_answers = []
+        answered_question_numbers = set()
+        correct_answer_count = 0
+        wrong_answer_count = 0
+
+        answer_map = {
+            (a["question_id"], a["question_number"]): {
+                "answer": a.get("answer"),
+                "is_correct": a.get("is_correct", False)
+            } for a in attempt.question_answer
+        }
+
+        all_question_numbers = set()
+
+        all_question_objs = Question.objects.filter(quiz__quiz_id=quiz_id)
+        for q_obj in all_question_objs:
+            try:
+                qid = q_obj.question_id
+                sub_questions = q_obj.question
+                if isinstance(sub_questions, str):
+                    sub_questions = json.loads(sub_questions)
+
+                for q in sub_questions:
+                    q_no = q.get("question_number")
+                    all_question_numbers.add(q_no)
+
+                    key = (qid, q_no)
+                    student_answer = answer_map.get(key, {}).get("answer")
+                    is_correct = answer_map.get(key, {}).get("is_correct", False)
+
+                    if student_answer is not None:
+                        answered_question_numbers.add(q_no)
+
+                    if is_correct:
+                        correct_answer_count += 1
+                    elif student_answer is not None:
+                        wrong_answer_count += 1
+
+                    detailed_answers.append({
+                        "question_number": q_no,
+                        "question": q.get("question"),
+                        "type": q.get("type"),
+                        "options": q.get("options", {}),
+                        "correct_answer": q.get("correct_answer"),
+                        "student_answer": student_answer,
+                        "explanation": q.get("explanation", ""),
+                        "is_correct": is_correct
+                    })
+            except Exception:
+                continue
+
+        total_questions = len(all_question_numbers)
+        attended_questions = len(answered_question_numbers)
+        not_answered_questions = max(0, total_questions - attended_questions)
+        percentage = (attempt.score / total_questions) * 100 if total_questions else 0
+
+        # Rank logic (only for pass)
+        rank = None
+        if attempt.result.lower() == "pass":
+            all_attempts = QuizAttempt.objects.filter(quiz__quiz_id=quiz_id, result__iexact="pass").order_by("-score", "created_at")
+            for idx, a in enumerate(all_attempts, start=1):
+                if a.student_id == student.student_id:
+                    rank = idx
+                    break
+
+        # Duration calculation
+        if hasattr(attempt, 'started_at') and hasattr(attempt, 'ended_at') and attempt.started_at and attempt.ended_at:
+            attempt_duration = attempt.ended_at - attempt.started_at
+        else:
+            attempt_duration = timedelta(minutes=attempt.quiz.time_limit_minutes)
+
+        return Response({
+            "attempt_id": attempt.attempt_id,
+            "quiz_id": attempt.quiz.quiz_id,
+            "quiz_name": attempt.quiz.title,
+            "student_id": student.student_id,
+            "student_attend_email": student.email,
+            "student_attend_name": student.name,
+            "attempt_date": attempt.created_at.date(),
+            "attempt_time": str(attempt.created_at.time()),
+            "attempt_duration": str(attempt_duration),
+            "quiz_duration": attempt.quiz.time_limit_minutes,
+            "total_time": attempt.created_at,
+            "score": attempt.score,
+            "result": attempt.result,
+            "total_questions": total_questions,
+            "attended_questions": attended_questions,
+            "not_answered_questions": not_answered_questions,
+            "correct_answer_count": correct_answer_count,
+            "wrong_answer_count": wrong_answer_count,
+            "percentage": round(percentage, 2),
+            "rank": rank,
+            # "detailed_answers": detailed_answers
+        }, status=status.HTTP_200_OK)
+
+class FetchQuizAttemptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, quiz_id):
+        user = request.user
+        student = Student.objects.filter(email=user.email, is_deleted=False).first()
+        quiz = Quiz.objects.filter(quiz_id=quiz_id, is_deleted=False).first()
+
+        if not student or not quiz:
+            return Response({"error": "Invalid student or quiz"}, status=status.HTTP_400_BAD_REQUEST)
+
+        attempt = QuizAttempt.objects.filter(student=student, quiz=quiz).order_by("-created_at").first()
+        if not attempt:
+            return Response({"error": "No attempt found for this quiz"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get all questions from the question_id used in this attempt
+        try:
+            q_entry = attempt.question_answer[0]
+            question_obj = Question.objects.get(question_id=q_entry["question_id"])
+            question_list = question_obj.question
+            if isinstance(question_list, str):
+                question_list = json.loads(question_list)
+        except:
+            question_list = []
+
+        total_questions = len(question_list)
+        percentage = (attempt.score / total_questions) * 100 if total_questions > 0 else 0
+
+        # Calculate rank
+        rank = None
+        if attempt.result.lower() == "pass":
+            all_attempts = QuizAttempt.objects.filter(quiz=quiz, result__iexact="pass").order_by("-score", "created_at")
+            for idx, a in enumerate(all_attempts, start=1):
+                if a.student_id == student.student_id:
+                    rank = idx
+                    break
+
+        # Build a mapping from question_number to answer
+        answer_map = {
+            (int(a["question_number"])): a for a in attempt.question_answer
+        }
+
+        # Build detailed_answers: include all questions, mark unanswered if not in answer_map
+        detailed_answers = []
+        for q in question_list:
+            q_num = int(q.get("question_number"))
+            q_data = {
+                "question_number": q_num,
+                "question": q.get("question"),
+                "type": q.get("type"),
+                "options": q.get("options") or {},
+                "correct_answer": q.get("correct_answer"),
+                "explanation": q.get("explanation", ""),
+            }
+
+            if q_num in answer_map:
+                ans = answer_map[q_num]
+                q_data["student_answer"] = ans.get("answer")
+                q_data["is_correct"] = ans.get("is_correct", False)
+            else:
+                q_data["student_answer"] = None
+                q_data["is_correct"] = False
+
+            detailed_answers.append(q_data)
+
+        return Response({
+            "attempt_id": attempt.attempt_id,
+            "quiz_id": quiz.quiz_id,
+            "quiz_name": quiz.title,
+            "student_id": student.student_id,
+            "score": attempt.score,
+            "total_questions": total_questions,
+            "result": attempt.result,
+            "question_answer": attempt.question_answer,
+            "detailed_answers": detailed_answers,
+            "percentage": round(percentage, 2),
+            "rank": rank,
+            "attempt_date": attempt.created_at.date(),
+            "attempt_time": str(attempt.created_at.time()),
+            "quiz_duration": quiz.time_limit_minutes,
+            "total_time": attempt.created_at,
+        }, status=status.HTTP_200_OK)
 
 class QuizReminderStudent(APIView):
     permission_classes = [permissions.IsAuthenticated, IsTeacherOrAdmin]
