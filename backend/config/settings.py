@@ -330,4 +330,19 @@ LOGGING = {
             'propagate': False,
         },
     },
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'quiz_cleanup': {
+            'class': 'logging.FileHandler',
+            'filename': 'quiz_cleanup.log',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['quiz_cleanup'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
 }

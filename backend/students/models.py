@@ -14,13 +14,8 @@ class Student(models.Model):
     is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     last_modified_at = models.DateTimeField(auto_now=True)
-    # created_by = models.CharField(max_length=255, blank=True, null=True)
-    # last_modified_by = models.CharField(max_length=255, blank=True, null=True)
-    # Using CharField instead of ForeignKey to match the existing database schema
     created_by = models.CharField(max_length=255, null=True, blank=True)
     last_modified_by = models.CharField(max_length=255, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    last_modified_at = models.DateTimeField(auto_now=True)
     class Meta:
         db_table = 'student'
         verbose_name = 'Student'
