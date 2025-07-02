@@ -24,7 +24,9 @@ from django.utils import timezone
 from datetime import timedelta
 import json
 from quiz.serializers import AvailableQuizSerializer
-
+from quiz.models import QuizAttempt
+from django.utils import timezone
+from datetime import timedelta
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -71,6 +73,9 @@ class StudentViewSet(viewsets.ModelViewSet):
     def download_template(self, request):
         # Create a sample Excel file
         data = {
+            'register_number': ['1234567890', '9876543210'],
+            'class_name': ['10'],
+            'section': ['A'],
             'name': ['John Doe', 'Jane Smith'],
             'email': ['john@example.com', 'jane@example.com'],
             'phone': ['1234567890', '9876543210'],
@@ -429,7 +434,7 @@ class SubmitQuizAttemptView(APIView):
             "message": "Quiz submitted successfully",
             "quiz_id": quiz.quiz_id,
             "student_id": student.student_id,
-            # "serial_number": student.serial_number,
+            # "register_number": student.register_number,
             # "score": score,
             "total_questions": total,
             # "result": result
@@ -537,9 +542,9 @@ class RetrieveQuizAttemptView(APIView):
 
         return Response({
             "attempt_id": attempt.attempt_id,
-            # "student_serial_number": student.student_serial_number if student.student_serial_number else None,
-            # "class_name": student.class_name,
-            # "session" : student.session,
+            "student_register_number": student.register_number,
+            "class_name": student.class_name,
+            "section" : student.section,
             "attempt_date": attempt.created_at.date(),
             "attempt_time": str(attempt.created_at.time()),
             "attempt_duration": str(attempt_duration),
@@ -570,9 +575,11 @@ class ListStudentQuizResultsView(APIView):
         role = getattr(user, "role", None)
 
         if role == "ADMIN":
+            print("role:", role)
             attempts = QuizAttempt.objects.select_related('quiz', 'student')\
                 .filter(quiz__isnull=False)\
                 .order_by('-created_at')
+            print("attempts:", attempts)
 
         elif role == "TEACHER":
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
@@ -595,6 +602,10 @@ class ListStudentQuizResultsView(APIView):
         else:
             return Response({"error": "Invalid role"}, status=status.HTTP_403_FORBIDDEN)
 
+        # ✅ No quiz attempts found
+        if not attempts.exists():
+            return Response({"message": "No quiz attempts found."}, status=status.HTTP_200_OK)
+
         result_data = []
 
         for attempt in attempts:
@@ -604,6 +615,10 @@ class ListStudentQuizResultsView(APIView):
             answered_question_numbers = set()
             correct_answer_count = 0
             wrong_answer_count = 0
+            atempt_question=attempt.question_answer
+            print("atempt_question:", atempt_question)
+            if not atempt_question:
+                continue
 
             for item in attempt.question_answer:
                 question_number = item.get("question_number")
@@ -621,13 +636,14 @@ class ListStudentQuizResultsView(APIView):
                 question_obj = Question.objects.get(question_id=question_id)
                 question_data = json.loads(question_obj.question) if isinstance(question_obj.question, str) else question_obj.question
                 total_questions = len(question_data)
+                print("total_questions:", total_questions)
             except Exception:
                 total_questions = 0
 
             attended_questions = len(answered_question_numbers)
             not_answered_questions = max(total_questions - attended_questions, 0)
             percentage = (attempt.score / total_questions) * 100 if total_questions else 0
-
+            print("percentage:", percentage)
             # Calculate rank
             rank = None
             if attempt.result and attempt.result.lower() == "pass":
@@ -645,13 +661,11 @@ class ListStudentQuizResultsView(APIView):
             # Duration
             if hasattr(attempt, 'started_at') and hasattr(attempt, 'ended_at') and attempt.started_at and attempt.ended_at:
                 attempt_duration = attempt.ended_at - attempt.started_at
+                print("if attempt_duration:", attempt_duration)
             else:
                 attempt_duration = timedelta(minutes=attempt.quiz.time_limit_minutes)
+                print("else attempt_duration:", attempt_duration)
             
-            # ✅ Conditionally show result only after quiz ends
-            quiz_end_time = datetime.combine(attempt.quiz.quiz_date, datetime.min.time()) + timedelta(minutes=attempt.quiz.time_limit_minutes)
-            show_result = attempt.created_at >= quiz_end_time
-
             data = {
                 "quiz_id": attempt.quiz.quiz_id,
                 "quiz_title": attempt.quiz.title,
@@ -675,20 +689,11 @@ class ListStudentQuizResultsView(APIView):
 
             if role in ["ADMIN", "TEACHER"]:
                 data["student_name"] = attempt.student.name
-                # data["class_name"] = attempt.student.class_name
-                # data["session"] = attempt.student.session
-                # data["department"] = attempt.student.department
-                # data["serial_number"] = attempt.student.serial_number
-            if show_result:
-                result_data.append(data)
-            else:
-                result_data.append({
-                    "quiz_id": attempt.quiz.quiz_id,
-                    "quiz_title": attempt.quiz.title,
-                    "message": "The quiz time is not finished. Result will be available after quiz end time."
-                })
-
-            # result_data.append(data)
+                data["class_name"] = attempt.student.class_name
+                data["section"] = attempt.student.section
+                data["register_number"] = attempt.student.register_number
+           
+            result_data.append(data)
 
         return Response(result_data, status=status.HTTP_200_OK)
 
@@ -790,6 +795,9 @@ class AdminTeacherViewReport(APIView):
             "quiz_id": attempt.quiz.quiz_id,
             "quiz_name": attempt.quiz.title,
             "student_id": student.student_id,
+            "student_class": student.class_name,
+            "student_section": student.section,
+            "student_register_number": student.register_number,
             "student_attend_email": student.email,
             "student_attend_name": student.name,
             "attempt_date": attempt.created_at.date(),
@@ -873,24 +881,35 @@ class FetchQuizAttemptView(APIView):
                 q_data["is_correct"] = False
 
             detailed_answers.append(q_data)
-
-        return Response({
-            "attempt_id": attempt.attempt_id,
-            "quiz_id": quiz.quiz_id,
-            "quiz_name": quiz.title,
-            "student_id": student.student_id,
-            "score": attempt.score,
-            "total_questions": total_questions,
-            "result": attempt.result,
-            "question_answer": attempt.question_answer,
-            "detailed_answers": detailed_answers,
-            "percentage": round(percentage, 2),
-            "rank": rank,
-            "attempt_date": attempt.created_at.date(),
-            "attempt_time": str(attempt.created_at.time()),
-            "quiz_duration": quiz.time_limit_minutes,
-            "total_time": attempt.created_at,
-        }, status=status.HTTP_200_OK)
+        # ✅ Conditionally show result only after quiz ends
+        show_result = attempt.created_at >= attempt.quiz.quiz_date + timedelta(minutes=attempt.quiz.time_limit_minutes)
+        print("show_result:", show_result)
+        if show_result:
+            return Response({
+                "attempt_id": attempt.attempt_id,
+                "quiz_id": quiz.quiz_id,
+                "quiz_name": quiz.title,
+                "student_id": student.student_id,
+                "student_name": student.name,
+                "student_register_number": student.register_number,
+                "score": attempt.score,
+                "total_questions": total_questions,
+                "result": attempt.result,
+                "question_answer": attempt.question_answer,
+                "detailed_answers": detailed_answers,
+                "percentage": round(percentage, 2),
+                "rank": rank,
+                "attempt_date": attempt.created_at.date(),
+                "attempt_time": str(attempt.created_at.time()),
+                "quiz_duration": quiz.time_limit_minutes,
+                "total_time": attempt.created_at,
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                "quiz_id": attempt.quiz.quiz_id,
+                "quiz_title": attempt.quiz.title,
+                "message": "The quiz time is not finished. Result will be available after quiz end time."
+            }, status=status.HTTP_200_OK)
 
 class QuizReminderStudent(APIView):
     permission_classes = [permissions.IsAuthenticated, IsTeacherOrAdmin]

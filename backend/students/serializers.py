@@ -20,7 +20,8 @@ class StudentSerializer(serializers.ModelSerializer):
         fields = [
             'student_id', 'uuid', 'name', 'email', 'phone', 
             'department_id', 'department_name', 'is_deleted','is_verified',
-            'created_at', 'last_modified_at', 'created_by', 'last_modified_by'
+            'created_at', 'last_modified_at', 'created_by', 'last_modified_by',
+            'register_number','class_name','section'
         ]
         read_only_fields = ['student_id', 'uuid', 'created_at', 'last_modified_at']
         extra_kwargs = {
@@ -110,7 +111,7 @@ class StudentBulkUploadSerializer(serializers.Serializer):
             df = pd.read_excel(file)
 
             # Required columns
-            required_columns = ['name', 'email',"mobile_number", 'department_name', 'department_code']
+            required_columns = ['register_number','class_name','section','name', 'email',"mobile_number", 'department_name', 'department_code']
             missing_columns = [col for col in required_columns if col not in df.columns]
             if missing_columns:
                 raise serializers.ValidationError(f"Missing required columns: {', '.join(missing_columns)}")
@@ -118,6 +119,9 @@ class StudentBulkUploadSerializer(serializers.Serializer):
             for index, row in df.iterrows():
                 try:
                     row_num = index + 2  # Excel row number
+                    register_number = str(row.get('register_number', '')).strip()
+                    class_name = str(row.get('class_name', '')).strip()
+                    section = str(row.get('section', '')).strip()
                     name = str(row.get('name', '')).strip()
                     email = str(row.get('email', '')).strip().lower()
                     phone = str(row.get('mobile_number', '')).strip() if pd.notna(row.get('mobile_number')) else None
@@ -161,7 +165,10 @@ class StudentBulkUploadSerializer(serializers.Serializer):
                         phone=phone,
                         department_id=department.department_id,  # ✅ Use department.department_id here
                         created_by=user,
-                        last_modified_by=user
+                        last_modified_by=user,
+                        register_number=register_number,
+                        class_name=class_name,
+                        section=section
                     )
 
                     success_count += 1
