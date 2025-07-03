@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress
+  Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress, Alert
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -53,13 +53,16 @@ const QuizSection = () => {
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [isViewModalOpen, setViewModalOpen] = useState(false);
   const [isQuestionsLoading, setQuestionsLoading] = useState(false);
+  const [replacementCount, setReplacementCount] = useState(0);
 
   const fetchQuizzes = useCallback(async () => {
     setIsLoading(true);
     setError('');
     try {
-      const quizzesData = await quizService.getUserquiz(activeTab);
-      console.log('Fetched quizzes:', quizzesData);
+      const response = await quizApi.getAll({ filter: activeTab === 'all' ? undefined : activeTab });
+      const quizzesData = Array.isArray(response.data)
+        ? response.data
+        : (response.data.results || []);
       
       if (!Array.isArray(quizzesData)) {
         console.error('Invalid quiz data format:', quizzesData);
@@ -104,7 +107,7 @@ const QuizSection = () => {
     
     loadData();
     // Only re-run when isCreating changes, not on function reference changes
-  }, [isCreating]);
+  }, [isCreating, fetchQuizzes, fetchDepartments]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -114,11 +117,31 @@ const QuizSection = () => {
     setIsCreating(true);
   };
 
+  const handleCreateQuiz = async (quizData) => {
+    const response = await quizService.createQuiz(quizData);
+    if (!response || !response.quiz_id) {
+      throw new Error("Failed to create quiz or get a valid quiz_id");
+    }
+    return response;
+  };
+
+  const handleUploadFiles = async (quizId, files, onUploadProgress) => {
+    if (!quizId) {
+      throw new Error("Missing quizId for file upload");
+    }
+    return await quizService.uploadFilesForQuiz(quizId, files, onUploadProgress);
+  };
+
+  const handleFinalizeQuiz = async (quizId) => {
+    console.log(`Quiz ${quizId} finalization step.`);
+    return Promise.resolve();
+  };
+
   const handleCancelCreate = () => {
     setIsCreating(false);
   };
 
-  const handleCreateQuiz = async (formData, onUploadProgress) => {
+  const handleCreateQuizSubmit = async (formData, onUploadProgress) => {
     try {
       setIsCreating(true);
       
@@ -201,6 +224,7 @@ const QuizSection = () => {
       setQuestionsLoading(true);
       setSelectedQuiz(null);
       setViewModalOpen(true);
+      setReplacementCount(0); // Reset count when modal opens
       
       // Use getQuizDetails to get complete quiz data with questions
       const quizData = await quizService.getQuizDetails(quizId);
@@ -251,10 +275,46 @@ const QuizSection = () => {
     }
   };
 
+  const refreshQuizView = async () => {
+    if (!selectedQuiz) return;
+    try {
+      setQuestionsLoading(true);
+      const quizData = await quizService.getQuizDetails(selectedQuiz.quiz_id);
+      
+      const questionsToDisplay = quizData.current_questions || [];
+      const processedQuestions = questionsToDisplay.map((q) => {
+        const processed = { ...q };
+        processed.question_text = q.question || q.question_text || 'No question text';
+        processed.type = q.question_type || q.type || 'mcq';
+        if (processed.type === 'mcq' && q.options && typeof q.options === 'object') {
+          const correctKey = q.correct_answer?.toString().split(':')[0].trim();
+          processed.options = Object.entries(q.options).map(([key, text]) => ({
+            option_text: text,
+            is_correct: key === correctKey,
+            id: key
+          }));
+        } else {
+          processed.options = [];
+        }
+        return processed;
+      });
+
+      setSelectedQuiz({
+        ...quizData,
+        questions: processedQuestions
+      });
+
+    } catch (error) {
+      console.error('Failed to refresh quiz details:', error);
+      showSnackbar('Failed to refresh quiz questions.', 'error');
+    } finally {
+      setQuestionsLoading(false);
+    }
+  };
+
   const handleReplaceQuestion = async (questionNumber) => {
     if (!selectedQuiz) return;
     
-    // Add validation to prevent sending bad requests
     if (typeof questionNumber === 'undefined' || questionNumber === null) {
       console.error("Attempted to replace a question with an invalid number:", questionNumber);
       showSnackbar('Cannot replace question: Invalid question number.', 'error');
@@ -263,9 +323,18 @@ const QuizSection = () => {
 
     try {
       await quizService.replaceQuestion(selectedQuiz.quiz_id, questionNumber);
-      showSnackbar('Question replaced successfully!', 'success');
-      // Refresh the view
-      await handleViewQuiz(selectedQuiz.quiz_id);
+      
+      const newCount = replacementCount + 1;
+      setReplacementCount(newCount);
+
+      if (newCount >= 5) {
+        showSnackbar('Last replacement used. No more exchanges available for this quiz.', 'warning');
+      } else {
+        showSnackbar('Question replaced successfully!', 'success');
+      }
+
+      await refreshQuizView();
+
     } catch (error) {
       console.error('Failed to replace question:', error);
       showSnackbar('Failed to replace question', 'error');
@@ -428,11 +497,11 @@ const QuizSection = () => {
       <Container maxWidth={false} sx={{ mt: 4, mb: 4 }}>
         {isCreating ? (
           <QuizFormModern 
-            onSave={{ 
-              createQuiz: quizService.createQuiz, 
-              uploadFile: quizService.uploadFileForQuiz 
+            onSave={{
+              createQuiz: handleCreateQuiz,
+              uploadFiles: handleUploadFiles,
+              finalizeQuiz: handleFinalizeQuiz
             }} 
-            className="glass-effect" 
             onCancel={handleCancelCreate} 
             departments={departments} 
           />
@@ -516,6 +585,11 @@ const QuizSection = () => {
             {selectedQuiz?.title}
           </DialogTitle>
           <DialogContent dividers>
+            {selectedQuiz && !selectedQuiz.is_published && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Only 5 replacements are allowed for this quiz. You have {5 - replacementCount} remaining.
+              </Alert>
+            )}
             {isQuestionsLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
                 <CircularProgress />
@@ -528,13 +602,15 @@ const QuizSection = () => {
                       <Typography variant="subtitle1" sx={{ fontWeight: 'bold', flexGrow: 1 }}>
                         {index + 1}. {question.question_text}
                       </Typography>
-                      <IconButton 
-                        edge="end" 
-                        aria-label="replace" 
-                        onClick={() => handleReplaceQuestion(question.question_number)}
-                      >
-                        <ReplayIcon />
-                      </IconButton>
+                      {selectedQuiz && !selectedQuiz.is_published && replacementCount < 5 && (
+                        <IconButton 
+                          edge="end" 
+                          aria-label="replace" 
+                          onClick={() => handleReplaceQuestion(question.question_number)}
+                        >
+                          <ReplayIcon />
+                        </IconButton>
+                      )}
                     </Box>
                     
                     {/* Options for MCQ */}
@@ -573,17 +649,8 @@ const QuizSection = () => {
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={closeViewModal}>Close</Button>
-            <Button 
-              variant="contained" 
-              onClick={() => {
-                if (selectedQuiz) {
-                  navigate(`/PUBLISH-quiz/${selectedQuiz.quiz_id}`);
-                  closeViewModal();
-                }
-              }}
-            >
-              Proceed to PUBLISH
+            <Button onClick={closeViewModal} sx={{ textTransform: 'none' }}>
+              Close
             </Button>
           </DialogActions>
         </Dialog>

@@ -4,13 +4,13 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(255, 255, 255, 0.88);
+    background-color: rgba(255, 255, 255, 0.9);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 9999;
-    backdrop-filter: blur(8px);
-    animation: fadeIn 0.3s ease-in-out;
+    backdrop-filter: blur(10px);
+    animation: fadeIn 0.5s ease-in-out;
     padding: 20px;
     box-sizing: border-box;
 }
@@ -46,9 +46,9 @@
 
 .loader-content {
     text-align: center;
-    animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    animation: popIn 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
     min-width: 280px;
 }
 
@@ -67,49 +67,36 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    margin: 0 auto 20px;
-}
-
-/* Responsive image container */
-@media (max-width: 768px) {
-    .loader-image-container {
-        width: 150px;
-        height: 150px;
-    }
-}
-
-@media (max-width: 480px) {
-    .loader-image-container {
-        width: 120px;
-        height: 120px;
-        margin: 0 auto 15px;
-    }
-}
-
-@media (max-width: 360px) {
-    .loader-image-container {
-        width: 100px;
-        height: 100px;
-    }
+    margin: 0 auto;
+    border-radius: 50%;
+    animation: bobbing 3s ease-in-out infinite;
 }
 
 .loader-image {
     width: 100%;
     height: 100%;
-    /* animation: spin 2.5s linear infinite; */ /* Rotation removed */
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.loader-percentage-container {
+    margin-top: -20px;
+    margin-bottom: 20px;
+    position: relative;
+    text-align: center;
 }
 
 .loader-percentage {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translate(-50%, -50%);
     font-family: 'Poppins', sans-serif;
-    font-size: 34px;
-    font-weight: 600;
-    color: #120e0e;
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-    z-index: 2;
+    font-size: 32px;
+    font-weight: 700;
+    color: #1a1a1a;
+    text-shadow: none;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 16px;
+    padding: 4px 16px;
+    display: inline-block;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 /* Responsive percentage text */
@@ -117,106 +104,74 @@
     .loader-percentage {
         font-size: 28px;
     }
+    .loader-image-container, .loader-percentage-container {
+        width: 150px; height: 150px;
+    }
 }
 
 @media (max-width: 480px) {
     .loader-percentage {
         font-size: 24px;
     }
-}
-
-@media (max-width: 360px) {
-    .loader-percentage {
-        font-size: 20px;
+     .loader-image-container, .loader-percentage-container {
+        width: 120px; height: 120px;
     }
 }
 
 .progress-bar-container {
-    margin: 20px auto;
+    margin: 25px auto;
     width: 100%;
-    max-width: 280px;
-    padding: 0 10px;
-}
-
-/* Responsive progress bar */
-@media (max-width: 768px) {
-    .progress-bar-container {
-        max-width: 240px;
-        margin: 15px auto;
-    }
-}
-
-@media (max-width: 480px) {
-    .progress-bar-container {
-        max-width: 200px;
-        margin: 12px auto;
-        padding: 0 5px;
-    }
-}
-
-@media (max-width: 360px) {
-    .progress-bar-container {
-        max-width: 180px;
-        margin: 10px auto;
-    }
+    max-width: 300px;
 }
 
 .progress-bar {
     width: 100%;
-    height: 8px;
-    background-color: rgba(0, 0, 0, 0.1);
-    border-radius: 4px;
+    height: 12px;
+    background-color: #e0e0e0;
+    border-radius: 6px;
     overflow: hidden;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* Responsive progress bar height */
-@media (max-width: 480px) {
-    .progress-bar {
-        height: 6px;
-    }
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
+    position: relative;
 }
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #2196f3, #64b5f6);
-    border-radius: 4px;
-    transition: width 0.3s ease, background-color 0.3s ease;
-    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.4);
-    animation: progressGlow 2s ease-in-out infinite;
+    background: linear-gradient(90deg, #42a5f5, #1e88e5);
+    border-radius: 6px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(30, 136, 229, 0.5);
+}
+
+.progress-indeterminate {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.4),
+        transparent
+    );
+    animation: indeterminate-progress 2s infinite ease-in-out;
 }
 
 .loader-text {
     font-family: 'Poppins', sans-serif;
     font-size: 18px;
-    color: #120e0e;
+    color: #333;
     letter-spacing: 0.5px;
-    margin-top: 15px;
-    transition: color 0.3s ease;
-    line-height: 1.4;
-    padding: 0 10px;
+    margin-top: 20px;
+    transition: all 0.3s ease;
+    line-height: 1.5;
+    padding: 0 15px;
 }
 
 /* Responsive text */
-@media (max-width: 768px) {
-    .loader-text {
-        font-size: 16px;
-        margin-top: 12px;
-    }
-}
-
 @media (max-width: 480px) {
     .loader-text {
-        font-size: 14px;
-        margin-top: 10px;
-        padding: 0 5px;
-    }
-}
-
-@media (max-width: 360px) {
-    .loader-text {
-        font-size: 13px;
-        margin-top: 8px;
+        font-size: 16px;
     }
 }
 
@@ -231,17 +186,18 @@
 }
 
 @keyframes popIn {
-    from { transform: scale(0.5); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
+    0% { transform: scale(0.8); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
 }
 
-@keyframes progressGlow {
-    0%, 100% {
-        box-shadow: 0 2px 4px rgba(33, 150, 243, 0.4);
-    }
-    50% {
-        box-shadow: 0 2px 8px rgba(33, 150, 243, 0.6), 0 0 16px rgba(33, 150, 243, 0.3);
-    }
+@keyframes bobbing {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+@keyframes indeterminate-progress {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
 }
 
 /* High DPI displays */

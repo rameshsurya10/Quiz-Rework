@@ -17,7 +17,12 @@ import {
   List,
   ListItem,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  Container,
+  Divider,
+  Chip,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
@@ -26,61 +31,277 @@ import {
   Person as PersonIcon,
   Logout as LogoutIcon,
   School as SchoolIcon,
-  Assignment as AssignmentIcon
+  Assignment as AssignmentIcon,
+  Assessment as AssessmentIcon,
+  TrendingUp as TrendingUpIcon,
+  Timer as TimerIcon,
+  CheckCircle as CheckIcon,
+  PendingActions as PendingIcon,
+  Visibility as ViewIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import apiService from '../../api';
+import { motion, AnimatePresence } from 'framer-motion';
+import { quizApi } from '../../services/api';
 
 const SimpleStudentDashboard = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   
+  const [studentDetails, setStudentDetails] = useState(null);
+
+  // Get student name from localStorage with better fallback logic
+  const getStudentName = () => {
+    // First check if we have API data
+    if (studentDetails) {
+      const apiName = studentDetails.name || studentDetails.full_name || studentDetails.first_name || 
+                     (studentDetails.user && (studentDetails.user.name || studentDetails.user.first_name));
+      if (apiName && apiName.trim() && !apiName.includes('@')) {
+        return apiName.trim();
+      }
+    }
+
+    // Check all possible sources for student name
+    const directName = localStorage.getItem('user_name') || 
+                      localStorage.getItem('student_name') || 
+                      localStorage.getItem('name');
+    
+    if (directName && directName !== 'null' && directName !== 'undefined' && !directName.includes('@')) {
+      return directName;
+    }
+
+    // Parse user object from localStorage
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (user && typeof user === 'object') {
+        // Try different name fields
+        const possibleNames = [
+          user.name,
+          user.full_name,
+          user.first_name,
+          user.username,
+          user.student_name,
+          user.display_name
+        ];
+        
+        for (const name of possibleNames) {
+          if (name && typeof name === 'string' && name.trim() && 
+              name !== 'null' && name !== 'undefined' && !name.includes('@')) {
+            return name.trim();
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Error parsing user data:', error);
+    }
+
+    // Extract name from email if that's all we have
+    const email = getStudentEmail();
+    if (email && email.includes('@') && email !== 'student@example.com') {
+      const nameFromEmail = email.split('@')[0];
+      
+      // Special handling for email pattern like "deepikaks75488+32@gmail.com"
+      let cleanName = nameFromEmail;
+      
+      // Remove everything after + sign if present
+      if (cleanName.includes('+')) {
+        cleanName = cleanName.split('+')[0];
+      }
+      
+      // Clean up the email username (remove numbers at the end, dots, etc.)
+      cleanName = cleanName
+        .replace(/[0-9]+$/g, '') // Remove trailing numbers
+        .replace(/[._-]/g, ' ') // Replace dots, underscores, dashes with spaces
+        .trim();
+      
+      if (cleanName && cleanName.length > 2) {
+        // Capitalize first letter of each word
+        return cleanName.split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+      }
+    }
+
+    return 'Student';
+  };
+
+  const getStudentEmail = () => {
+    // Check direct email storage
+    const directEmail = localStorage.getItem('user_email') || 
+                       localStorage.getItem('student_email') || 
+                       localStorage.getItem('email');
+    
+    if (directEmail && directEmail !== 'null' && directEmail !== 'undefined') {
+      return directEmail;
+    }
+
+    // Parse user object
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (user && typeof user === 'object') {
+        return user.email || user.student_email || user.username || 'student@example.com';
+      }
+    } catch (error) {
+      console.log('Error parsing user email:', error);
+    }
+
+    return 'student@example.com';
+  };
+  
   const [userInfo, setUserInfo] = useState({
-    email: localStorage.getItem('user_email') || '',
+    name: getStudentName(),
+    email: getStudentEmail(),
     studentId: localStorage.getItem('student_id') || '',
     role: 'student'
   });
   const [quizLink, setQuizLink] = useState('');
   const [availableQuizzes, setAvailableQuizzes] = useState([]);
+  const [quizAttempts, setQuizAttempts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    loadAvailableQuizzes();
+    loadDashboardData();
     // Check for pending quiz from login
     const pendingQuizId = localStorage.getItem('pending_quiz_id');
     if (pendingQuizId) {
       localStorage.removeItem('pending_quiz_id');
       navigate(`/quiz/take/${pendingQuizId}`);
     }
+
+    // Refresh user info in case it was updated after login
+    setUserInfo(prev => ({
+      ...prev,
+      name: getStudentName(),
+      email: getStudentEmail()
+    }));
   }, [navigate]);
+
+  // Update userInfo when studentDetails changes
+  useEffect(() => {
+    if (studentDetails) {
+      setUserInfo(prev => ({
+        ...prev,
+        name: getStudentName(),
+        email: getStudentEmail()
+      }));
+    }
+  }, [studentDetails]);
+
+  const loadDashboardData = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      // Load student details, available quizzes and attempts in parallel
+      await Promise.all([
+        loadStudentDetails(),
+        loadAvailableQuizzes(),
+        loadQuizAttempts()
+      ]);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      setError('Failed to load dashboard data. Please refresh the page.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStudentDetails = async () => {
+    try {
+      // Try to get student ID from localStorage or token
+      const studentId = localStorage.getItem('student_id') || localStorage.getItem('user_id');
+      
+      if (!studentId) {
+        console.log('No student ID found, skipping profile fetch');
+        return;
+      }
+
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/students/${studentId}/`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Student details received:', data);
+        setStudentDetails(data);
+        
+        // Update userInfo with actual API data
+        setUserInfo(prev => ({
+          ...prev,
+          name: data.name || data.full_name || data.first_name || data.user?.name || prev.name,
+          email: data.email || data.user?.email || prev.email,
+          studentId: data.student_id || data.id || prev.studentId
+        }));
+      } else {
+        console.error('Failed to fetch student details:', response.status);
+      }
+    } catch (error) {
+      console.error('Error loading student details:', error);
+    }
+  };
 
   const loadAvailableQuizzes = async () => {
     try {
-      // Try student-specific endpoint first, fallback to general if needed
-      let response;
-      try {
-        response = await apiService.get('/api/students/available-quizzes/');
-      } catch (studentEndpointError) {
-        console.log('Student endpoint not available, using general quiz endpoint');
-        response = await apiService.get('/api/quiz/');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/students/available_quizzes/`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Available quizzes received:', data);
+        
+        let allQuizzes = [];
+        if (data && (data.current_quizzes || data.upcoming_quizzes)) {
+          allQuizzes = [
+            ...(data.current_quizzes || []),
+            ...(data.upcoming_quizzes || [])
+          ];
+        } else if (Array.isArray(data)) {
+          allQuizzes = data;
+        }
+        
+        const attemptedQuizIds = new Set(quizAttempts.map(a => a.quiz?.id || a.quiz?.quiz_id));
+        const filteredQuizzes = allQuizzes.filter(q => !attemptedQuizIds.has(q.quiz_id));
+
+        setAvailableQuizzes(filteredQuizzes);
+        
+      } else {
+        console.error('Failed to load available quizzes:', response.status);
+        setError('Could not load quizzes.');
       }
-      
-      const quizzes = response.data.results || response.data || [];
-      
-      // Ensure quizzes is an array
-      if (!Array.isArray(quizzes)) {
-        console.warn('Quizzes data is not an array:', quizzes);
-        setAvailableQuizzes([]);
-        return;
-      }
-      
-      const publishedQuizzes = quizzes.filter(quiz => 
-        quiz && typeof quiz === 'object' && quiz.is_published
-      );
-      setAvailableQuizzes(publishedQuizzes.slice(0, 5)); // Show recent 5
     } catch (error) {
-      console.error('Error loading quizzes:', error);
-      setAvailableQuizzes([]);
+      console.error('Error loading available quizzes:', error);
+      setError('An error occurred while fetching quizzes.');
+    }
+  };
+
+  const loadQuizAttempts = async () => {
+    try {
+      const response = await quizApi.getAllQuizAttempts();
+      const data = response.data;
+      
+      // Handle different response structures
+      const attempts = data.results || data.data || data || [];
+      
+      if (Array.isArray(attempts)) {
+        // Sort by attempt date (newest first) and get recent attempts
+        const sortedAttempts = attempts.sort((a, b) => 
+          new Date(b.attempted_at || b.created_at) - new Date(a.attempted_at || a.created_at)
+        );
+        setQuizAttempts(sortedAttempts);
+      } else {
+        console.warn('Quiz attempts data is not an array:', attempts);
+        setQuizAttempts([]);
+      }
+    } catch (error) {
+      console.error('Error loading quiz attempts:', error);
+      setQuizAttempts([]);
     }
   };
 
@@ -126,7 +347,7 @@ const SimpleStudentDashboard = () => {
       
       if (!quizId) {
         console.error('Could not extract quiz ID from:', quizLink);
-        alert('Invalid quiz link format. Please check the link and try again.');
+        setError('Invalid quiz link format. Please check the link and try again.');
         return;
       }
       
@@ -136,23 +357,27 @@ const SimpleStudentDashboard = () => {
       
     } catch (error) {
       console.error('Error with quiz link:', error);
-      alert('Could not access quiz. Please check the link.');
+      setError('Could not access quiz. Please check the link.');
     }
   };
 
   const handleTakeQuiz = async (quizId) => {
     try {
-      // Get the quiz questions for taking the quiz (not attempt results)
+      // Check if student already attempted this quiz
+      const hasAttempted = quizAttempts.some(attempt => 
+        attempt.quiz_id === parseInt(quizId) || attempt.quiz?.quiz_id === parseInt(quizId)
+      );
+      
+      if (hasAttempted) {
+        setError('You have already attempted this quiz. Each quiz can only be taken once.');
+        return;
+      }
+
+      // Get the quiz questions for taking the quiz
       console.log(`Getting quiz questions for quiz ID: ${quizId}`);
-      console.log('Current user info:', {
-        token: localStorage.getItem('token') ? 'exists' : 'missing',
-        userRole: localStorage.getItem('userRole'),
-        userEmail: localStorage.getItem('user_email'),
-        user: localStorage.getItem('user')
-      });
       
       // Use the correct endpoint to get quiz questions for taking
-      const response = await apiService.get(`/api/quiz/${quizId}/`);
+      const response = await quizApi.getForStudent(quizId);
       
       console.log('Quiz data response:', response.data);
       
@@ -177,310 +402,526 @@ const SimpleStudentDashboard = () => {
         errorMessage = 'You do not have permission to access this quiz. Please make sure you are logged in as a student.';
       } else if (error.response?.status === 401) {
         errorMessage = 'Authentication required. Please log in again.';
-        // Clear invalid tokens and redirect to login
-        localStorage.clear();
-        navigate('/student-login');
-        return;
       } else if (error.response?.status === 500) {
         errorMessage = 'Server error. Please try again later or contact support.';
-      } else if (!error.response) {
-        errorMessage = 'Network error. Please check your connection and try again.';
       } else {
-        errorMessage += `Error ${error.response.status}: ${error.response.statusText}`;
+        errorMessage += 'Please check the quiz link and try again.';
       }
       
-      alert(errorMessage);
+      setError(errorMessage);
     }
   };
+
+  const handleViewResult = (attempt) => {
+    // Check if results should be available (10 minutes after quiz end time)
+    const quizEndTime = new Date(attempt.attempted_at);
+    const resultAvailableTime = new Date(quizEndTime.getTime() + (10 * 60 * 1000)); // 10 minutes later
+    const now = new Date();
+    
+    if (now >= resultAvailableTime) {
+      navigate(`/quiz/result/${attempt.quiz_id || attempt.quiz?.quiz_id}`);
+    } else {
+      const remainingTime = Math.ceil((resultAvailableTime - now) / (60 * 1000));
+      setError(`Results will be available in ${remainingTime} minutes after quiz completion.`);
+    }
+  };
+
+  const isResultAvailable = (attempt) => {
+    const quizEndTime = new Date(attempt.attempted_at);
+    const resultAvailableTime = new Date(quizEndTime.getTime() + (10 * 60 * 1000));
+    return new Date() >= resultAvailableTime;
+  };
+
+  const getTimeUntilResult = (attempt) => {
+    const quizEndTime = new Date(attempt.attempted_at);
+    const resultAvailableTime = new Date(quizEndTime.getTime() + (10 * 60 * 1000));
+    const now = new Date();
+    const remainingMs = resultAvailableTime - now;
+    
+    if (remainingMs <= 0) return 'Available now';
+    
+    const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+    return `${remainingMinutes} min`;
+  };
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Paper elevation={8} sx={{ p: 6, borderRadius: 4, textAlign: 'center' }}>
+          <CircularProgress size={60} sx={{ mb: 3 }} />
+          <Typography variant="h6" color="primary" sx={{ fontWeight: 600 }}>
+            Loading Dashboard...
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  }
 
   return (
     <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
-        p: 3,
+        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+        py: 3,
       }}
     >
+      <Container maxWidth="lg">
+        {/* Error Alert */}
+        {error && (
+          <Alert 
+            severity="error" 
+            onClose={() => setError('')} 
+            sx={{ mb: 3, borderRadius: 3 }}
+          >
+            {error}
+          </Alert>
+        )}
+
       {/* Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 4,
-          background: alpha(theme.palette.background.paper, 0.95),
-          backdropFilter: 'blur(20px)',
-          borderRadius: 3,
-          p: 3,
-          border: `1px solid ${alpha('#45b7d1', 0.2)}`,
-        }}
-      >
-        <Box>
-          <Typography
-            variant="h4"
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <Paper
+            elevation={6}
             sx={{
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #45b7d1, #96c93d)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              mb: 1,
+              p: 3,
+              mb: 4,
+              background: 'linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%)',
+              color: 'white',
+              borderRadius: 3,
+              position: 'relative',
+              overflow: 'hidden'
             }}
           >
+            <Box sx={{ position: 'relative', zIndex: 2 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Avatar sx={{ bgcolor: alpha('#fff', 0.2), width: 56, height: 56 }}>
+                    <PersonIcon fontSize="large" />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5, color: 'white' }}>
             Student Portal
           </Typography>
-          <Typography variant="body1" sx={{ color: 'text.secondary' }}>
-            Welcome, {userInfo.email}
+                    <Typography variant="h6" sx={{ opacity: 0.9, color: 'white' }}>
+                      Welcome, {userInfo.name}
           </Typography>
+                  </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar
+                <IconButton
+                  onClick={handleLogout}
             sx={{
-              background: 'linear-gradient(135deg, #45b7d1 0%, #96c93d 100%)',
-            }}
-          >
-            <PersonIcon />
-          </Avatar>
-          <IconButton onClick={handleLogout} sx={{ color: 'text.secondary' }}>
-            <LogoutIcon />
-          </IconButton>
-        </Box>
-      </Box>
-
-      <Grid container spacing={3}>
-        {/* Quiz Link Access */}
-        <Grid item xs={12} md={8}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <Card
-              sx={{
-                background: alpha(theme.palette.background.paper, 0.95),
-                backdropFilter: 'blur(20px)',
-                border: `1px solid ${alpha('#45b7d1', 0.2)}`,
-                borderRadius: 3,
-              }}
-            >
-              <CardContent sx={{ p: 3 }}>
-                <Typography
-                  variant="h5"
-                  sx={{
-                    fontWeight: 600,
-                    mb: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1
+                    color: 'white',
+                    bgcolor: alpha('#fff', 0.1),
+                    '&:hover': {
+                      bgcolor: alpha('#fff', 0.2),
+                      transform: 'scale(1.05)',
+                    }
                   }}
                 >
-                  <LinkIcon color="primary" />
+            <LogoutIcon />
+          </IconButton>
+              </Stack>
+      </Box>
+
+            {/* Decorative background */}
+            <Box
+              sx={{
+                position: 'absolute',
+                top: -50,
+                right: -50,
+                width: 200,
+                height: 200,
+                background: alpha('#fff', 0.1),
+                borderRadius: '50%',
+                zIndex: 1
+              }}
+            />
+          </Paper>
+        </motion.div>
+
+        <Grid container spacing={4}>
+          {/* Left Side - Quiz Access */}
+          <Grid item xs={12} md={8}>
+            {/* Quiz Link Section */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+            >
+              <Paper
+                elevation={8}
+                  sx={{
+                  p: 4,
+                  mb: 4,
+                  borderRadius: 4,
+                  background: alpha('#fff', 0.98),
+                  backdropFilter: 'blur(20px)',
+                  border: `1px solid ${alpha('#4CAF50', 0.1)}`,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                  <Avatar sx={{ bgcolor: 'primary.main', width: 48, height: 48 }}>
+                    <LinkIcon fontSize="large" />
+                  </Avatar>
+                  <Typography variant="h5" sx={{ fontWeight: 600, color: 'primary.main' }}>
                   Access Quiz by Link
                 </Typography>
+                </Box>
                 
-                <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+                <Stack direction="row" spacing={2} alignItems="center">
                   <TextField
                     fullWidth
-                    placeholder="Paste your quiz link here..."
+                    variant="outlined"
+                    placeholder="http://localhost:3000/quiz/207/join/"
                     value={quizLink}
                     onChange={(e) => setQuizLink(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleQuizLinkSubmit()}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: alpha('#e3f2fd', 0.3),
+                        borderRadius: 3,
+                        '&:hover': {
+                          backgroundColor: alpha('#e3f2fd', 0.5),
+                        },
+                        '&.Mui-focused': {
+                          backgroundColor: alpha('#e3f2fd', 0.7),
+                        }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: '#333',
+                        fontWeight: 500
+                      }
+                    }}
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
-                          <LinkIcon color="action" />
+                          <LinkIcon color="primary" />
                         </InputAdornment>
                       ),
-                    }}
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 2,
-                      },
                     }}
                   />
                   <Button
                     variant="contained"
                     onClick={handleQuizLinkSubmit}
                     disabled={!quizLink.trim()}
-                    startIcon={<PlayIcon />}
                     sx={{
-                      px: 3,
-                      borderRadius: 2,
-                      background: 'linear-gradient(135deg, #45b7d1 0%, #96c93d 100%)',
+                      px: 4,
+                      py: 1.5,
+                      borderRadius: 3,
+                      background: 'linear-gradient(45deg, #4CAF50, #8BC34A)',
+                      color: 'white',
+                      fontWeight: 600,
                       '&:hover': {
-                        background: 'linear-gradient(135deg, #3a9bc1 0%, #85b82d 100%)',
-                      },
+                        background: 'linear-gradient(45deg, #45a049, #7cb342)',
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 8px 25px rgba(76, 175, 80, 0.3)',
+                      }
                     }}
+                    startIcon={<PlayIcon />}
                   >
                     Start Quiz
                   </Button>
                 </Stack>
 
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" sx={{ mt: 2, fontStyle: 'italic', color: '#666' }}>
                   💡 Paste the quiz link provided by your teacher to start the test
                 </Typography>
-              </CardContent>
-            </Card>
+              </Paper>
           </motion.div>
-        </Grid>
 
-        {/* Student Info */}
-        <Grid item xs={12} md={4}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-          >
-            <Card
-              sx={{
-                background: alpha(theme.palette.background.paper, 0.95),
-                backdropFilter: 'blur(20px)',
-                border: `1px solid ${alpha('#45b7d1', 0.2)}`,
-                borderRadius: 3,
-                height: 'fit-content'
-              }}
+            {/* Available Quizzes */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <CardContent sx={{ p: 3 }}>
-                <Typography
-                  variant="h6"
-                  sx={{
-                    fontWeight: 600,
-                    mb: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1
-                  }}
-                >
-                  <PersonIcon color="primary" />
-                  Student Details
-                </Typography>
-                
-                <Stack spacing={2}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Email
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {userInfo.email}
-                    </Typography>
-                  </Box>
-                  
-                  {userInfo.studentId && (
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">
-                        Student ID
-                      </Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {userInfo.studentId}
-                      </Typography>
-                    </Box>
-                  )}
-                  
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Role
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 500, textTransform: 'capitalize' }}>
-                      {userInfo.role}
-                    </Typography>
-                  </Box>
-                </Stack>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </Grid>
-
-        {/* Available Quizzes */}
-        <Grid item xs={12}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
-            <Card
-              sx={{
-                background: alpha(theme.palette.background.paper, 0.95),
-                backdropFilter: 'blur(20px)',
-                border: `1px solid ${alpha('#45b7d1', 0.2)}`,
-                borderRadius: 3,
-              }}
-            >
-              <CardContent sx={{ p: 3 }}>
-                <Typography
-                  variant="h5"
-                  sx={{
-                    fontWeight: 600,
-                    mb: 3,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1
-                  }}
-                >
-                  <QuizIcon color="primary" />
-                  Available Quizzes
-                </Typography>
+              <Paper
+                elevation={8}
+                sx={{
+                  p: 4,
+                  borderRadius: 4,
+                  background: alpha('#fff', 0.98),
+                  backdropFilter: 'blur(20px)',
+                  border: `1px solid ${alpha('#4CAF50', 0.1)}`,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                  <Avatar sx={{ bgcolor: 'secondary.main', width: 48, height: 48 }}>
+                    <QuizIcon fontSize="large" />
+                  </Avatar>
+                  <Typography variant="h5" sx={{ fontWeight: 600, color: 'secondary.main' }}>
+                    Available Quizzes ({availableQuizzes.length})
+                  </Typography>
+                </Box>
 
                 {availableQuizzes.length > 0 ? (
-                  <List>
+                  <List sx={{ p: 0 }}>
                     {availableQuizzes.map((quiz, index) => (
-                      <ListItem
-                        key={quiz.quiz_id}
-                        sx={{
-                          border: `1px solid ${alpha('#45b7d1', 0.1)}`,
-                          borderRadius: 2,
-                          mb: 1,
-                          '&:hover': {
-                            backgroundColor: alpha('#45b7d1', 0.05),
-                          },
-                        }}
-                      >
-                        <ListItemIcon>
-                          <AssignmentIcon color="primary" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={quiz.title}
-                          secondary={`Created: ${new Date(quiz.created_at).toLocaleDateString()}`}
-                        />
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<PlayIcon />}
-                          onClick={() => handleTakeQuiz(quiz.quiz_id)}
-                          sx={{
-                            borderColor: '#45b7d1',
-                            color: '#45b7d1',
+          <motion.div
+                        key={quiz.quiz_id || index}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+          >
+                        <ListItem
+              sx={{
+                            mb: 2,
+                            bgcolor: alpha('#f3e5f5', 0.3),
+                borderRadius: 3,
+                            border: `1px solid ${alpha('#9c27b0', 0.1)}`,
                             '&:hover': {
-                              borderColor: '#3a9bc1',
-                              backgroundColor: alpha('#45b7d1', 0.05),
+                              bgcolor: alpha('#f3e5f5', 0.5),
+                              transform: 'translateX(4px)',
                             },
+                            transition: 'all 0.3s ease',
                           }}
                         >
-                          Start
-                        </Button>
-                      </ListItem>
+                          <ListItemIcon>
+                            <Avatar sx={{ bgcolor: 'secondary.main', width: 40, height: 40 }}>
+                              <AssignmentIcon />
+                            </Avatar>
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={
+                              <Typography variant="h6" sx={{ fontWeight: 600, color: '#333' }}>
+                                {quiz.title}
+                              </Typography>
+                            }
+                            secondary={
+                              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                                <Chip
+                                  icon={<TimerIcon />}
+                                  label={`${quiz.time_limit_minutes || quiz.duration || 'Unknown'} min`}
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                />
+                                <Chip
+                                  icon={<QuizIcon />}
+                                  label={`${quiz.actual_question_count || quiz.total_questions || quiz.question_count || quiz.questions?.length || 'Unknown'} questions`}
+                                  size="small"
+                                  color="secondary"
+                                  variant="outlined"
+                                />
+                              </Stack>
+                            }
+                          />
+                          <Button
+                            variant="contained"
+                            onClick={() => handleTakeQuiz(quiz.quiz_id)}
+                            sx={{
+                              borderRadius: 2,
+                              background: 'linear-gradient(45deg, #9c27b0, #e91e63)',
+                              color: 'white',
+                              fontWeight: 600,
+                              '&:hover': {
+                                background: 'linear-gradient(45deg, #7b1fa2, #c2185b)',
+                              }
+                            }}
+                            startIcon={<PlayIcon />}
+                          >
+                            Take Quiz
+                          </Button>
+                        </ListItem>
+                      </motion.div>
                     ))}
                   </List>
                 ) : (
-                  <Box
-                    sx={{
-                      textAlign: 'center',
-                      py: 4,
-                      color: 'text.secondary'
-                    }}
-                  >
-                    <SchoolIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-                    <Typography variant="body1">
+                  <Box sx={{ textAlign: 'center', py: 6 }}>
+                    <Avatar sx={{ mx: 'auto', mb: 2, bgcolor: 'grey.200', width: 64, height: 64 }}>
+                      <SchoolIcon fontSize="large" sx={{ color: 'grey.400' }} />
+                    </Avatar>
+                    <Typography variant="h6" sx={{ mb: 1, color: '#666' }}>
                       No quizzes available at the moment
                     </Typography>
-                    <Typography variant="body2">
+                    <Typography variant="body2" sx={{ color: '#888' }}>
                       Check back later or use the quiz link from your teacher
                     </Typography>
                   </Box>
                 )}
-              </CardContent>
-            </Card>
+              </Paper>
+            </motion.div>
+          </Grid>
+
+          {/* Right Side - Student Details & Recent Attempts */}
+          <Grid item xs={12} md={4}>
+            {/* Student Details */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+            >
+              <Paper
+                elevation={8}
+                  sx={{
+                  p: 3,
+                  mb: 4,
+                  borderRadius: 4,
+                  background: alpha('#fff', 0.98),
+                  backdropFilter: 'blur(20px)',
+                  border: `1px solid ${alpha('#ff9800', 0.1)}`,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                  <Avatar sx={{ bgcolor: 'warning.main', width: 48, height: 48 }}>
+                    <PersonIcon fontSize="large" />
+                  </Avatar>
+                  <Typography variant="h6" sx={{ fontWeight: 600, color: 'warning.main' }}>
+                  Student Details
+                </Typography>
+                </Box>
+                
+                <Stack spacing={2}>
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#666' }}>
+                      Name
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500, color: '#333' }}>
+                      {userInfo.name}
+                    </Typography>
+                  </Box>
+                  <Divider />
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#666' }}>
+                      Email
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500, color: '#333' }}>
+                      {userInfo.email}
+                    </Typography>
+                  </Box>
+                  <Divider />
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#666' }}>
+                      Role
+                    </Typography>
+                    <Chip
+                      label="Student"
+                      color="success"
+                      variant="outlined"
+                      sx={{ mt: 0.5 }}
+                    />
+                  </Box>
+                </Stack>
+              </Paper>
+          </motion.div>
+
+            {/* Quiz Attempts & Results */}
+          <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              <Paper
+                elevation={8}
+                  sx={{
+                  p: 3,
+                  borderRadius: 4,
+                  background: alpha('#fff', 0.98),
+                  backdropFilter: 'blur(20px)',
+                  border: `1px solid ${alpha('#2196f3', 0.1)}`,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                  <Avatar sx={{ bgcolor: 'info.main', width: 48, height: 48 }}>
+                    <AssessmentIcon fontSize="large" />
+                  </Avatar>
+                  <Typography variant="h6" sx={{ fontWeight: 600, color: 'info.main' }}>
+                    Quiz Attempts ({quizAttempts.length})
+                </Typography>
+                </Box>
+
+                {quizAttempts.length > 0 ? (
+                  <List sx={{ p: 0, maxHeight: 400, overflow: 'auto' }}>
+                    {quizAttempts.map((attempt, index) => (
+                      <motion.div
+                        key={attempt.id || index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                      >
+                        <ListItem
+                          sx={{
+                            mb: 1,
+                            bgcolor: alpha('#e3f2fd', 0.3),
+                            borderRadius: 2,
+                            border: `1px solid ${alpha('#2196f3', 0.1)}`,
+                            '&:hover': {
+                              bgcolor: alpha('#e3f2fd', 0.5),
+                            },
+                            transition: 'all 0.3s ease',
+                          }}
+                        >
+                          <ListItemIcon>
+                            {isResultAvailable(attempt) ? (
+                              <CheckIcon color="success" />
+                            ) : (
+                              <PendingIcon color="warning" />
+                            )}
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={
+                              <Typography variant="body2" sx={{ fontWeight: 600, color: '#333' }}>
+                                {attempt.quiz_title || attempt.quiz?.title || 'Quiz'}
+                              </Typography>
+                            }
+                            secondary={
+                              <Box>
+                                <Typography variant="caption" sx={{ color: '#666' }}>
+                                  Score: {attempt.percentage || 0}%
+                                </Typography>
+                                {!isResultAvailable(attempt) && (
+                                  <Typography variant="caption" sx={{ display: 'block', color: '#f57c00' }}>
+                                    Result in: {getTimeUntilResult(attempt)}
+                                  </Typography>
+                                )}
+                              </Box>
+                            }
+                          />
+                          {isResultAvailable(attempt) && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => handleViewResult(attempt)}
+                              startIcon={<ViewIcon />}
+                              sx={{
+                                borderRadius: 2,
+                                fontWeight: 600
+                              }}
+                            >
+                              View Result
+                        </Button>
+                          )}
+                      </ListItem>
+                      </motion.div>
+                    ))}
+                  </List>
+                ) : (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Avatar sx={{ mx: 'auto', mb: 2, bgcolor: 'grey.200', width: 48, height: 48 }}>
+                      <TrendingUpIcon sx={{ color: 'grey.400' }} />
+                    </Avatar>
+                    <Typography variant="body2" sx={{ color: '#666' }}>
+                      No quiz attempts yet
+                    </Typography>
+                  </Box>
+                )}
+              </Paper>
           </motion.div>
         </Grid>
       </Grid>
+      </Container>
     </Box>
   );
 };

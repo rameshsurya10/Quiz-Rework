@@ -11,12 +11,17 @@ import {
 } from '@chakra-ui/react';
 import { AddIcon, SearchIcon, ChevronDownIcon, EditIcon, ViewIcon, DeleteIcon, CheckIcon, RepeatIcon } from '@chakra-ui/icons';
 import quizService from '../../services/quizService';
+import { CircularProgress } from '@mui/material';
+import { Typography } from '@mui/material';
+import { Edit, Delete, Visibility } from '@mui/icons-material';
+import { quizApi } from '../../services/api';
 
 const QuizListView = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   
@@ -26,27 +31,26 @@ const QuizListView = () => {
   const [isQuestionsLoading, setQuestionsLoading] = useState(false);
 
   useEffect(() => {
-    const fetchQuizzes = async () => {
-      try {
-        setLoading(true);
-        const data = await quizService.getUserquiz();
-        setQuizzes(data || []);
-      } catch (error) {
-        toast({
-          title: 'Error fetching quizzes',
-          description: error.message,
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
+    loadQuizzes();
+  }, []);
 
-    fetchQuizzes();
-  }, [toast]);
-  
+  const loadQuizzes = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await quizApi.getAll();
+      const quizzesData = Array.isArray(response.data)
+        ? response.data
+        : (response.data.results || response.data || []);
+      setQuizzes(quizzesData);
+    } catch (err) {
+      setError('Failed to load quizzes. Please try again.');
+      console.error('Error loading quizzes:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleViewClick = async (quizId) => {
     try {
       setQuestionsLoading(true);
@@ -180,6 +184,33 @@ const QuizListView = () => {
     return matchesSearch && matchesStatus;
   });
 
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box p={3} textAlign="center">
+        <Typography color="error" gutterBottom>{error}</Typography>
+        <Button variant="contained" color="primary" onClick={loadQuizzes}>
+          Retry
+        </Button>
+      </Box>
+    );
+  }
+
+  if (quizzes.length === 0) {
+    return (
+      <Box p={3} textAlign="center">
+        <Typography color="textSecondary">No quizzes available</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Flex 
@@ -228,12 +259,7 @@ const QuizListView = () => {
         </Select>
       </Flex>
       
-      {loading ? (
-        <Box textAlign="center" py={10}>
-          <Spinner size="xl" />
-          <Text mt={4}>Loading quizzes...</Text>
-        </Box>
-      ) : filteredQuizzes.length === 0 ? (
+      {filteredQuizzes.length === 0 ? (
         <Alert status="info" borderRadius="md">
           <AlertIcon />
           {quizzes.length === 0 
@@ -416,14 +442,7 @@ const QuizListView = () => {
           <ModalFooter>
             <Button variant="ghost" onClick={closeViewModal} mr={3}>Close</Button>
             {selectedQuiz && !selectedQuiz.is_published && (
-              <Button colorScheme="blue" onClick={() => {
-                if (selectedQuiz) {
-                  navigate(`/PUBLISH-quiz/${selectedQuiz.id}`);
-                  closeViewModal();
-                }
-              }}>
-                Proceed to PUBLISH
-              </Button>
+              <></>
             )}
             {selectedQuiz && selectedQuiz.is_published && (
               <Button colorScheme="green" variant="outline" onClick={() => {

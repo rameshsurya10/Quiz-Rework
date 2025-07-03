@@ -229,7 +229,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       setUploadProgress(10); // Initial progress
       
       const createdQuiz = await onSave.createQuiz(quizPayload);
-      const quizId = createdQuiz.quiz_id;
+      const quizId = createdQuiz.quiz_id || createdQuiz.id;
 
       if (!quizId) {
         throw new Error('Failed to get quiz_id after creation.');
@@ -242,53 +242,45 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       const filesToUpload = form.files || [];
       if (filesToUpload.length > 0) {
         console.log(`Step 2: Uploading ${filesToUpload.length} files...`);
-        const totalFiles = filesToUpload.length;
-        let filesUploaded = 0;
-
-        for (const file of filesToUpload) {
-          try {
-            // Find the page range for this specific file
-            const fileData = form.filesData?.find(fd => fd.file === file);
-            const pageRange = fileData?.page_range || null;
-            
-            console.log(`Uploading ${file.name} with page range: ${pageRange}`);
-            await onSave.uploadFile(quizId, file, pageRange);
-            filesUploaded++;
-            // Update progress based on number of files uploaded
-            const fileProgress = (filesUploaded / totalFiles) * 60; // Files upload takes 60% of progress
-            setUploadProgress(30 + fileProgress);
-          } catch (uploadError) {
-            console.error(`Failed to upload ${file.name}:`, uploadError);
-            // Decide if you want to continue or stop on first file error
-          }
-        }
+        await onSave.uploadFiles(quizId, filesToUpload, (progressEvent) => {
+          const progress = 30 + (progressEvent.loaded / progressEvent.total) * 60;
+          setUploadProgress(progress);
+        });
+        console.log('Step 2 successful: Files uploaded.');
+        setUploadProgress(90);
       } else {
-          // If no files, just jump progress to near completion
-          setUploadProgress(90);
+        console.log('Step 2 skipped: No files to upload.');
+        setUploadProgress(90); 
       }
 
-      console.log('All steps completed successfully!');
-      setUploadProgress(100);
-      
-      // Use the snackbar from context for success message
-      showSnackbar('Quiz created successfully!', 'success');
+      // Step 3: Finalize quiz (e.g., AI generation might happen here)
+      console.log('Step 3: Finalizing quiz...');
+      // Simulate a small delay for finalization before hitting 100%
+      await new Promise(resolve => setTimeout(resolve, 500)); 
+      setUploadProgress(95);
 
-      // Hold at 100% for a bit, then fade out and redirect
+      // Final step to complete the process
+      await onSave.finalizeQuiz(quizId); // Assuming there's a finalization step
+
+      console.log('Quiz creation process complete!');
+      setUploadProgress(100);
+
       setTimeout(() => {
         setIsFadingOut(true);
         setTimeout(() => {
           setLoading(false);
-          onCancel(); // Call onCancel to go back to the list view
+          onCancel(); // Close form or redirect
+          showSnackbar('Quiz created successfully!', 'success');
         }, 500);
-      }, 1000); // Hold for 1 second to show completion
+      }, 1000);
 
-    } catch (err) {
-      console.error('Quiz creation process failed:', err);
+    } catch (error) {
+      console.error('Quiz creation process failed:', error);
       setLoading(false);
       setErrorDialog({
         open: true,
         title: 'Error',
-        message: err.message || 'An unexpected error occurred.'
+        message: error.message || 'An unexpected error occurred.'
       });
     }
   };
