@@ -60,16 +60,32 @@ const QuizSection = () => {
     setError('');
     try {
       const response = await quizApi.getAll({ filter: activeTab === 'all' ? undefined : activeTab });
-      const quizzesData = Array.isArray(response.data)
-        ? response.data
-        : (response.data.results || []);
-      
-      if (!Array.isArray(quizzesData)) {
-        console.error('Invalid quiz data format:', quizzesData);
+      const data = response.data;
+      let allQuizzes = [];
+
+      // Case 1: categorized quizzes
+      if (data.current_quizzes || data.upcoming_quizzes || data.past_quizzes) {
+        allQuizzes = [
+          ...(data.current_quizzes || []),
+          ...(data.upcoming_quizzes || []),
+          ...(data.past_quizzes || []),
+        ];
+      }
+      // Case 2: plain array
+      else if (Array.isArray(data)) {
+        allQuizzes = data;
+      }
+      // Case 3: paginated results
+      else if (Array.isArray(data.results)) {
+        allQuizzes = data.results;
+      }
+
+      if (!Array.isArray(allQuizzes)) {
+        console.error('Invalid quiz data format:', data);
         throw new Error('Invalid response format from server');
       }
-      
-      setQuizzes(quizzesData);
+
+      setQuizzes(allQuizzes);
     } catch (error) {
       console.error('Error fetching quizzes:', error);
       setError(error.message || 'Failed to fetch quizzes');
@@ -431,7 +447,7 @@ const QuizSection = () => {
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="caption">
-                    Difficulty: {quiz.quiz_type || 'Normal'}
+                    Difficulty: {typeof quiz.quiz_type === 'object' ? 'Mixed' : (quiz.quiz_type || 'Normal')}
                   </Typography>
                 </Grid>
                 <Grid item xs={6}>
