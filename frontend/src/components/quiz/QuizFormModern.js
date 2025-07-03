@@ -30,10 +30,22 @@ import { Autocomplete } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import QuizImage from './QuizImage';
 import FileUpload from './FileUpload';
-
 import CreatingQuizLoader from './CreatingQuizLoader';
-import api from '../../services/api';
 import { useSnackbar } from '../../contexts/SnackbarContext';
+
+// Helper Functions
+const capitalize = (str) => str?.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+
+const formatQuestionType = (value) => {
+  switch (value?.toLowerCase()) {
+    case 'mcq': return 'MCQ';
+    case 'fill': return 'Fill ups';
+    case 'truefalse': return 'True/False';
+    case 'oneline': return 'One Line';
+    case 'mixed': return 'Mixed';
+    default: return value || '';
+  }
+};
 
 const initialFormState = {
   title: '',
@@ -49,78 +61,118 @@ const initialFormState = {
   quiz_date: ''
 };
 
-const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) => {
+const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, initialQuizData = null }) => {
   const { showSnackbar } = useSnackbar();
-  // Add constants for limits
-  const MAX_FILE_SIZE = 60; // 60MB
+
+  const MAX_FILE_SIZE = 60; // MB
   const MAX_QUESTIONS = 35;
-  
+
   const [form, setForm] = useState(initialFormState);
   const [loading, setLoading] = useState(false);
   const [departments, setDepartments] = useState(initialDepartments || []);
   const [deptLoading, setDeptLoading] = useState(!initialDepartments);
   const [errors, setErrors] = useState({});
   const [hasPdf, setHasPdf] = useState(false);
-  // Add state for error dialog
-  const [errorDialog, setErrorDialog] = useState({ open: false, title: '', message: '' });
-
+  const [complexityCounts, setComplexityCounts] = useState({ easy: '', medium: '', hard: '' });
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isFadingOut, setIsFadingOut] = useState(false);
-  const [departmentSelectOpen, setDepartmentSelectOpen] = useState(false);
-  const [isFetchingDepartments, setIsFetchingDepartments] = useState(false);
-  
+  const [errorDialog, setErrorDialog] = useState({ open: false, title: '', message: '' });
+
   useEffect(() => {
     setDepartments(initialDepartments || []);
-    if (initialDepartments) {
-      setDeptLoading(false);
-    }
+    if (initialDepartments) setDeptLoading(false);
   }, [initialDepartments]);
 
+  useEffect(() => {
+    if (initialQuizData) {
+      const {
+        title,
+        description,
+        no_of_questions,
+        time_limit_minutes,
+        complexity,
+        quiz_type,
+        department_id,
+        passing_score,
+        quiz_date,
+        pages = []
+      } = initialQuizData;
+
+      let complexityCountsFromBackend = { easy: '', medium: '', hard: '' };
+      if (typeof complexity === 'object' && complexity !== null) {
+        complexityCountsFromBackend = {
+          easy: complexity.easy || '',
+          medium: complexity.medium || '',
+          hard: complexity.hard || ''
+        };
+      }
+
+      setForm({
+        title: title || '',
+        description: description || '',
+        no_of_questions: no_of_questions?.toString() || '',
+        time_limit_minutes: time_limit_minutes?.toString() || '',
+        complexity: typeof complexity === 'string' ? capitalize(complexity) : 'Mixed',
+        quiz_type: formatQuestionType(quiz_type),
+        department: department_id || '',
+        passing_score: passing_score?.toString() || '',
+        quiz_date: quiz_date ? quiz_date.slice(0, 10) : '',
+        files: [],
+        filesData: pages.map(p => ({
+          filename: p.filename,
+          page_range: p.page_range,
+          is_pdf: true
+        }))
+      });
+
+      setComplexityCounts(complexityCountsFromBackend);
+      setHasPdf(pages.length > 0);
+    }
+  }, [initialQuizData]);
+
   const handleField = useCallback((key, value) => {
-    setForm(prev => ({
-      ...prev,
-      [key]: Array.isArray(prev[key]) ? value : value.target?.value || value
-    }));
-    if (errors[key]) setErrors(prev => {
-      const newErrors = { ...prev };
-      delete newErrors[key];
-      return newErrors;
-    });
+    if (key.startsWith('complexity_')) {
+      const type = key.split('_')[1];
+      setComplexityCounts(prev => ({ ...prev, [type]: value.target.value }));
+    } else {
+      const fieldValue = value && value.target ? value.target.value : value;
+      setForm(prev => ({ ...prev, [key]: fieldValue }));
+    }
+
+    if (errors[key]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[key];
+        return newErrors;
+      });
+    }
   }, [errors]);
 
   const handleFilesSelect = useCallback((selectedFiles) => {
-    // Check if at least one PDF file is included
     const containsPdf = selectedFiles.some(file => file.type === 'application/pdf');
     setHasPdf(containsPdf);
-    
+    setForm(prev => ({ ...prev, files: selectedFiles }));
+  }, []);
+
+  const handleFilesDataChange = useCallback((filesData) => {
     setForm(prev => ({
       ...prev,
-      files: selectedFiles
-    }));
-  }, []);
-  
-  const handleFilesDataChange = useCallback((filesData) => {
-    // Update form with structured files data
-      setForm(prev => ({
-        ...prev,
       filesData: filesData,
       files: filesData.map(fd => fd.file)
     }));
-    
-    // Check if at least one PDF file is included
+
     const containsPdf = filesData.some(fd => fd.is_pdf);
     setHasPdf(containsPdf);
-      
-    // Clear any existing file-related errors
+
     if (errors.files || errors.page_ranges) {
-        setErrors(prev => {
-          const newErrors = { ...prev };
+      setErrors(prev => {
+        const newErrors = { ...prev };
         delete newErrors.files;
-          delete newErrors.page_ranges;
-          return newErrors;
-        });
-      }
-  }, [errors.files, errors.page_ranges]);
+        delete newErrors.page_ranges;
+        return newErrors;
+      });
+    }
+  }, [errors]);
 
   const validate = () => {
     const errs = {};
@@ -128,59 +180,58 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
       if (!form[field]) errs[field] = 'Required';
     });
     if (!form.department) errs.department = 'Please select a subject';
-    
-    // Files are now optional for initial creation, so we remove the validation for their presence.
-    // We can still validate for empty or oversized files if they are selected.
-    if (form.files && form.files.length > 0) {
-      const emptyFiles = form.files.filter(file => file.size === 0);
-      if (emptyFiles.length > 0) {
-        errs.files = `The following files are empty: ${emptyFiles.map(f => f.name).join(', ')}`;
-      }
-      
-      const oversizedFiles = form.files.filter(file => file.size > MAX_FILE_SIZE * 1024 * 1024);
-      if (oversizedFiles.length > 0) {
-        errs.files = `The following files exceed the size limit: ${oversizedFiles.map(f => f.name).join(', ')}`;
+
+    if (form.complexity === 'Mixed') {
+      const { easy, medium, hard } = complexityCounts;
+      const total = (parseInt(easy) || 0) + (parseInt(medium) || 0) + (parseInt(hard) || 0);
+      const totalQuestions = parseInt(form.no_of_questions) || 0;
+      if (total !== totalQuestions) {
+        errs.complexity = `The sum of easy, medium, and hard questions must equal the total number of questions (${totalQuestions}).`;
       }
     }
-    
-    // Check number of questions limit
+
+    if (form.files && form.files.length > 0) {
+      const emptyFiles = form.files.filter(file => file.size === 0);
+      const oversized = form.files.filter(file => file.size > MAX_FILE_SIZE * 1024 * 1024);
+      if (emptyFiles.length > 0) {
+        errs.files = `Empty files: ${emptyFiles.map(f => f.name).join(', ')}`;
+      }
+      if (oversized.length > 0) {
+        errs.files = `Oversized files: ${oversized.map(f => f.name).join(', ')}`;
+      }
+    }
+
     if (form.no_of_questions && parseInt(form.no_of_questions) > MAX_QUESTIONS) {
       errs.no_of_questions = `Maximum ${MAX_QUESTIONS} questions allowed`;
     }
-    
+
     if (form.filesData) {
       for (const fileData of form.filesData) {
         if (fileData.is_pdf && fileData.page_range) {
-      const pattern = /^(\d+(-\d+)?)(,\d+(-\d+)?)*$/;
+          const pattern = /^(\d+(-\d+)?)(,\d+(-\d+)?)*$/;
           if (!pattern.test(fileData.page_range)) {
             errs.page_ranges = `Invalid page range format for ${fileData.filename}`;
             break;
-      } else {
-            const rangeParts = fileData.page_range.split(',');
-        for (const part of rangeParts) {
-          if (part.includes('-')) {
-            const [start, end] = part.split('-').map(Number);
-            if (start > end) {
-                  errs.page_ranges = `Invalid range: ${start}-${end} in ${fileData.filename}. Start must be <= end.`;
-              break;
-            }
-            if (start <= 0) {
-                  errs.page_ranges = `Page numbers must be positive in ${fileData.filename}`;
-              break;
-            }
-          } else if (parseInt(part) <= 0) {
-                errs.page_ranges = `Page numbers must be positive in ${fileData.filename}`;
-            break;
+          }
+          const parts = fileData.page_range.split(',');
+          for (const part of parts) {
+            if (part.includes('-')) {
+              const [start, end] = part.split('-').map(Number);
+              if (start > end || start <= 0) {
+                errs.page_ranges = `Invalid range: ${start}-${end} in ${fileData.filename}`;
+                break;
               }
+            } else if (parseInt(part) <= 0) {
+              errs.page_ranges = `Invalid page number in ${fileData.filename}`;
+              break;
             }
-            if (errs.page_ranges) break;
           }
         }
       }
     }
-    
+
     setErrors(errs);
-    return !Object.keys(errs).length;
+    return Object.keys(errs).length === 0;
   };
 
   const handleSubmit = async e => {
@@ -206,76 +257,44 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
     };
 
     try {
-      // Step 1: Create the Quiz with JSON data
       const quizPayload = {
         title: form.title,
         description: form.description,
-        no_of_questions: form.no_of_questions ? parseInt(form.no_of_questions, 10) : undefined,
-        time_limit_minutes: form.time_limit_minutes ? parseInt(form.time_limit_minutes, 10) : undefined,
-        quiz_date: form.quiz_date || undefined,
-        question_type: questionTypeMapping[form.quiz_type] || form.quiz_type,
-        quiz_type: complexityMapping[form.complexity] || form.complexity,
-        department_id: form.department || undefined,
-        passing_score: form.passing_score ? parseInt(form.passing_score, 10) : null,
-        pages: form.filesData
-            ? form.filesData.map(fd => ({
-                filename: fd.filename,
-                page_range: fd.page_range
-              }))
-            : []
+        no_of_questions: parseInt(form.no_of_questions),
+        time_limit_minutes: parseInt(form.time_limit_minutes),
+        quiz_date: form.quiz_date,
+        question_type: questionTypeMapping[form.quiz_type],
+        quiz_type: form.complexity === 'Mixed' ? complexityCounts : complexityMapping[form.complexity],
+        department_id: form.department,
+        passing_score: parseInt(form.passing_score),
+        pages: form.filesData?.map(fd => ({ filename: fd.filename, page_range: fd.page_range })) || []
       };
 
-      console.log('Step 1: Creating quiz with payload:', quizPayload);
-      setUploadProgress(10); // Initial progress
-      
       const createdQuiz = await onSave.createQuiz(quizPayload);
       const quizId = createdQuiz.quiz_id || createdQuiz.id;
+      if (!quizId) throw new Error('Failed to get quiz ID');
 
-      if (!quizId) {
-        throw new Error('Failed to get quiz_id after creation.');
-      }
-      
-      console.log(`Step 1 successful. Quiz created with ID: ${quizId}`);
       setUploadProgress(30);
-
-      // Step 2: Upload files if they exist
-      const filesToUpload = form.files || [];
-      if (filesToUpload.length > 0) {
-        console.log(`Step 2: Uploading ${filesToUpload.length} files...`);
-        await onSave.uploadFiles(quizId, filesToUpload, (progressEvent) => {
+      if (form.files?.length > 0) {
+        await onSave.uploadFiles(quizId, form.files, (progressEvent) => {
           const progress = 30 + (progressEvent.loaded / progressEvent.total) * 60;
           setUploadProgress(progress);
         });
-        console.log('Step 2 successful: Files uploaded.');
-        setUploadProgress(90);
-      } else {
-        console.log('Step 2 skipped: No files to upload.');
-        setUploadProgress(90); 
       }
-
-      // Step 3: Finalize quiz (e.g., AI generation might happen here)
-      console.log('Step 3: Finalizing quiz...');
-      // Simulate a small delay for finalization before hitting 100%
-      await new Promise(resolve => setTimeout(resolve, 500)); 
-      setUploadProgress(95);
-
-      // Final step to complete the process
-      await onSave.finalizeQuiz(quizId); // Assuming there's a finalization step
-
-      console.log('Quiz creation process complete!');
+      setUploadProgress(90);
+      await onSave.finalizeQuiz(quizId);
       setUploadProgress(100);
 
       setTimeout(() => {
         setIsFadingOut(true);
         setTimeout(() => {
           setLoading(false);
-          onCancel(); // Close form or redirect
+          onCancel();
           showSnackbar('Quiz created successfully!', 'success');
         }, 500);
       }, 1000);
 
     } catch (error) {
-      console.error('Quiz creation process failed:', error);
       setLoading(false);
       setErrorDialog({
         open: true,
@@ -452,8 +471,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                 />
               </Grid>
 
-
-              {/* Quiz Type & Complexity */}
+              {/* Quiz Type */}
               <Grid item xs={12} sm={6}>
                 <Autocomplete
                   disableClearable
@@ -466,18 +484,56 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments }) =
                   )}
                 />
               </Grid>
+
+              {/* Complexity */}
               <Grid item xs={12} sm={6}>
                 <Autocomplete
                   disableClearable
-                  options={['Easy','Medium','Hard','Mixed']}
+                  options={['Easy', 'Medium', 'Hard', 'Mixed']}
                   value={form.complexity}
-                  onChange={(e, v) => handleField('complexity', v)}
+                  onChange={(e, val) => handleField('complexity', val)}
                   isOptionEqualToValue={(option, value) => option === value}
                   renderInput={params => (
                     <TextField {...params} label="Complexity" error={!!errors.complexity} helperText={errors.complexity} />
                   )}
                 />
               </Grid>
+
+              {form.complexity === 'Mixed' && (
+                <>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth
+                      label="Easy Questions"
+                      type="number"
+                      value={complexityCounts.easy}
+                      onChange={(e) => handleField('complexity_easy', e)}
+                      error={!!errors.complexity}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth
+                      label="Medium Questions"
+                      type="number"
+                      value={complexityCounts.medium}
+                      onChange={(e) => handleField('complexity_medium', e)}
+                      error={!!errors.complexity}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth
+                      label="Hard Questions"
+                      type="number"
+                      value={complexityCounts.hard}
+                      onChange={(e) => handleField('complexity_hard', e)}
+                      error={!!errors.complexity}
+                      helperText={errors.complexity}
+                    />
+                  </Grid>
+                </>
+              )}
 
               {/* Department Single Select */}
               <Grid item xs={12}>

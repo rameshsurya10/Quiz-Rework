@@ -86,11 +86,24 @@ const TeacherQuizSection = () => {
       ]);
 
       // Process quizzes data
-      const allQuizzes = [
-        ...(quizzesResponse.data.current_quizzes || []),
-        ...(quizzesResponse.data.upcoming_quizzes || []),
-        ...(quizzesResponse.data.past_quizzes || []),
-      ];
+      let allQuizzes = [];
+      const data = quizzesResponse.data;
+
+      // Case 1: categorized quizzes (current, upcoming, past)
+      if (data.current_quizzes || data.upcoming_quizzes || data.past_quizzes) {
+        allQuizzes = [
+          ...(data.current_quizzes || []),
+          ...(data.upcoming_quizzes || []),
+          ...(data.past_quizzes || []),
+        ];
+      }
+      // Case 2: paginated (results) or plain array
+      else if (Array.isArray(data)) {
+        allQuizzes = data;
+      } else if (Array.isArray(data.results)) {
+        allQuizzes = data.results;
+      }
+
       setQuizzes(allQuizzes);
 
       // Process departments data
@@ -117,7 +130,7 @@ const TeacherQuizSection = () => {
 
     // Filter by department
     if (departmentFilter !== 'all') {
-      filtered = filtered.filter(quiz => quiz.department_id === departmentFilter);
+      filtered = filtered.filter(quiz => String(quiz.department_id) === String(departmentFilter));
     }
 
     // Filter by status
