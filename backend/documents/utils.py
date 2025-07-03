@@ -71,57 +71,71 @@ def extract_text_from_pdf(document):
         document.save()
         return False
 
-def extract_text_from_file(file, page_ranges=None):
+def extract_text_from_file(file_obj, page_range_str: str = None, filename: str = None):
     """
-    Extract text from various file types with support for page ranges in PDFs
-    
+    Extract text from a file (PDF, TXT) with optional page range for PDFs.
+
     Args:
-        file: File object to extract text from
-        page_ranges: Optional list of page ranges to extract from PDFs
-        
+        file_obj: File-like object (e.g., from request.FILES)
+        page_range_str: Optional string specifying page ranges (e.g., "1-5,7,10-15")
+        filename: Optional filename to help determine file type if file_obj lacks one.
+
     Returns:
-        str: Extracted text
+        str: Extracted text or an error message.
     """
-    if not file:
-        logger.warning("No file provided for text extraction")
-        return ""
-    
     try:
-        file.seek(0)
-        content_type = getattr(file, 'content_type', 'application/octet-stream')
-        file_name = getattr(file, 'name', 'unknown')
-        file_content = file.read()
-        file.seek(0)
+        # Determine file type from filename if available
+        if filename:
+            file_extension = os.path.splitext(filename)[1].lower()
+        else:
+            file_extension = "" # Default if no filename
+
+        # Reset file position
+        file_obj.seek(0)
         
-        # Extract file extension
-        _, file_extension = os.path.splitext(file_name)
-        file_extension = file_extension.lower()
-        
-        # Log file information
-        logger.info(f"Extracting text from file: {file_name}, type: {content_type}, extension: {file_extension}")
-        
-        # Handle different file types
-        if content_type == 'application/pdf' or file_extension == '.pdf':
-            return _extract_text_from_pdf_content(file_content, page_ranges)
+        # Handle PDF
+        if file_extension == '.pdf' or (hasattr(file_obj, 'name') and file_obj.name.lower().endswith('.pdf')):
+            pdf_reader = PdfReader(file_obj)
+            text = ""
             
-        elif content_type.startswith('text/') or file_extension in ['.txt', '.csv', '.json', '.xml', '.html']:
-            return _extract_text_from_text_file(file_content)
+            # Parse page ranges if provided
+            if page_range_str:
+                selected_pages = set()
+                ranges = page_range_str.split(',')
+                for r in ranges:
+                    if '-' in r:
+                        try:
+                            start, end = map(int, r.split('-'))
+                            # Adjust for 0-based indexing and include the end page
+                            selected_pages.update(range(start - 1, end))
+                        except ValueError:
+                            pass # Ignore invalid ranges
+                    else:
+                        try:
+                            # Adjust for 0-based indexing
+                            selected_pages.add(int(r) - 1)
+                        except ValueError:
+                            pass # Ignore invalid page numbers
+                
+                # Extract text from selected pages
+                for page_num in sorted(list(selected_pages)):
+                    if 0 <= page_num < len(pdf_reader.pages):
+                        text += pdf_reader.pages[page_num].extract_text() or ""
+            else:
+                # Extract from all pages if no range is specified
+                for page in pdf_reader.pages:
+                    text += page.extract_text() or ""
             
-        elif content_type.startswith('image/') or file_extension in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']:
-            return _extract_text_from_image(file_content)
+            return text
             
-        elif content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' or file_extension == '.docx':
-            return _extract_text_from_docx(file_content)
-            
-        elif content_type in ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'] or file_extension in ['.xls', '.xlsx']:
-            return _extract_text_from_excel(file_content)
+        # Handle TXT files
+        elif file_extension == '.txt' or (hasattr(file_obj, 'name') and file_obj.name.lower().endswith('.txt')):
+            return file_obj.read().decode('utf-8')
             
         else:
-            logger.warning(f"Unsupported file type: {content_type} with extension {file_extension}")
-            return f"[Unsupported file type: {content_type} with extension {file_extension}]"
-        
+            return f"[Error: Unsupported file type with extension '{file_extension}']"
+
     except Exception as e:
-        logger.error(f"Error extracting text from file: {e}")
         return f"[Error extracting text: {str(e)}]"
 
 def _extract_text_from_pdf_content(file_content, page_ranges=None):
@@ -316,50 +330,141 @@ def _extract_text_from_excel(file_content):
 
 def _parse_page_ranges_str(page_ranges_str):
     """
-    Parse page ranges string in format "1-5,7,10-15" into a list of ranges.
+    Parse a page range string into a list of page numbers and ranges.
     
     Args:
-        page_ranges_str: String with page ranges (e.g., "1-5,7,10-15")
+        page_ranges_str: String like "1-5,7,10-15" or single page like "3"
         
     Returns:
-        list: List of integers and tuples representing page ranges, e.g., 
-              [(1, 5), 7, (10, 15)]
+        List of integers and tuples, e.g. [(1,5), 7, (10,15)] or [3] for single page
     """
     if not page_ranges_str:
         return None
         
-    result = []
-    parts = page_ranges_str.split(',')
+    try:
+        page_ranges = []
+        # Split by comma and process each range
+        for range_str in page_ranges_str.split(','):
+            range_str = range_str.strip()
+            if '-' in range_str:
+                start, end = map(int, range_str.split('-'))
+                # Store as tuple for range
+                page_ranges.append((start, end))
+            else:
+                # Store as single integer
+                page_ranges.append(int(range_str))
+        
+        logger.info(f"Parsed page ranges '{page_ranges_str}' into: {page_ranges}")
+        return page_ranges
+    except ValueError as e:
+        logger.error(f"Invalid page range format: {page_ranges_str}")
+        return None
+
+def extract_single_page_content(file_obj, page_number):
+    """
+    Extract content from a specific single page of a PDF.
     
-    for part in parts:
-        part = part.strip()
-        if not part:
-            continue
+    Args:
+        file_obj: File-like object (e.g., from request.FILES)
+        page_number: Single page number (1-indexed)
+        
+    Returns:
+        str: Extracted text from the specified page or error message
+    """
+    try:
+        if not PDF_SUPPORT:
+            logger.error("PDF support not available")
+            return "[PDF support not available. Install PyPDF2]"
             
-        # Check if it's a range (contains '-')
-        if '-' in part:
-            try:
-                start, end = part.split('-', 1)
-                start = int(start.strip())
-                end = int(end.strip())
-                
-                # Validate range
-                if start <= 0 or end <= 0:
-                    raise ValueError("Page numbers must be positive")
-                if start > end:
-                    raise ValueError(f"Invalid range: {start}-{end}")
-                
-                result.append((start, end))
-            except ValueError as e:
-                logger.warning(f"Invalid page range format: '{part}' - {str(e)}")
-        else:
-            # Single page
-            try:
-                page = int(part)
-                if page <= 0:
-                    raise ValueError("Page numbers must be positive")
-                result.append(page)
-            except ValueError as e:
-                logger.warning(f"Invalid page number: '{part}' - {str(e)}")
+        # Reset file position
+        file_obj.seek(0)
+        
+        pdf_reader = PdfReader(file_obj)
+        total_pages = len(pdf_reader.pages)
+        
+        # Validate page number
+        if page_number < 1 or page_number > total_pages:
+            logger.error(f"Invalid page number {page_number}. PDF has {total_pages} pages.")
+            return f"[Invalid page number {page_number}. PDF has {total_pages} pages.]"
+        
+        # Convert to 0-indexed
+        page_index = page_number - 1
+        
+        # Extract text from the specific page
+        page = pdf_reader.pages[page_index]
+        page_text = page.extract_text()
+        
+        if not page_text:
+            logger.warning(f"No text found on page {page_number}")
+            return f"[No text found on page {page_number}]"
+        
+        # Format with page markers for consistency
+        formatted_text = f"==================== PAGE {page_number} ====================\n"
+        formatted_text += page_text + "\n"
+        formatted_text += f"==================== END OF PAGE {page_number} ====================\n"
+        
+        logger.info(f"Successfully extracted {len(page_text)} characters from page {page_number}")
+        return formatted_text
+        
+    except Exception as e:
+        logger.error(f"Error extracting text from page {page_number}: {str(e)}")
+        return f"[Error extracting text from page {page_number}: {str(e)}]"
+
+def validate_page_range(page_ranges_str, total_pages):
+    """
+    Validate that page ranges are within the document's page count.
     
-    return result if result else None
+    Args:
+        page_ranges_str: String like "1-5,7,10-15" or single page like "3"
+        total_pages: Total number of pages in the document
+        
+    Returns:
+        dict: {'valid': bool, 'message': str, 'adjusted_ranges': str}
+    """
+    if not page_ranges_str:
+        return {'valid': True, 'message': 'No page range specified', 'adjusted_ranges': None}
+    
+    try:
+        page_ranges = _parse_page_ranges_str(page_ranges_str)
+        if not page_ranges:
+            return {'valid': False, 'message': 'Invalid page range format', 'adjusted_ranges': None}
+        
+        invalid_pages = []
+        valid_ranges = []
+        
+        for page_range in page_ranges:
+            if isinstance(page_range, tuple):
+                start, end = page_range
+                if start < 1 or end > total_pages:
+                    invalid_pages.append(f"{start}-{end}")
+                else:
+                    valid_ranges.append(f"{start}-{end}")
+            else:
+                # Single page
+                if page_range < 1 or page_range > total_pages:
+                    invalid_pages.append(str(page_range))
+                else:
+                    valid_ranges.append(str(page_range))
+        
+        if invalid_pages:
+            message = f"Invalid pages for document with {total_pages} pages: {', '.join(invalid_pages)}"
+            if valid_ranges:
+                message += f". Valid ranges: {', '.join(valid_ranges)}"
+            return {
+                'valid': False, 
+                'message': message,
+                'adjusted_ranges': ','.join(valid_ranges) if valid_ranges else None
+            }
+        
+        return {
+            'valid': True,
+            'message': f"All pages valid for document with {total_pages} pages",
+            'adjusted_ranges': page_ranges_str
+        }
+        
+    except Exception as e:
+        return {
+            'valid': False,
+            'message': f"Error validating page ranges: {str(e)}",
+            'adjusted_ranges': None
+        }

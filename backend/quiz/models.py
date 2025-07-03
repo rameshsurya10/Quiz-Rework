@@ -18,13 +18,16 @@ class Quiz(models.Model):
         ('fill', 'Fill in the Blank'),
         ('truefalse', 'True/False'),
         ('oneline', 'One Line Answer'),
+        ('match-the-following', 'Match the Following'),
         ('mixed', 'Mixed Types'),
     ]
     
     quiz_id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    quiz_type = models.CharField(max_length=50, choices=QUIZ_TYPE_CHOICES, default='medium')
+    quiz_type = models.JSONField(null=True, blank=True)  # stores as JSON string
+    book_name = models.CharField(max_length=255, blank=True, null=True)  # if not already added
+    # quiz_type = models.CharField(max_length=50, choices=QUIZ_TYPE_CHOICES, default='medium')
     question_type = models.CharField(max_length=50, choices=QUESTION_TYPE_CHOICES, default='mcq')
     no_of_questions = models.IntegerField(default=5)
     time_limit_minutes = models.IntegerField(default=30)

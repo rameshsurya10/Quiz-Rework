@@ -6,7 +6,11 @@ import io
 from django.conf import settings
 from .models import Document
 from quiz.models import Question
-from .utils import extract_text_from_file
+from .utils import extract_text_from_file, _extract_text_from_pdf_content, _parse_page_ranges_str, extract_single_page_content, validate_page_range
+from openai import OpenAI
+import json
+from supabase import create_client, Client
+
 
 logger = logging.getLogger(__name__)
 
@@ -124,20 +128,21 @@ class DocumentProcessingService:
             
             # Make the prompt more specific for 'mixed' type
             if question_type == 'mixed':
-                type_instruction = "a mix of question types, including 'mcq', 'fill', 'truefalse', and 'oneline'"
+                type_instruction = "a mix of question types, including 'mcq', 'fill', 'truefalse', 'oneline', and 'match-the-following'"
                 format_instruction = """
                 For mixed questions, ensure each question object has:
                 - "question": The question text
-                - "type": The specific type ('mcq', 'fill', 'truefalse', 'oneline')
+                - "type": The specific type ('mcq', 'fill', 'truefalse', 'oneline', 'match-the-following')
                 - "options": For MCQ, an object with keys "A", "B", "C", "D". For others, empty object {}
                 - "correct_answer": The correct answer (for MCQ, use the key like "A" or "B")
                 - "explanation": Brief explanation
                 
                 Generate approximately:
-                - 40% MCQ questions
+                - 30% MCQ questions
                 - 25% True/False questions  
                 - 20% Fill-in-the-blank questions
                 - 15% One-line answer questions
+                - 10% Match-the-following questions
                 """
             else:
                 type_instruction = f"the question type should be '{question_type}'"
@@ -150,36 +155,96 @@ class DocumentProcessingService:
                 - "explanation": Brief explanation
                 """
 
-            # Prepare the prompt for the API
+            # Parse text to identify pages and their content
+            text_sections = []
+            current_section = []
+            current_page = None
+            
+            for line in text.split('\n'):
+                if line.startswith('==================== PAGE '):
+                    if current_section and current_page:
+                        text_sections.append((current_page, '\n'.join(current_section)))
+                    current_section = []
+                    # Extract page number more reliably
+                    page_match = re.search(r'PAGE (\d+)', line)
+                    if page_match:
+                        current_page = page_match.group(1)
+                elif line.startswith('==================== END OF PAGE'):
+                    continue
+                else:
+                    current_section.append(line)
+            
+            # Add the last section if it exists
+            if current_section and current_page:
+                text_sections.append((current_page, '\n'.join(current_section)))
+            
+            # If no page markers found, treat as single text block
+            if not text_sections:
+                text_sections = [('all', text)]
+
+            # Log page analysis
+            logger.info(f"Found {len(text_sections)} page sections")
+            for page_num, content in text_sections:
+                logger.info(f"Page {page_num}: {len(content)} characters")
+
+            # Prepare content for question generation
+            if len(text_sections) == 1:
+                # Single page or no page markers - use all content
+                page_num, page_content = text_sections[0]
+                sections_text = f"Content from page {page_num}:\n{page_content}\n"
+                primary_page = page_num
+            else:
+                # Multiple pages - include all but note primary pages
+                sections_text = ""
+                page_numbers = []
+                for page_num, section_text in text_sections:
+                    sections_text += f"\nContent from page {page_num}:\n{section_text}\n"
+                    page_numbers.append(page_num)
+                primary_page = page_numbers[0] if page_numbers else 'all'
+
+            # Truncate text if too long for API
+            max_content_length = 4000
+            if len(sections_text) > max_content_length:
+                sections_text = sections_text[:max_content_length] + "\n[Content truncated for API limits]"
+                logger.warning(f"Content truncated from {len(sections_text)} to {max_content_length} characters")
+
             base_prompt = f"""
-            You are an expert quiz creator. Based on the following text, generate {num_questions} questions.
+            You are an expert quiz creator. Based on the following text content, generate {num_questions} high-quality questions.
             The quiz difficulty should be '{quiz_type}' and you should generate {type_instruction}.
 
-            Text:
+            Text content to analyze:
             ---
-            {text[:4000]}
+            {sections_text}
             ---
 
             {format_instruction}
 
+            IMPORTANT REQUIREMENTS:
+            1. Each question MUST be based directly on the content provided above
+            2. Questions should test understanding of the specific concepts, facts, or procedures mentioned in the text
+            3. Avoid generic questions that could apply to any document
+            4. For single page content, all questions should reference that specific page
+            5. Ensure questions are at '{quiz_type}' difficulty level
+
             Please format the output as a JSON object with a "questions" key containing an array of question objects.
             Each question object must have the following keys:
-            - "question": The question text (string).
-            - "type": The type of question. Must be one of 'mcq', 'fill', 'truefalse', 'oneline' (string).
-            - "options": An object with keys "A", "B", "C", "D" for 'mcq' type, otherwise an empty object {{}}.
-            - "correct_answer": The correct answer (string).
-            - "explanation": A brief explanation for the answer (string).
+            - "question": The question text based on the specific content provided (string)
+            - "type": The type of question. Must be one of 'mcq', 'fill', 'truefalse', 'oneline', 'match-the-following' (string)
+            - "options": An object with keys "A", "B", "C", "D" for 'mcq' type, otherwise an empty object {{}}
+            - "correct_answer": The correct answer (string)
+            - "explanation": A brief explanation referencing the source content (string)
+            - "source_page": The page number where this question's content comes from (string)
 
             Return only valid JSON in this format:
             {{
                 "questions": [
                     {{
-                        "question": "Your question text here",
+                        "question": "Based on the content, what is...",
                         "type": "mcq",
                         "options": {{"A": "Option 1", "B": "Option 2", "C": "Option 3", "D": "Option 4"}},
                         "correct_answer": "A",
-                        "explanation": "Explanation here",
-                        "question_number": 1
+                        "explanation": "According to the text content...",
+                        "source_page": "{primary_page}"
                     }}
                 ]
             }}
@@ -188,15 +253,27 @@ class DocumentProcessingService:
             response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that generates a diverse set of quiz questions in a strict JSON format."},
+                    {"role": "system", "content": "You are a helpful assistant that generates quiz questions specifically from the provided content. All questions must be directly based on the given text."},
                     {"role": "user", "content": base_prompt}
                 ],
-                temperature=0.5,
+                temperature=0.3,  # Lower temperature for more consistent results
             )
             
             content = response.choices[0].message.content
-            generated_data = json.loads(content)
+            logger.info(f"Generated content from OpenAI: {len(content)} characters")
             
+            try:
+                # Clean the content by stripping markdown JSON markers
+                if content.startswith("```json"):
+                    content = content[7:]
+                    if content.endswith("```"):
+                        content = content[:-3]
+                
+                generated_data = json.loads(content)
+            except json.JSONDecodeError:
+                logger.error(f"Raw OpenAI output:\n{content}")
+                raise ValueError("OpenAI response was not valid JSON. Please check formatting.")
+                        
             questions = []
             # Handle different response formats
             if isinstance(generated_data, dict):
@@ -223,7 +300,7 @@ class DocumentProcessingService:
                 if 'type' not in q:
                     if question_type == 'mixed':
                         # Assign types in a balanced way for mixed quizzes
-                        type_cycle = ['mcq', 'truefalse', 'fill', 'oneline']
+                        type_cycle = ['mcq', 'truefalse', 'fill', 'oneline', 'match-the-following']
                         q['type'] = type_cycle[i % len(type_cycle)]
                     else:
                         q['type'] = question_type
@@ -249,74 +326,20 @@ class DocumentProcessingService:
                 
                 # Ensure explanation exists
                 if 'explanation' not in q:
-                    q['explanation'] = "No explanation provided."
+                    q['explanation'] = "Based on the provided content."
                 
                 # Clean question text
                 if not q['question'] or q['question'].strip() == "":
                     q['question'] = f"Question {i+1} content missing"
                 
-                validated_questions.append(q)
-                logger.info(f"Validated question {len(validated_questions)}: {q['type']} - {q['question'][:50]}...")
-            
-            # If we don't have enough questions, try to generate more
-            if len(validated_questions) < num_questions:
-                additional_needed = num_questions - len(validated_questions)
-                logger.warning(f"Only generated {len(validated_questions)} questions, need {additional_needed} more")
+                # Ensure source_page exists
+                if 'source_page' not in q or not q['source_page']:
+                    q['source_page'] = primary_page
                 
-                # Generate additional questions with a simpler approach
-                for attempt in range(min(additional_needed, 3)):  # Max 3 additional attempts
-                    try:
-                        simple_prompt = f"""
-                        Generate 1 quiz question about: {text[:1500]}
-                        
-                        Return as JSON object:
-                        {{
-                            "questions": [
-                                {{
-                                    "question": "Your question here", 
-                                    "type": "{'mcq' if question_type == 'mixed' else question_type}", 
-                                    "options": {{"A": "opt1", "B": "opt2", "C": "opt3", "D": "opt4"}}, 
-                                    "correct_answer": "A", 
-                                    "explanation": "explanation here",
-                                    "question_number": 1
-                                }}
-                            ]
-                        }}
-                        """
-                        
-                        additional_response = client.chat.completions.create(
-                            model="gpt-4",
-                            messages=[
-                                {"role": "system", "content": "Generate quiz questions in JSON format."},
-                                {"role": "user", "content": simple_prompt}
-                            ],
-                            temperature=0.7,
-                        )
-                        
-                        additional_content = additional_response.choices[0].message.content
-                        additional_data = json.loads(additional_content)
-                        
-                        if isinstance(additional_data, dict) and 'questions' in additional_data:
-                            for add_q in additional_data['questions']:
-                                if len(validated_questions) >= num_questions:
-                                    break
-                                # Apply same validation
-                                if 'question' in add_q:
-                                    if 'type' not in add_q:
-                                        add_q['type'] = 'mcq'
-                                    if add_q['type'] == 'mcq' and 'options' not in add_q:
-                                        add_q['options'] = {"A": "Option A", "B": "Option B", "C": "Option C", "D": "Option D"}
-                                    if 'correct_answer' not in add_q:
-                                        add_q['correct_answer'] = "A" if add_q['type'] == 'mcq' else "Answer"
-                                    if 'explanation' not in add_q:
-                                        add_q['explanation'] = "No explanation provided."
-                                    validated_questions.append(add_q)
-                                    logger.info(f"Added additional question: {add_q['type']} - {add_q['question'][:50]}...")
-                                    
-                    except Exception as e:
-                        logger.warning(f"Failed to generate additional question {attempt+1}: {str(e)}")
-
-            logger.info(f"Final question count: {len(validated_questions)}")
+                validated_questions.append(q)
+                logger.info(f"Validated question {len(validated_questions)}: {q['type']} - {q['question'][:50]}... (Page: {q['source_page']})")
+            
+            logger.info(f"Successfully generated and validated {len(validated_questions)} questions")
             return validated_questions[:num_questions] if validated_questions else []
 
         except Exception as e:
@@ -338,13 +361,14 @@ class DocumentProcessingService:
             uploaded_file: The uploaded file object
             quiz: Quiz instance to associate document with
             user: User who uploaded the file
-            page_range: Optional string specifying page ranges (e.g., "1-5,7,10-15")
+            page_range: Optional string specifying page ranges (e.g., "1-5,7,10-15") or single page number (e.g., "3")
             
         Returns:
             Dict containing processing results
         """
         import json
         import logging
+        from .utils import _extract_text_from_pdf_content, _parse_page_ranges_str
         logger = logging.getLogger(__name__)
         
         try:
@@ -356,34 +380,95 @@ class DocumentProcessingService:
                 file_type=uploaded_file.content_type,
                 quiz=quiz,
                 user=user,
-                storage_type='local', # Or determine based on settings
+                storage_type='supabase',
                 metadata={'page_range': page_range} if page_range else {}
             )
 
-            # Step 2: Extract text from the file
-            logger.info("Starting text extraction")
+            # Load file from Supabase bucket
+            logger.info(f"Downloading file from Supabase bucket")
+            supabase_url = "https://jlrirnwhigtmognookoe.supabase.co"
+            supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpscmlybndoaWd0bW9nbm9va29lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc4MjA3MjcsImV4cCI6MjA2MzM5NjcyN30.sqDr7maHEmd2xKoH3JA5UoUddcQaWrj8Lab6AMdDLSk"
+            supabase = create_client(supabase_url, supabase_key)
+            file_path = f"{quiz.quiz_id}/{uploaded_file.name}"
+            file_data = supabase.storage.from_("fileupload").download(file_path)
+            
+            # Get total pages for validation
+            from PyPDF2 import PdfReader
+            import io
+            pdf_reader = PdfReader(io.BytesIO(file_data))
+            total_pages = len(pdf_reader.pages)
+            logger.info(f"PDF has {total_pages} total pages")
+            
+            # Validate page ranges if provided
+            if page_range:
+                validation_result = validate_page_range(page_range, total_pages)
+                if not validation_result['valid']:
+                    logger.error(f"Page validation failed: {validation_result['message']}")
+                    document.processing_status = 'failed'
+                    document.processing_error = validation_result['message']
+                    document.save()
+                    return {"success": False, "error": validation_result['message']}
+                
+                # Use adjusted ranges if available
+                page_range = validation_result['adjusted_ranges'] or page_range
+                logger.info(f"Using validated page range: {page_range}")
+            
+            # Parse page ranges first
+            page_ranges = _parse_page_ranges_str(page_range) if page_range else None
+            logger.info(f"Parsed page ranges: {page_ranges}")
+            
+            # Extract text using the PDF-specific function with page ranges
             logger.info(f"Extracting text with page range: {page_range}")
-            extracted_text = extract_text_from_file(uploaded_file, page_range)
-            if not extracted_text:
+            extracted_text = _extract_text_from_pdf_content(file_data, page_ranges)
+            
+            if not extracted_text or extracted_text.startswith('[Error'):
                 logger.error("Text extraction failed - no text extracted")
                 document.processing_status = 'failed'
                 document.processing_error = 'Failed to extract text from file.'
                 document.save()
                 return {"success": False, "error": "Failed to extract text."}
 
+            # Validate that text contains page markers for the requested pages
+            if page_range:
+                # Check if the extracted text contains the requested page content
+                requested_pages = []
+                if page_ranges:
+                    for page_item in page_ranges:
+                        if isinstance(page_item, tuple):
+                            start, end = page_item
+                            requested_pages.extend(range(start, end + 1))
+                        else:
+                            requested_pages.append(page_item)
+                
+                # Verify that at least one requested page has content
+                found_pages = []
+                for page_num in requested_pages:
+                    if f"==================== PAGE {page_num} ====================" in extracted_text:
+                        found_pages.append(page_num)
+                
+                if not found_pages:
+                    logger.error(f"No content found for requested pages: {page_range}")
+                    document.processing_status = 'failed'
+                    document.processing_error = f'No content found for requested pages: {page_range}'
+                    document.save()
+                    return {"success": False, "error": f"No content found for requested pages: {page_range}"}
+                
+                logger.info(f"Successfully found content for pages: {found_pages}")
+
+            # Clean the extracted text but preserve page markers for question generation
             document.extracted_text = extracted_text
             document.save()
-            logger.info(f"Successfully extracted {len(extracted_text)} characters of text")
+            logger.info(f"Successfully extracted {len(extracted_text)} characters of text from specified pages")
 
             # Step 3: Generate questions from the extracted text
             target_questions = quiz.no_of_questions or 5
-            total_questions_to_generate = max(target_questions + 5, 10)  # Generate at least 5 extra
-            
-            logger.info(f"Attempting to generate {total_questions_to_generate} questions")
-            logger.info(f"Quiz type: {quiz.quiz_type}, Question type: {quiz.question_type}")
-            
+            total_questions_to_generate = max(target_questions + 5, 10)
+
+            logger.info(f"Generating {total_questions_to_generate} questions for quiz from specified pages")
+
+            # Generate questions with page-specific context
             questions = self.generate_questions_from_text(
-                document.extracted_text,
+                extracted_text,
                 quiz.question_type,
                 quiz.quiz_type,
                 total_questions_to_generate
@@ -396,39 +481,35 @@ class DocumentProcessingService:
                 document.save()
                 return {"success": False, "error": "Failed to generate questions."}
 
-            logger.info(f"Successfully generated {len(questions)} questions")
+            # Validate that questions are properly attributed to pages
+            questions_with_pages = 0
+            for q in questions:
+                if 'source_page' in q and q['source_page']:
+                    questions_with_pages += 1
+                else:
+                    # If no source page specified, try to determine from page range
+                    if page_range and len(page_ranges) == 1 and isinstance(page_ranges[0], int):
+                        q['source_page'] = str(page_ranges[0])
+                        questions_with_pages += 1
+                    else:
+                        q['source_page'] = page_range if page_range else 'all'
+
+            logger.info(f"Successfully generated {len(questions)} questions ({questions_with_pages} with page attribution) from specified pages")
 
             # Step 4: Save the generated questions
             try:
-                if quiz.question_type == 'mixed':
-                    # For mixed type, store all questions as a single JSON object
-                    logger.info("Saving mixed type questions")
-                    Question.objects.create(
-                        quiz=quiz,
-                        document=document,
-                        question=json.dumps(questions),  # Store as JSON string
-                        question_type='mixed',
-                        options={},
-                        correct_answer='',
-                        explanation='',
-                        difficulty=quiz.quiz_type,
-                        created_by=user.email
-                    )
-                else:
-                    # For single type questions, store individually
-                    logger.info("Saving individual questions")
-                    for q_data in questions:
-                        Question.objects.create(
-                            quiz=quiz,
-                            document=document,
-                            question=q_data.get('question', ''),
-                            question_type=q_data.get('type', quiz.question_type),
-                            options=q_data.get('options', {}),
-                            correct_answer=q_data.get('correct_answer', ''),
-                            explanation=q_data.get('explanation', ''),
-                            difficulty=quiz.quiz_type,
-                            created_by=user.email
-                        )
+                logger.info("Saving all questions in a single row")
+                Question.objects.create(
+                    quiz=quiz,
+                    document=document,
+                    question=json.dumps(questions),  # Store all questions as JSON string
+                    question_type=quiz.question_type,
+                    options={},  # Options will be stored in the JSON
+                    correct_answer='',  # Answers will be stored in the JSON
+                    explanation='',  # Explanations will be stored in the JSON
+                    difficulty=quiz.quiz_type,
+                    created_by=user.email
+                )
             except Exception as e:
                 logger.error(f"Error saving questions to database: {str(e)}")
                 return {"success": False, "error": f"Failed to save questions: {str(e)}"}
@@ -440,12 +521,47 @@ class DocumentProcessingService:
             return {
                 "success": True, 
                 "document_id": document.id,
-                "questions_generated": len(questions)
+                "questions_generated": len(questions),
+                "pages_processed": page_range,
+                "page_ranges_used": str(page_ranges) if page_ranges else "all",
+                "questions_with_page_attribution": questions_with_pages
             }
 
         except Exception as e:
             logger.error(f"Error processing document {uploaded_file.name}: {str(e)}")
             logger.error(f"Full error details:", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    def generate_questions_from_single_page(self, uploaded_file, quiz, user, page_number):
+        """
+        Generate questions from a specific single page of a document.
+        
+        Args:
+            uploaded_file: The uploaded file object
+            quiz: Quiz instance to associate document with
+            user: User who uploaded the file
+            page_number: Single page number (1-indexed) as integer or string
+            
+        Returns:
+            Dict containing processing results
+        """
+        try:
+            # Convert page_number to string for consistency
+            page_range = str(page_number)
+            logger.info(f"Generating questions from single page {page_number}")
+            
+            # Use the existing process_single_document method
+            result = self.process_single_document(uploaded_file, quiz, user, page_range)
+            
+            if result.get('success'):
+                logger.info(f"Successfully generated questions from page {page_number}")
+                result['single_page_mode'] = True
+                result['target_page'] = page_number
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error generating questions from single page {page_number}: {str(e)}")
             return {"success": False, "error": str(e)}
 
 def process_uploaded_documents(files_data, quiz, user):

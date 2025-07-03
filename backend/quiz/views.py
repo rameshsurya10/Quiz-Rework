@@ -32,58 +32,85 @@ from accounts.models import User
 from django.db import transaction
 import json
 from rest_framework.response import Response
+from quiz.models import QuizAttempt
+from documents.models import Document, DocumentVector
 
 from documents.services import DocumentProcessingService
+from django.utils.dateparse import parse_datetime
+from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
 
+supabase_url = "https://jlrirnwhigtmognookoe.supabase.co"
+print("supabase_url:",supabase_url)
+supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpscmlybndoaWd0bW9nbm9va29lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc4MjA3MjcsImV4cCI6MjA2MzM5NjcyN30.sqDr7maHEmd2xKoH3JA5UoUddcQaWrj8Lab6AMdDLSk"
+print("supabase_key:",supabase_key)
+SUPABASE_BUCKET = "fileupload"  # Your bucket name
+
+def get_supabase_client():
+    return create_client(supabase_url, supabase_key)
+
+def chunk_text(text: str, max_tokens: int = 500) -> list[str]:
+    enc = tiktoken.encoding_for_model("gpt-4o")
+    tokens = enc.encode(text)
+    chunks, i = [], 0
+    while i < len(tokens):
+        chunk = tokens[i:i + max_tokens]
+        chunks.append(enc.decode(chunk))
+        i += max_tokens
+    return chunks
 
 class QuizFileUploadView(APIView):
-    """
-    Upload a document for a quiz, process it, and generate questions.
-    """
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
     def get_quiz(self, quiz_id):
-        try:
-            return Quiz.objects.get(pk=quiz_id)
-        except Quiz.DoesNotExist:
-            return None
+        return Quiz.objects.filter(pk=quiz_id).first()
 
     def post(self, request, quiz_id, format=None):
         logger.info(f"Processing file upload for quiz {quiz_id}")
-        logger.info(f"Request POST data: {dict(request.POST)}")
-        logger.info(f"Request FILES: {list(request.FILES.keys())}")
-        
         quiz = self.get_quiz(quiz_id)
         if not quiz:
             return Response({"error": "Quiz not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        if 'file' not in request.FILES:
+        uploaded_file = request.FILES.get('file')
+        print("uploaded_file:",uploaded_file)
+        page_range = request.POST.get('page_range')  # Optional
+        print("page_range:",page_range)
+
+        if not uploaded_file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
-        uploaded_file = request.FILES['file']
-        page_range = request.POST.get('page_range')  # Get page range from request
-        
-        logger.info(f"File: {uploaded_file.name}, Page range: {page_range}")
-        
-        # Use the document processing service to handle the file
-        service = DocumentProcessingService()
         try:
+            # Construct Supabase client
+            supa = create_client(supabase_url, supabase_key)
+            print("supa:",supa)
+
+            # Create a storage path in Supabase bucket
+            file_name = uploaded_file.name
+            print("file_name:",file_name)
+            file_path = f"{quiz.quiz_id}/{file_name}"  # e.g., "239/python.pdf"
+            print("file_path:",file_path)
+
+           # Upload directly to Supabase (no local save)
+            file_content = uploaded_file.read()  # This returns bytes
+            supa.storage.from_("fileupload").upload(file_path, file_content)
+            print(f"Uploaded file to Supabase: {file_path}")
+
+            # Step 2: Use DocumentProcessingService to extract text and generate questions
+            service = DocumentProcessingService()
             processing_result = service.process_single_document(
-                uploaded_file, 
-                quiz, 
-                request.user,
-                page_range=page_range  # Pass page range to the service
+                uploaded_file=uploaded_file,
+                quiz=quiz,
+                user=request.user,
+                page_range=page_range
             )
-            
-            if not processing_result:
-                return Response({"error": "Failed to process document"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                
-            if isinstance(processing_result, dict) and not processing_result.get('success', False):
-                error_message = processing_result.get('error', 'Unknown processing error')
-                return Response({"error": error_message}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            if not processing_result or not processing_result.get('success', False):
+                return Response(
+                    {"error": processing_result.get('error', 'Failed to process file.')},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
             return Response({
                 "message": "File uploaded and processed successfully",
@@ -93,10 +120,11 @@ class QuizFileUploadView(APIView):
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            logger.error(f"Error processing file upload: {str(e)}")
-            # Catch any unexpected errors during processing
-            return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            logger.error(f"Unexpected error during file upload: {str(e)}", exc_info=True)
+            return Response(
+                {"error": f"An unexpected error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class QuizListCreateView(generics.ListCreateAPIView):
     """API endpoint for listing and creating quizzes"""
@@ -110,42 +138,93 @@ class QuizListCreateView(generics.ListCreateAPIView):
         return Quiz.objects.filter(is_deleted=False)
     
     def list(self, request, *args, **kwargs):
-        user = self.request.user
-        now = timezone.now()
-        base_queryset = Quiz.objects.filter(is_deleted=False)
-        role = getattr(user, 'role', '').upper()
+        try:
+            user = self.request.user
+            now = timezone.now()
+            base_queryset = Quiz.objects.filter(is_deleted=False)
+            role = getattr(user, 'role', '').upper()
 
-        if role == 'ADMIN':
-            quiz_queryset = base_queryset
+            if role == 'ADMIN':
+                quiz_queryset = base_queryset
 
-        elif role == 'TEACHER':
-            teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
-            if not teacher:
-                return Response({"message": "Teacher record not found"}, status=404)
-            department_ids = teacher.department_ids or []
-            quiz_queryset = base_queryset.filter(
-                Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
+            elif role == 'TEACHER':
+                teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+                if not teacher:
+                    return Response({"message": "Teacher record not found"}, status=404)
+                department_ids = teacher.department_ids or []
+                quiz_queryset = base_queryset.filter(
+                    Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
+                )
+
+            elif role == 'STUDENT':
+                student = Student.objects.filter(email=user.email, is_deleted=False).first()
+                if not student:
+                    return Response({"message": "Student record not found"}, status=404)
+                quiz_queryset = base_queryset.filter(department_id=student.department_id, is_published=True)
+
+            else:
+                return Response({"message": "Unauthorized role"}, status=403)
+
+            # Make sure all quiz dates are timezone-aware
+            def get_aware_date(quiz_date):
+                if quiz_date and timezone.is_naive(quiz_date):
+                    return timezone.make_aware(quiz_date)
+                return quiz_date
+
+            # Get current date without time for date comparison
+            current_date = now.date()
+
+            # Filter quizzes with proper date handling
+            current_quizzes = []
+            upcoming_quizzes = []
+            past_quizzes = []
+
+            for quiz in quiz_queryset:
+                quiz_date = get_aware_date(quiz.quiz_date)
+                if not quiz_date:
+                    continue
+
+                quiz_date_only = quiz_date.date()
+                
+                if quiz_date_only == current_date:
+                    current_quizzes.append(quiz)
+                elif quiz_date_only > current_date:
+                    upcoming_quizzes.append(quiz)
+                else:
+                    past_quizzes.append(quiz)
+
+            # Sort the lists
+            current_quizzes.sort(key=lambda x: x.quiz_date)
+            upcoming_quizzes.sort(key=lambda x: x.quiz_date)
+            past_quizzes.sort(key=lambda x: x.quiz_date, reverse=True)
+
+            # Serialize the quizzes
+            serializer = QuizSerializer()
+            response_data = {
+                "current_quizzes": [
+                    serializer.to_representation(quiz) 
+                    for quiz in current_quizzes
+                ],
+                "upcoming_quizzes": [
+                    serializer.to_representation(quiz)
+                    for quiz in upcoming_quizzes
+                ],
+                "past_quizzes": [
+                    serializer.to_representation(quiz)
+                    for quiz in past_quizzes
+                ]
+            }
+
+            return Response(response_data)
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in quiz listing: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "An error occurred while fetching quizzes. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-        elif role == 'STUDENT':
-            student = Student.objects.filter(email=user.email, is_deleted=False).first()
-            if not student:
-                return Response({"message": "Student record not found"}, status=404)
-            quiz_queryset = base_queryset.filter(department_id=student.department_id,is_published=True)
-
-        else:
-            return Response({"message": "Unauthorized role"}, status=403)
-
-        # ✅ Replace start_time / end_time with quiz_date
-        current_quizzes = quiz_queryset.filter(quiz_date__date=now.date()).order_by('quiz_date')
-        upcoming_quizzes = quiz_queryset.filter(quiz_date__gt=now).order_by('quiz_date')
-        past_quizzes = quiz_queryset.filter(quiz_date__lt=now.date()).order_by('-quiz_date')
-
-        return Response({
-            "current_quizzes": QuizSerializer(current_quizzes, many=True).data,
-            "upcoming_quizzes": QuizSerializer(upcoming_quizzes, many=True).data,
-            "past_quizzes": QuizSerializer(past_quizzes, many=True).data,
-        })
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -187,26 +266,35 @@ class QuizListCreateView(generics.ListCreateAPIView):
                     if not admin:
                         return Response({"message": "Admin record not found"}, status=404)
 
-                # Count how many quizzes this user has created
-                quiz_count = Quiz.objects.filter(created_by=user.email, is_deleted=False).count()
-                if quiz_count >= 5:
-                    return Response({
-                        "error": "Quiz creation limit reached",
-                        "message": "You have reached the limit of 5 quizzes. Please subscribe to create more quizzes.",
-                        "title": "Limit Exceeded"
-                    }, status=status.HTTP_403_FORBIDDEN)
+                # # Count how many quizzes this user has created
+                # quiz_count = Quiz.objects.filter(created_by=user.email, is_deleted=False).count()
+                # if quiz_count >= 5:
+                #     return Response({
+                #         "error": "Quiz creation limit reached",
+                #         "message": "You have reached the limit of 5 quizzes. Please subscribe to create more quizzes.",
+                #         "title": "Limit Exceeded"
+                #     }, status=status.HTTP_403_FORBIDDEN)
 
             # ✅ Validate number of questions
-            try:
-                no_of_questions = int(data.get('no_of_questions', 0))
-                if no_of_questions > self.MAX_QUESTIONS:
-                    return Response({
-                        "error": f"Number of questions cannot exceed {self.MAX_QUESTIONS}",
-                        "message": f"You've requested {no_of_questions} questions, but the maximum allowed is {self.MAX_QUESTIONS}. Please reduce the number of questions.",
-                        "title": "Question Limit Exceeded"
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            except (ValueError, TypeError):
-                pass  # Let the serializer handle invalid inputs
+            # try:
+            #     no_of_questions = int(data.get('no_of_questions', 0))
+            #     if no_of_questions > self.MAX_QUESTIONS:
+            #         return Response({
+            #             "error": f"Number of questions cannot exceed {self.MAX_QUESTIONS}",
+            #             "message": f"You've requested {no_of_questions} questions, but the maximum allowed is {self.MAX_QUESTIONS}. Please reduce the number of questions.",
+            #             "title": "Question Limit Exceeded"
+            #         }, status=status.HTTP_400_BAD_REQUEST)
+            # except (ValueError, TypeError):
+            #     pass  # Let the serializer handle invalid inputs
+
+            # ✅ Handle book_name and quiz_type transformation
+            book_name = data.get('book_name')
+            if book_name:
+                data['book_name'] = book_name
+
+            quiz_type = data.get('quiz_type')
+            if isinstance(quiz_type, dict):
+                data['quiz_type'] = json.dumps(quiz_type)
 
             logger.info("About to create serializer")
 
@@ -277,25 +365,20 @@ class StudentQuestionView(generics.RetrieveUpdateDestroyAPIView):
         quiz_data = QuizSerializer(quiz).data
 
         # ✅ Fetch and shuffle questions
-        questions = list(quiz.questions.all())
+        questions = list(quiz.db_questions.all())
         random.shuffle(questions)
 
-        serialized_blocks = SlimQuestionSerializer(questions, many=True).data
+        serialized_questions = SlimQuestionSerializer(questions, many=True).data
+        random.shuffle(serialized_questions)
 
-        # Flatten nested question lists
-        flattened_questions = []
-        for block in serialized_blocks:
-            flattened_questions.extend(block)  # Each block is a list of questions
-
-        random.shuffle(flattened_questions)
-
-        quiz_data['questions'] = flattened_questions
+        quiz_data['questions'] = serialized_questions
 
         return Response(quiz_data)
 
 class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     """API endpoint for retrieving, updating, and deleting a quiz"""
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+    # permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdminOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'quiz_id'
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     
@@ -303,42 +386,93 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         return Quiz.objects.filter(is_deleted=False)
     
     def list(self, request, *args, **kwargs):
-        user = self.request.user
-        now = timezone.now()
-        base_queryset = Quiz.objects.filter(is_deleted=False)
-        role = getattr(user, 'role', '').upper()
+        try:
+            user = self.request.user
+            now = timezone.now()
+            base_queryset = Quiz.objects.filter(is_deleted=False)
+            role = getattr(user, 'role', '').upper()
 
-        if role == 'ADMIN':
-            quiz_queryset = base_queryset
+            if role == 'ADMIN':
+                quiz_queryset = base_queryset
 
-        elif role == 'TEACHER':
-            teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
-            if not teacher:
-                return Response({"message": "Teacher record not found"}, status=404)
-            department_ids = teacher.department_ids or []
-            quiz_queryset = base_queryset.filter(
-                Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
+            elif role == 'TEACHER':
+                teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+                if not teacher:
+                    return Response({"message": "Teacher record not found"}, status=404)
+                department_ids = teacher.department_ids or []
+                quiz_queryset = base_queryset.filter(
+                    Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
+                )
+
+            elif role == 'STUDENT':
+                student = Student.objects.filter(email=user.email, is_deleted=False).first()
+                if not student:
+                    return Response({"message": "Student record not found"}, status=404)
+                quiz_queryset = base_queryset.filter(department_id=student.department_id, is_published=True)
+
+            else:
+                return Response({"message": "Unauthorized role"}, status=403)
+
+            # Make sure all quiz dates are timezone-aware
+            def get_aware_date(quiz_date):
+                if quiz_date and timezone.is_naive(quiz_date):
+                    return timezone.make_aware(quiz_date)
+                return quiz_date
+
+            # Get current date without time for date comparison
+            current_date = now.date()
+
+            # Filter quizzes with proper date handling
+            current_quizzes = []
+            upcoming_quizzes = []
+            past_quizzes = []
+
+            for quiz in quiz_queryset:
+                quiz_date = get_aware_date(quiz.quiz_date)
+                if not quiz_date:
+                    continue
+
+                quiz_date_only = quiz_date.date()
+                
+                if quiz_date_only == current_date:
+                    current_quizzes.append(quiz)
+                elif quiz_date_only > current_date:
+                    upcoming_quizzes.append(quiz)
+                else:
+                    past_quizzes.append(quiz)
+
+            # Sort the lists
+            current_quizzes.sort(key=lambda x: x.quiz_date)
+            upcoming_quizzes.sort(key=lambda x: x.quiz_date)
+            past_quizzes.sort(key=lambda x: x.quiz_date, reverse=True)
+
+            # Serialize the quizzes
+            serializer = QuizSerializer()
+            response_data = {
+                "current_quizzes": [
+                    serializer.to_representation(quiz) 
+                    for quiz in current_quizzes
+                ],
+                "upcoming_quizzes": [
+                    serializer.to_representation(quiz)
+                    for quiz in upcoming_quizzes
+                ],
+                "past_quizzes": [
+                    serializer.to_representation(quiz)
+                    for quiz in past_quizzes
+                ]
+            }
+
+            return Response(response_data)
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in quiz listing: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "An error occurred while fetching quizzes. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-        elif role == 'STUDENT':
-            student = Student.objects.filter(email=user.email, is_deleted=False).first()
-            if not student:
-                return Response({"message": "Student record not found"}, status=404)
-            quiz_queryset = base_queryset.filter(department_id=student.department_id,is_published=True)
-
-        else:
-            return Response({"message": "Unauthorized role"}, status=403)
-
-        # ✅ Replace start_time / end_time with quiz_date
-        current_quizzes = quiz_queryset.filter(quiz_date__date=now.date()).order_by('quiz_date')
-        upcoming_quizzes = quiz_queryset.filter(quiz_date__gt=now).order_by('quiz_date')
-        past_quizzes = quiz_queryset.filter(quiz_date__lt=now.date()).order_by('-quiz_date')
-
-        return Response({
-            "current_quizzes": QuizSerializer(current_quizzes, many=True).data,
-            "upcoming_quizzes": QuizSerializer(upcoming_quizzes, many=True).data,
-            "past_quizzes": QuizSerializer(past_quizzes, many=True).data,
-        })
     
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
@@ -460,8 +594,8 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
             all_serialized_questions.extend(serialized_questions)
 
         # Add question numbers
-        for i, question in enumerate(all_serialized_questions, 1):
-            question['question_number'] = i
+        # for i, question in enumerate(all_serialized_questions, 1):
+        #     question['question_number'] = i
 
         # Split based on required number
         current_questions = all_serialized_questions[:max_questions]
@@ -479,64 +613,74 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
         return Response(data)
         
-    def update(self, request, *args, **kwargs):
-        """
-        API endpoint to update a quiz.
-        
-        Allows updating of quiz metadata and questions. 
-        Questions are expected to be in the "questions" key of the request data.
-        Each question is expected to be a dictionary with the following keys:
-        - question (text)
-        - question_type (string, one of 'multiple_choice', 'true_false', 'mixed')
-        - options (dict, optional)
-        - correct_answer (string, optional)
-        - explanation (string, optional)
-        
-        Returns the updated quiz object in the response if successful.
-        """
-        instance = self.get_object()
-        data = request.data.copy()
+    def put(self, request, quiz_id):
+        quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
+        print("quiz:", quiz)
+        # 1. Update quiz fields
+        quiz.title = request.data.get("title", quiz.title)
+        quiz.description = request.data.get("description", quiz.description)
+        quiz.is_published = request.data.get("is_published", quiz.is_published)
+        quiz.time_limit_minutes = request.data.get("time_limit_minutes", quiz.time_limit_minutes)
+        quiz.passing_score = request.data.get("passing_score", quiz.passing_score)
 
-        # Update published time if needed
-        if data.get('is_published') and not instance.published_at:
-            data['published_at'] = timezone.now()
+        quiz_date_str = request.data.get("quiz_date")
+        if quiz_date_str:
+            parsed_date = parse_datetime(quiz_date_str)
+            if parsed_date:
+                quiz.quiz_date = parsed_date
 
-        # Track last modified user
-        data['last_modified_by'] = request.user.id
+        quiz.save()
 
-        # Extract and remove questions from main payload
-        questions_data = data.pop('questions', [])
+        # 2. Load existing questions for this quiz
+        existing_questions = Question.objects.filter(quiz=quiz)
+        question_map = {}
 
-        # Validate and update quiz
-        serializer = self.get_serializer(instance, data=data, partial=kwargs.get('partial', False))
-        serializer.is_valid(raise_exception=True)
+        for q in existing_questions:
+            try:
+                q_data = json.loads(q.question)
+                print("q_data:", q_data)
+                if isinstance(q_data, dict):
+                    q_num = q_data.get("question_number")
+                    if q_num is not None:
+                        question_map[str(q_num)] = q
+            except json.JSONDecodeError:
+                continue  # skip corrupted data
 
-        try:
-            with transaction.atomic():
-                self.perform_update(serializer)
-                updated_instance = self.get_queryset().get(pk=instance.pk)
+        # 3. Update matching questions from incoming payload
+        incoming_questions = request.data.get("questions", [])
+        updated_numbers = []
 
-                # Clear old questions (optional: filter by quiz)
-                Question.objects.filter(quiz=updated_instance).delete()
+        for new_q in incoming_questions:
+            q_num = new_q.get("question_number")
+            print("q_num:", q_num)
+            if q_num is None:
+                continue
 
-                # Create new questions
-                question_objs = []
-                for q in questions_data:
-                    question_objs.append(Question(
-                        quiz=updated_instance,
-                        question_type=q.get('type', '').lower(),  # ensure lowercase consistency
-                        question=q.get('question'),
-                        options=q.get('options') or {},  # default to empty dict
-                        correct_answer=q.get('correct_answer'),
-                        explanation=q.get('explanation')
-                    ))
-                if question_objs:
-                    Question.objects.bulk_create(question_objs)
+            existing = question_map.get(str(q_num))
+            print("existing:", existing)
+            if existing:
+                # Update only the fields you want
+                existing.question = json.dumps({
+                    "question": new_q.get("question"),
+                    "options": new_q.get("options", {}),
+                    "type": new_q.get("type"),
+                    "correct_answer": new_q.get("correct_answer"),
+                    "explanation": new_q.get("explanation"),
+                    "question_number": q_num
+                })
+                existing.question_type = new_q.get("question_type", existing.question_type)
+                existing.correct_answer = new_q.get("correct_answer")
+                existing.explanation = new_q.get("explanation")
+                existing.options = new_q.get("options", {})
+                existing.save()
+                updated_numbers.append(q_num)
 
-                return Response(QuizSerializer(updated_instance).data)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response({
+            "message": "Quiz and matching questions updated successfully.",
+            "updated_question_numbers": updated_numbers,
+            "quiz_id": quiz.quiz_id
+        }, status=status.HTTP_200_OK)
+
     def destroy(self, request, *args, **kwargs):
         """
         Soft delete: set is_deleted=True for the quiz instead of deleting from DB.
@@ -602,7 +746,7 @@ class QuizQuestionGenerateView(APIView):
             prompt = f"Generate 5 quiz questions based on the following content:\n{file_content}"
             client = openai.OpenAI()
             response = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=[{"role": "system", "content": "You are a quiz generator."},
                           {"role": "user", "content": prompt}]
             )
@@ -804,7 +948,7 @@ class QuizQuestionGenerateFromPromptView(APIView):
             """
             # Generate questions using OpenAI
             response = client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "Generate questions based on the provided content and prompt."}
@@ -885,30 +1029,33 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 3. May have multiple valid answers
                 4. Require deep analytical thinking
                 """
-        },
+        },  
         'true_false': {
             'easy': """
                 Generate easy true/false questions about code that:
-                1. Test basic understanding of concepts
-                2. Have clear and unambiguous answers
-                3. Are suitable for beginners
-                4. Focus on fundamental concepts
+                1. Test basic understanding of programming concepts.
+                2. Have clear and unambiguous true or false answers.
+                3. Are suitable for beginners.
+                4. Focus on fundamental principles or simple facts.
+                5. Avoid trick questions or ambiguity.
                 """,
             'medium': """
                 Generate medium difficulty true/false questions about code that:
-                1. Test intermediate understanding of concepts
-                2. May include some complex scenarios
-                3. Require some analytical thinking
-                4. Focus on practical applications
+                1. Test intermediate understanding of programming concepts.
+                2. Include moderately complex scenarios or use cases.
+                3. Require some reasoning or analytical thinking.
+                4. Focus on practical coding applications and common mistakes.
+                5. Ensure the answer can be definitively true or false.
                 """,
             'hard': """
                 Generate hard true/false questions about code that:
-                1. Test advanced understanding of concepts
-                2. Include complex scenarios and edge cases
-                3. Require deep analytical thinking
-                4. Focus on nuanced technical details
+                1. Test advanced understanding of programming concepts.
+                2. Include complex scenarios, tricky edge cases, or uncommon behaviors.
+                3. Require deep analysis and technical insight to answer correctly.
+                4. Focus on nuanced language features or subtle logic.
+                5. Avoid vague or opinion-based statements; answers must be objectively true or false.
                 """
-        },
+                },
         'one_line': {
             'easy': """
                 Generate easy one-line answer questions about code that:
@@ -932,6 +1079,39 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 4. Focus on nuanced technical details
                 """
         },
+        'match-the-following': {
+            'easy': """
+                Generate easy match-the-following questions about code that:
+                1. Test basic understanding of programming terms and definitions.
+                2. Have clear one-to-one mappings between items in two columns.
+                3. Use simple concepts like keywords, data types, or function names.
+                4. Are suitable for beginners.
+                5. Avoid ambiguity in both left and right columns.
+                Example format:
+                Column A: ['for', 'if', 'def', 'print']
+                Column B: ['Used to define a function', 'Used to output text', 'Used for conditional branching', 'Used for looping']
+                """,
+            'medium': """
+                Generate medium difficulty match-the-following questions about code that:
+                1. Test intermediate understanding of programming structures and behaviors.
+                2. Include slightly more complex terms, like built-in functions, error types, or object-oriented terms.
+                3. Require some reasoning to match correctly.
+                4. Focus on real-world code relationships or usage patterns.
+                Example format:
+                Column A: ['__init__', 'try', 'list', 'range']
+                Column B: ['Used for defining constructors', 'Used for exception handling', 'A mutable collection type', 'Generates a sequence of numbers']
+                """,
+            'hard': """
+                Generate hard match-the-following questions about code that:
+                1. Test advanced understanding of programming concepts, libraries, or APIs.
+                2. Include complex relationships like decorators, design patterns, or advanced methods.
+                3. Require deep technical understanding to match correctly.
+                4. Avoid surface-level associations — focus on function, purpose, or mechanism.
+                Example format:
+                Column A: ['@staticmethod', 'metaclass', 'generator', 'async']
+                Column B: ['Used to define coroutines', 'Defines class behavior at creation time', 'Produces values lazily', 'Defines a method without self/cls']
+                """
+                },
         'mixed': {
             'easy': """
                 Generate a mix of easy questions about code that:
@@ -1034,11 +1214,17 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                     "question": "What is the main purpose of Django REST Framework's serializers?",
                     "correct_answer": "To convert complex data types to Python data types that can be easily rendered into JSON",
                     "explanation": "Serializers in DRF are used to convert complex data types (like Django models) into Python data types that can be easily converted to JSON, and vice versa."
+                },
+                'match-the-following': {
+                    "question_id": 1,
+                    "question": "What is the main purpose of Django REST Framework's serializers?",
+                    "correct_answer": "To convert complex data types to Python data types that can be easily rendered into JSON",
+                    "explanation": "Serializers in DRF are used to convert complex data types (like Django models) into Python data types that can be easily converted to JSON, and vice versa."
                 }
             }
             
             # Define all possible question types and difficulties
-            all_question_types = ['multiple_choice', 'fill_in_blank', 'true_false', 'one_line']
+            all_question_types = ['multiple_choice', 'fill_in_blank', 'true_false', 'one_line', 'match-the-following']
             all_difficulties = ['easy', 'medium', 'hard']
             
             # Initialize list to store all questions
@@ -1069,7 +1255,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                         """
                         
                         response = client.chat.completions.create(
-                            model="gpt-4",
+                            model="gpt-4o",
                             messages=[
                                 {"role": "system", "content": f"You are a professional quiz question generator. Generate exactly 1 {q_type} question at {difficulty} difficulty level."},
                                 {"role": "user", "content": prompt}
@@ -1192,6 +1378,14 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                     if 'correct_answer' not in question:
                         continue
 
+                elif actual_question_type == 'match-the-following':
+                    if 'answer' not in question:
+                        continue
+                    answer = str(question['answer']).strip().capitalize()
+                    if answer not in ['A', 'B', 'C', 'D']:
+                        continue
+                    question['answer'] = answer
+
                 elif actual_question_type == 'true_false':
                     if 'answer' not in question:
                         continue
@@ -1258,6 +1452,13 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                                 continue
                             if 'correct_answer' not in question:
                                 continue
+                        elif actual_question_type == 'match-the-following':
+                            if 'answer' not in question:
+                                continue
+                            answer = str(question['answer']).strip().capitalize()
+                            if answer not in ['A', 'B', 'C', 'D']:
+                                continue
+                            question['answer'] = answer
                         elif actual_question_type == 'true_false':
                             if 'answer' not in question:
                                 continue
@@ -1446,7 +1647,8 @@ class QuizQuestionGenerateByTypeView(APIView):
         'true_false': "Generate a true/false question with a clear correct answer.",
         'fill_in_blank': "Generate a fill in the blank question with the correct answer.",
         'short_answer': "Generate a short answer question with a detailed answer.",
-        'essay': "Generate an essay question that requires detailed explanation."
+        'essay': "Generate an essay question that requires detailed explanation.",
+        'match-the-following': "Generate a match-the-following question with the correct answer."
     }
 
     def get_quiz(self, quiz_id):
@@ -1486,7 +1688,7 @@ class QuizQuestionGenerateByTypeView(APIView):
             
             # Generate questions using OpenAI
             response = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "You are a professional quiz question generator."},
                     {"role": "user", "content": base_prompt}
@@ -1583,6 +1785,10 @@ class QuizQuestionsView(APIView):
                                 # Ensure fill questions have [BLANK] in the question
                                 if q.get('type') == 'fill' and '[BLANK]' not in q.get('question', ''):
                                     q['question'] = q.get('question', '') + " [BLANK]"
+                                
+                                # Ensure match-the-following questions have correct answer
+                                if q.get('type') == 'match-the-following' and 'answer' not in q:
+                                    q['answer'] = "Unknown"
                         
                         # Return the parsed and validated JSON
                         return Response({
@@ -1602,7 +1808,7 @@ class QuizQuestionsView(APIView):
                     question_data["options"] = question.options
                     question_data["correct_answer"] = question.correct_answer
                     question_data["explanation"] = question.explanation
-                
+                    question_data["question_number"] = question.question_number
                 processed_questions.append(question_data)
             
             return Response({
@@ -1700,6 +1906,7 @@ class QuizQuestionsView(APIView):
                         options=q_data.get('options'),
                         correct_answer=q_data.get('correct_answer'),
                         explanation=q_data.get('explanation'),
+                        question_number=q_data.get('question_number'),
                         created_by=request.user.email,
                         last_modified_by=request.user.email
                     )
@@ -1757,7 +1964,8 @@ class QuizShareView(APIView):
                     'difficulty': question.difficulty,
                     'options': question.options,
                     # Don't include correct answer in the response
-                    'explanation': None  # Don't show explanation initially
+                    'explanation': None,  # Don't show explanation initially
+                    'question_number': question.question_number,
                 }
                 quiz_data['questions'].append(question_data)
             
@@ -1922,7 +2130,7 @@ class ReplaceQuizQuestionAPIView(APIView):
 #         try:
 #             client = OpenAI(api_key=settings.OPENAI_API_KEY)
 #             response = client.chat.completions.create(
-#                 model="gpt-4",
+#                 model="gpt-4o",
 #                 messages=[
 #                     {"role": "system", "content": "You are a Tamil quiz generator."},
 #                     {"role": "user", "content": prompt}

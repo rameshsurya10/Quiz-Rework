@@ -83,39 +83,19 @@ class CustomDateTimeField(serializers.DateTimeField):
 class SlimQuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
-        fields = ['question_id', 'question', 'options', 'type', 'question_number']
+        fields = ['question_id', 'question', 'options', 'question_type']
 
     def to_representation(self, instance):
-        try:
-            # If question is stored as JSON string, parse it
-            parsed = json.loads(instance.question)
-            if not isinstance(parsed, list):
-                parsed = [parsed]
-        except Exception:
-            # fallback to raw question text
-            parsed = [{
-                "question": instance.question,
-                "options": instance.options or {}
-            }]
-
-        result = []
-        for q in parsed:
-            result.append({
-                "question_id": instance.question_id,
-                "question": q.get("question", ""),
-                "options": q.get("options", {}),
-                "question_type": q.get("type", ""),
-                "question_number": q.get("question_number", "")
-            })
-
-        return result 
+        representation = super().to_representation(instance)
+        representation['options'] = representation.get('options') or {}
+        return representation
 
 class QuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
         fields = [
             'question_id',
-            'question',  # Still named "question" for compatibility
+            'question',
             'question_type',
             'options',
             'correct_answer',
@@ -166,13 +146,13 @@ class QuizSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True)
     last_modified_at = serializers.DateTimeField(read_only=True)
     published_at = serializers.DateTimeField(required=False)
-    questions = QuestionSerializer(many=True, read_only=True, source='quiz_questions')
+    questions = QuestionSerializer(many=True, read_only=True, source='db_questions')
     
     class Meta:
         model = Quiz
         fields = [
             'quiz_id', 'title', 'description', 'no_of_questions',
-            'quiz_type', 'question_type', 'pages',
+            'quiz_type', 'question_type', 'pages','book_name',
             'department_id',
             'department_name',
             'quiz_date',
@@ -194,18 +174,45 @@ class QuizSerializer(serializers.ModelSerializer):
         }
 
     def to_representation(self, instance):
-        """Override to_representation to parse JSON in question field"""
+        """Override to_representation to handle various data formats"""
         data = super().to_representation(instance)
+        
+        # Handle quiz_type field which might be JSON string
+        if 'quiz_type' in data and data['quiz_type']:
+            try:
+                if isinstance(data['quiz_type'], str):
+                    quiz_type_data = json.loads(data['quiz_type'])
+                    if isinstance(quiz_type_data, dict):
+                        # If it's a dictionary like {"easy": 5, "medium": 3, "hard": 2}
+                        data['quiz_type'] = quiz_type_data
+                    elif isinstance(quiz_type_data, str):
+                        # If it's a simple string like "easy"
+                        data['quiz_type'] = quiz_type_data
+            except json.JSONDecodeError:
+                # If it's not JSON, leave it as is
+                pass
         
         # Process questions if they exist
         if 'questions' in data and data['questions']:
+            processed_questions = []
             for question in data['questions']:
-                # Parse JSON for mixed question types
-                if question.get('question_type') == 'mixed':
-                    try:
-                        question['parsed_json'] = json.loads(question['question'])
-                    except (json.JSONDecodeError, TypeError):
-                        question['parsed_json'] = None
+                try:
+                    # If question is a string, try to parse it as JSON
+                    if isinstance(question, str):
+                        question_data = json.loads(question)
+                    else:
+                        question_data = question
+
+                    # If question_data is a list, extend our questions
+                    if isinstance(question_data, list):
+                        processed_questions.extend(question_data)
+                    else:
+                        processed_questions.append(question_data)
+                except (json.JSONDecodeError, AttributeError):
+                    # If parsing fails, add the original question
+                    processed_questions.append(question)
+            
+            data['questions'] = processed_questions
         
         return data
 
@@ -218,24 +225,17 @@ class QuizSerializer(serializers.ModelSerializer):
         """Validate the pages format"""
         if not value:  # Handle empty list or None
             return []
-            
-        if not isinstance(value, list):
-            raise serializers.ValidationError("Pages must be a list")
-            
-        for page_range in value:
-            if not isinstance(page_range, str):
-                raise serializers.ValidationError("Each page range must be a string")
-            # Validate format like "23-45,56-60"
-            parts = page_range.split(',')
-            for part in parts:
-                if '-' not in part:
-                    raise serializers.ValidationError("Page ranges must be in format 'start-end'")
-                try:
-                    start, end = map(int, part.split('-'))
-                    if start > end:
-                        raise serializers.ValidationError("Start page must be less than end page")
-                except ValueError:
-                    raise serializers.ValidationError("Page numbers must be integers")
+        return value
+
+    def validate_quiz_type(self, value):
+        """Validate and normalize quiz_type"""
+        if isinstance(value, str):
+            try:
+                # Try to parse as JSON if it's a string
+                return json.loads(value)
+            except json.JSONDecodeError:
+                # If it's not JSON, return as is
+                return value
         return value
 
 class AvailableQuizSerializer(serializers.ModelSerializer):
@@ -247,6 +247,7 @@ class AvailableQuizSerializer(serializers.ModelSerializer):
         fields = [
             'quiz_id', 'title', 'description', 'no_of_questions',
             'quiz_type', 'question_type',
+            'book_name',
             'department_name',
             'quiz_date',
             'time_limit_minutes', 'passing_score',
@@ -263,6 +264,7 @@ class QuizCreateSerializer(serializers.Serializer):
     quiz_type = serializers.CharField(max_length=50, required=False)
     question_type = serializers.CharField(max_length=50, required=False, default='multiple_choice')
     pages = serializers.JSONField(required=False, default=list)
+    book_name = serializers.CharField(max_length=255, required=False)
     department_id = serializers.IntegerField(required=False, allow_null=True)
     quiz_date = CustomDateTimeField(required=False)
     uploadedfiles = serializers.JSONField(required=False, default=list)
@@ -300,6 +302,7 @@ class QuizCreateSerializer(serializers.Serializer):
         
         field_mapping = {
             'quiz_type': 'quiz_type',
+            'book_name': 'book_name',
             'question_type': 'question_type',
             'no_of_questions': 'no_of_questions',
             'time_limit_minutes': 'time_limit_minutes',
