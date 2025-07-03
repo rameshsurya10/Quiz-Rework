@@ -202,30 +202,24 @@ class StudentListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         user = self.request.user
-        print("user:",user)
 
         # Admin: See all students
         if hasattr(user, 'role') and user.role == 'ADMIN':
-            print("Admin")
             return Student.objects.filter(is_deleted=False)
 
         # Teacher: See students in their departments
         elif hasattr(user, 'role') and user.role == 'TEACHER':
-            print("Teacher")
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
             
             if not teacher:
-                print("No matching teacher found.")
-                return Student.objects.none()  # Return empty queryset if no teacher found
+                return Student.objects.none()
 
             department_ids = teacher.department_ids or []
-            print("department_ids:", department_ids)
 
             return Student.objects.filter(is_deleted=False, department_id__in=department_ids)
 
         # Other users: return none
         else:
-            print("Unauthorized or unknown role.")
             return Student.objects.none()
     
     def perform_create(self, serializer):
@@ -445,9 +439,7 @@ class RetrieveQuizAttemptView(APIView):
 
     def get(self, request, quiz_id):
         user = request.user
-        print("user:", user)
         student = Student.objects.filter(email=user.email, is_deleted=False).first()
-        print("student:", student)
         if not student:
             return Response({"error": "Student not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -575,11 +567,9 @@ class ListStudentQuizResultsView(APIView):
         role = getattr(user, "role", None)
 
         if role == "ADMIN":
-            print("role:", role)
             attempts = QuizAttempt.objects.select_related('quiz', 'student')\
                 .filter(quiz__isnull=False)\
                 .order_by('-created_at')
-            print("attempts:", attempts)
 
         elif role == "TEACHER":
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
@@ -616,7 +606,6 @@ class ListStudentQuizResultsView(APIView):
             correct_answer_count = 0
             wrong_answer_count = 0
             atempt_question=attempt.question_answer
-            print("atempt_question:", atempt_question)
             if not atempt_question:
                 continue
 
@@ -636,14 +625,12 @@ class ListStudentQuizResultsView(APIView):
                 question_obj = Question.objects.get(question_id=question_id)
                 question_data = json.loads(question_obj.question) if isinstance(question_obj.question, str) else question_obj.question
                 total_questions = len(question_data)
-                print("total_questions:", total_questions)
             except Exception:
                 total_questions = 0
 
             attended_questions = len(answered_question_numbers)
             not_answered_questions = max(total_questions - attended_questions, 0)
             percentage = (attempt.score / total_questions) * 100 if total_questions else 0
-            print("percentage:", percentage)
             # Calculate rank
             rank = None
             if attempt.result and attempt.result.lower() == "pass":
@@ -661,10 +648,8 @@ class ListStudentQuizResultsView(APIView):
             # Duration
             if hasattr(attempt, 'started_at') and hasattr(attempt, 'ended_at') and attempt.started_at and attempt.ended_at:
                 attempt_duration = attempt.ended_at - attempt.started_at
-                print("if attempt_duration:", attempt_duration)
             else:
                 attempt_duration = timedelta(minutes=attempt.quiz.time_limit_minutes)
-                print("else attempt_duration:", attempt_duration)
             
             data = {
                 "quiz_id": attempt.quiz.quiz_id,
@@ -883,7 +868,6 @@ class FetchQuizAttemptView(APIView):
             detailed_answers.append(q_data)
         # ✅ Conditionally show result only after quiz ends
         show_result = attempt.created_at >= attempt.quiz.quiz_date + timedelta(minutes=attempt.quiz.time_limit_minutes)
-        print("show_result:", show_result)
         if show_result:
             return Response({
                 "attempt_id": attempt.attempt_id,
@@ -925,32 +909,25 @@ class QuizReminderStudent(APIView):
                 return Response({"error": "Only teachers can send reminders."}, status=status.HTTP_403_FORBIDDEN)
 
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
-            print("teacher:",teacher)
             if not teacher:
                 return Response({"error": "Teacher not found."}, status=status.HTTP_404_NOT_FOUND)
 
             days_before = int(request.data.get("day", 3))
-            print("days_before:",days_before)
 
             # Convert now to UTC to match quiz_date timezone
             now_utc = timezone.now().astimezone(timezone.utc).date()
-            print("now_utc:",now_utc)
             target_date = now_utc + timedelta(days=days_before)
-            print("target_date:",target_date)
 
             # Get quizzes whose date (only date portion) is exactly `days_before` ahead
             department_ids = teacher.department_ids if isinstance(teacher.department_ids, list) else [teacher.department_ids]
-            print("department_ids:",department_ids)
             quizzes = Quiz.objects.filter(
                 department_id__in=department_ids,
                 is_deleted=False,
             )
-            print("len quizess:",len(quizzes))
             # Filter quizzes manually by checking date difference
             quizzes_to_remind = []
             for quiz in quizzes:
                 quiz_date = quiz.quiz_date.astimezone(timezone.utc).date()
-                print("quiz_date:",quiz_date)
                 if quiz_date == target_date:
                     quizzes_to_remind.append(quiz)
 
@@ -959,7 +936,6 @@ class QuizReminderStudent(APIView):
 
             # Notify students
             students = Student.objects.filter(department_id__in=department_ids, is_deleted=False)
-            print("students:",students)
 
             for student in students:
                 for quiz in quizzes_to_remind:
