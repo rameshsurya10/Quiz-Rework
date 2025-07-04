@@ -66,7 +66,7 @@ const QuizSection = () => {
         throw new Error('Invalid response format from server');
       }
 
-      setQuizzes(allQuizzes);
+      setQuizzes(quizzesData);
     } catch (error) {
       console.error('Error fetching quizzes:', error);
       setError(error.message || 'Failed to fetch quizzes');

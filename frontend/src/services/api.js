@@ -169,6 +169,8 @@ export const quizApi = {
   uploadFile: (quizId, fileData, config = {}) => {
     return api.post(`/api/quiz/${quizId}/files/upload/`, fileData, config);
   },
+  getForStudent: (id) => api.get(`/api/quiz/${id}/`),
+  submitQuizAttempt: (data) => api.post('/api/students/quiz_submit/', data),
   
   // New question management endpoints
   questions: {
@@ -185,7 +187,11 @@ export const quizApi = {
       api.post(`/api/quiz/${quizId}/questions/`, data),
     replace: (quizId, questionNumber) =>
       api.post(`/api/quiz/replace_question/${quizId}/`, { question_number: questionNumber })
-  }
+  },
+  
+  // Endpoints for student quiz results
+  getResults: () => api.get('/api/students/quiz_attempts/'),
+  getResultById: (id) => api.get(`/api/students/quiz_result/${id}/`),
 };
 
 export const userApi = {

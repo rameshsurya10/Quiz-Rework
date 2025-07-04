@@ -29,6 +29,7 @@ import OTPVerification from './components/auth/OTPVerification';
 // Student-specific components
 import StudentLogin from './components/auth/StudentLogin';
 import StudentQuizView from './components/quiz/StudentQuizView';
+import QuizResultView from './components/quiz/QuizResultView';
 import QuizTestComponent from './components/quiz/QuizTestComponent';
 import DirectQuizAccess from './components/quiz/DirectQuizAccess';
 
@@ -122,6 +123,13 @@ function App() {
           <Route path="/quiz/take/:quizId" element={
             <ProtectedRoute>
               <StudentQuizView />
+            </ProtectedRoute>
+          } />
+          
+          {/* Student Quiz Results */}
+          <Route path="/quiz/result/:quizId" element={
+            <ProtectedRoute>
+              <QuizResultView />
             </ProtectedRoute>
           } />
           
