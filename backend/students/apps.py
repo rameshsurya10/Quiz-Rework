@@ -7,5 +7,5 @@ class StudentsConfig(AppConfig):
 
     def ready(self):
         # ✅ Move import here to delay until apps are ready
-        from students import quizattempot_deleted_scheduler_job
-        quizattempot_deleted_scheduler_job.start()
+        from students import quizattempt_deleted_schedulerjob
+        quizattempt_deleted_schedulerjob.start()

@@ -654,6 +654,8 @@ class ListStudentQuizResultsView(APIView):
             data = {
                 "quiz_id": attempt.quiz.quiz_id,
                 "quiz_title": attempt.quiz.title,
+                "student_id" : attempt.student_id,
+                "student_name" : attempt.student.name,
                 "score": attempt.score,
                 "percentage": round(percentage, 2),
                 "rank": rank,
@@ -867,7 +869,19 @@ class FetchQuizAttemptView(APIView):
 
             detailed_answers.append(q_data)
         # ✅ Conditionally show result only after quiz ends
-        show_result = attempt.created_at >= attempt.quiz.quiz_date + timedelta(minutes=attempt.quiz.time_limit_minutes)
+        quiz_end_time = attempt.quiz.quiz_date + timedelta(minutes=attempt.quiz.time_limit_minutes)
+        now = timezone.now()
+        # show_result = now >= quiz_end_time
+        if now >= quiz_end_time and attempt.created_at >= quiz.quiz_date:
+            show_result = True
+        else:
+            show_result = False
+        print("attempt.quiz.quiz_date:",attempt.quiz.quiz_date)
+        print("attempt.quiz.time_limit_minutes:",attempt.quiz.time_limit_minutes)
+        print("attempt.created_at:",attempt.created_at)
+        print("now:",now)
+        print("quiz_end_time:",quiz_end_time)
+        print("show_result:",show_result)
         if show_result:
             return Response({
                 "attempt_id": attempt.attempt_id,
