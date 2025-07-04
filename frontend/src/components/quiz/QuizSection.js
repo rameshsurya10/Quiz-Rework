@@ -262,13 +262,35 @@ const QuizSection = () => {
         processed.type = q.question_type || q.type || 'mcq';
 
         // Process MCQ options into a consistent format if they exist
-        if (processed.type === 'mcq' && q.options && typeof q.options === 'object') {
-          const correctKey = q.correct_answer?.toString().split(':')[0].trim();
-          processed.options = Object.entries(q.options).map(([key, text]) => ({
-            option_text: text,
-            is_correct: key === correctKey,
-            id: key
-          }));
+        if (processed.type === 'mcq' && q.options) {
+          if (Array.isArray(q.options)) {
+            // Already in array format, just ensure consistency
+            processed.options = q.options.map((opt, index) => {
+              if (typeof opt === 'object' && opt.option_text) {
+                return opt; // Already properly formatted
+              }
+              // Convert simple array items to proper format
+              return {
+                option_text: String(opt),
+                is_correct: false, // Will be determined elsewhere
+                id: String.fromCharCode(65 + index) // A, B, C, D...
+              };
+            });
+          } else if (typeof q.options === 'object') {
+            // Convert object format to array
+            const correctKey = q.correct_answer?.toString().split(':')[0].trim();
+            processed.options = Object.entries(q.options).map(([key, value]) => {
+              // Ensure the option text is a string, even if it's a nested object.
+              const optionText = (value && typeof value === 'object') ? JSON.stringify(value) : String(value);
+              return {
+                option_text: optionText,
+                is_correct: key === correctKey,
+                id: key
+              };
+            });
+          } else {
+            processed.options = [];
+          }
         } else {
           // Ensure options is an empty array for non-MCQ to prevent render errors
           processed.options = [];
@@ -302,13 +324,35 @@ const QuizSection = () => {
         const processed = { ...q };
         processed.question_text = q.question || q.question_text || 'No question text';
         processed.type = q.question_type || q.type || 'mcq';
-        if (processed.type === 'mcq' && q.options && typeof q.options === 'object') {
-          const correctKey = q.correct_answer?.toString().split(':')[0].trim();
-          processed.options = Object.entries(q.options).map(([key, text]) => ({
-            option_text: text,
-            is_correct: key === correctKey,
-            id: key
-          }));
+        if (processed.type === 'mcq' && q.options) {
+          if (Array.isArray(q.options)) {
+            // Already in array format, just ensure consistency
+            processed.options = q.options.map((opt, index) => {
+              if (typeof opt === 'object' && opt.option_text) {
+                return opt; // Already properly formatted
+              }
+              // Convert simple array items to proper format
+              return {
+                option_text: String(opt),
+                is_correct: false, // Will be determined elsewhere
+                id: String.fromCharCode(65 + index) // A, B, C, D...
+              };
+            });
+          } else if (typeof q.options === 'object') {
+            // Convert object format to array
+            const correctKey = q.correct_answer?.toString().split(':')[0].trim();
+            processed.options = Object.entries(q.options).map(([key, value]) => {
+              // Ensure the option text is a string, even if it's a nested object.
+              const optionText = (value && typeof value === 'object') ? JSON.stringify(value) : String(value);
+              return {
+                option_text: optionText,
+                is_correct: key === correctKey,
+                id: key
+              };
+            });
+          } else {
+            processed.options = [];
+          }
         } else {
           processed.options = [];
         }
@@ -397,12 +441,7 @@ const QuizSection = () => {
     
     // Get passing score from backend data only
     const getPassingScore = (quiz) => {
-      console.log('[QuizSection] Quiz passing score data:', {
-        quiz_id: quiz.quiz_id,
-        title: quiz.title,
-        passing_score: quiz.passing_score,
-        passing_score_type: typeof quiz.passing_score
-      });
+    
       
       // Use only the backend passing_score field - no fallbacks to mock data
       if (quiz.passing_score !== undefined && quiz.passing_score !== null) {
@@ -632,21 +671,40 @@ const QuizSection = () => {
                     {/* Options for MCQ */}
                     {question.type === 'mcq' && question.options && (
                       <Box sx={{ pl: 2, mt: 1 }}>
-                        {question.options.map(option => (
-                          <Typography 
-                            key={option.id} 
-                            sx={{ color: option.is_correct ? 'success.main' : 'text.secondary' }}
-                          >
-                            {option.id}: {option.option_text}
-                          </Typography>
-                        ))}
+                        {Array.isArray(question.options) ? (
+                          // Handle processed options array
+                          question.options.map(option => (
+                            <Typography 
+                              key={option.id || option.key} 
+                              sx={{ color: option.is_correct ? 'success.main' : 'text.secondary' }}
+                            >
+                              {option.id}: {String(option.option_text)}
+                            </Typography>
+                          ))
+                        ) : (
+                          // Handle raw options object
+                          Object.entries(question.options).map(([key, text]) => (
+                            <Typography 
+                              key={key} 
+                              sx={{ 
+                                color: question.correct_answer?.toString().split(':')[0].trim() === key ? 'success.main' : 'text.secondary' 
+                              }}
+                            >
+                              {key}: {String(text)}
+                            </Typography>
+                          ))
+                        )}
                       </Box>
                     )}
 
                     {/* Correct Answer for other types */}
                     {(question.type !== 'mcq') && (
                       <Typography sx={{ pl: 2, mt: 1, color: 'success.main' }}>
-                        Correct Answer: {question.correct_answer}
+                        Correct Answer: {
+                          (question.correct_answer && typeof question.correct_answer === 'object')
+                            ? JSON.stringify(question.correct_answer)
+                            : String(question.correct_answer)
+                        }
                       </Typography>
                     )}
 

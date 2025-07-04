@@ -610,29 +610,32 @@ const StudentQuizResultView = () => {
                           Options:
                         </Typography>
                         <Stack spacing={1}>
-                          {Object.values(answer.options).map((option, idx) => (
-                            <Box
-                              key={idx}
-                              sx={{
-                                p: 2,
-                                borderRadius: 2,
-                                border: `2px solid ${
-                                  option === answer.correct_answer ? '#4CAF50' :
-                                  option === answer.student_answer ? '#F44336' : 
-                                  alpha('#667eea', 0.2)
-                                }`,
-                                bgcolor: option === answer.correct_answer ? alpha('#4CAF50', 0.1) :
-                                        option === answer.student_answer ? alpha('#F44336', 0.1) : 
-                                        'transparent'
-                              }}
-                            >
-                              <Typography variant="body2">
-                                {option}
-                                {option === answer.correct_answer && ' ✓ (Correct)'}
-                                {option === answer.student_answer && option !== answer.correct_answer && ' ✗ (Your Answer)'}
-                              </Typography>
-                            </Box>
-                          ))}
+                          {Object.values(answer.options).map((option, idx) => {
+                            const optionText = String(option);
+                            return (
+                              <Box
+                                key={idx}
+                                sx={{
+                                  p: 2,
+                                  borderRadius: 2,
+                                  border: `2px solid ${
+                                    optionText === answer.correct_answer ? '#4CAF50' :
+                                    optionText === answer.student_answer ? '#F44336' : 
+                                    alpha('#667eea', 0.2)
+                                  }`,
+                                  bgcolor: optionText === answer.correct_answer ? alpha('#4CAF50', 0.1) :
+                                          optionText === answer.student_answer ? alpha('#F44336', 0.1) : 
+                                          'transparent'
+                                }}
+                              >
+                                <Typography variant="body2">
+                                  {optionText}
+                                  {optionText === answer.correct_answer && ' ✓ (Correct)'}
+                                  {optionText === answer.student_answer && optionText !== answer.correct_answer && ' ✗ (Your Answer)'}
+                                </Typography>
+                              </Box>
+                            );
+                          })}
                         </Stack>
                       </Box>
                     )}

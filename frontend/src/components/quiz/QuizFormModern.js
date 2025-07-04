@@ -50,6 +50,7 @@ const formatQuestionType = (value) => {
 const initialFormState = {
   title: '',
   description: '',
+  book_name: '',
   files: [],
   filesData: [],
   no_of_questions: '',
@@ -88,6 +89,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
       const {
         title,
         description,
+        book_name,
         no_of_questions,
         time_limit_minutes,
         complexity,
@@ -110,13 +112,14 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
       setForm({
         title: title || '',
         description: description || '',
+        book_name: book_name || '',
         no_of_questions: no_of_questions?.toString() || '',
         time_limit_minutes: time_limit_minutes?.toString() || '',
         complexity: typeof complexity === 'string' ? capitalize(complexity) : 'Mixed',
         quiz_type: formatQuestionType(quiz_type),
         department: department_id || '',
         passing_score: passing_score?.toString() || '',
-        quiz_date: quiz_date ? quiz_date.slice(0, 10) : '',
+        quiz_date: quiz_date ? quiz_date.slice(0, 16) : '',
         files: [],
         filesData: pages.map(p => ({
           filename: p.filename,
@@ -129,6 +132,40 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
       setHasPdf(pages.length > 0);
     }
   }, [initialQuizData]);
+
+  useEffect(() => {
+    if (form.complexity === 'Mixed') {
+      const { easy, medium, hard } = complexityCounts;
+      const total = (parseInt(easy, 10) || 0) + (parseInt(medium, 10) || 0) + (parseInt(hard, 10) || 0);
+      const totalQuestions = parseInt(form.no_of_questions, 10) || 0;
+
+      // Only show error if user has started entering counts and they don't add up
+      if ((easy || medium || hard) && totalQuestions > 0 && total !== totalQuestions) {
+        setErrors(prev => ({
+          ...prev,
+          complexity: `The sum of easy, medium, and hard questions must equal the total number of questions (${totalQuestions}).`
+        }));
+      } else {
+        // Otherwise, clear the specific error
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          if (newErrors.complexity?.startsWith('The sum of easy')) {
+             delete newErrors.complexity;
+          }
+          return newErrors;
+        });
+      }
+    } else {
+        // Also clear if complexity is not Mixed
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          if (newErrors.complexity?.startsWith('The sum of easy')) {
+             delete newErrors.complexity;
+          }
+          return newErrors;
+        });
+    }
+  }, [complexityCounts, form.no_of_questions, form.complexity]);
 
   const handleField = useCallback((key, value) => {
     if (key.startsWith('complexity_')) {
@@ -183,10 +220,13 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
 
     if (form.complexity === 'Mixed') {
       const { easy, medium, hard } = complexityCounts;
-      const total = (parseInt(easy) || 0) + (parseInt(medium) || 0) + (parseInt(hard) || 0);
-      const totalQuestions = parseInt(form.no_of_questions) || 0;
-      if (total !== totalQuestions) {
-        errs.complexity = `The sum of easy, medium, and hard questions must equal the total number of questions (${totalQuestions}).`;
+      // Only validate if user has provided counts.
+      if (easy || medium || hard) {
+        const total = (parseInt(easy) || 0) + (parseInt(medium) || 0) + (parseInt(hard) || 0);
+        const totalQuestions = parseInt(form.no_of_questions) || 0;
+        if (total !== totalQuestions) {
+          errs.complexity = `The sum of easy, medium, and hard questions must equal the total number of questions (${totalQuestions}).`;
+        }
       }
     }
 
@@ -260,6 +300,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
       const quizPayload = {
         title: form.title,
         description: form.description,
+        book_name: form.book_name,
         no_of_questions: parseInt(form.no_of_questions),
         time_limit_minutes: parseInt(form.time_limit_minutes),
         quiz_date: form.quiz_date,
@@ -338,6 +379,22 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   onChange={e => handleField('title', e.target.value)}
                   error={!!errors.title}
                   helperText={errors.title}
+                  sx={{
+                    '& .MuiInputBase-input': {
+                      fontSize: { xs: '0.9rem', sm: '1rem' }
+                    }
+                  }}
+                />
+              </Grid>
+
+              {/* Book Name */}
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Book Name"
+                  name="book_name"
+                  value={form.book_name}
+                  onChange={e => handleField('book_name', e.target.value)}
                   sx={{
                     '& .MuiInputBase-input': {
                       fontSize: { xs: '0.9rem', sm: '1rem' }
@@ -453,12 +510,12 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  type="date"
-                  label="Quiz Date"
+                  type="datetime-local"
+                  label="Quiz Date & Time"
                   value={form.quiz_date}
                   onChange={(e) => handleField('quiz_date', e.target.value)}
                   inputProps={{
-                    min: new Date().toISOString().split('T')[0], // Prevent past dates
+                    min: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 11) + '00:00', // Prevent past dates
                   }}
                   InputLabelProps={{ shrink: true }}
                   error={!!errors.quiz_date}
@@ -529,7 +586,6 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                       value={complexityCounts.hard}
                       onChange={(e) => handleField('complexity_hard', e)}
                       error={!!errors.complexity}
-                      helperText={errors.complexity}
                     />
                   </Grid>
                 </>
@@ -666,6 +722,13 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   </Grid>
                   <Grid item xs={6}>
                     <Typography variant="body2" fontWeight="medium">{form.title || 'Not set'}</Typography>
+                  </Grid>
+
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Book Name:</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" fontWeight="medium">{form.book_name || 'Not set'}</Typography>
                   </Grid>
 
                   <Grid item xs={6}>

@@ -245,7 +245,7 @@ const SimpleStudentDashboard = () => {
 
   const loadAvailableQuizzes = async () => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/students/available_quizzes/`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/quiz/`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json',
@@ -256,18 +256,12 @@ const SimpleStudentDashboard = () => {
         const data = await response.json();
         console.log('Available quizzes received:', data);
         
-        let allQuizzes = [];
-        if (data && (data.current_quizzes || data.upcoming_quizzes)) {
-          allQuizzes = [
-            ...(data.current_quizzes || []),
-            ...(data.upcoming_quizzes || [])
-          ];
-        } else if (Array.isArray(data)) {
-          allQuizzes = data;
-        }
+        const allQuizzes = data.results || (Array.isArray(data) ? data : []);
         
         const attemptedQuizIds = new Set(quizAttempts.map(a => a.quiz?.id || a.quiz?.quiz_id));
-        const filteredQuizzes = allQuizzes.filter(q => !attemptedQuizIds.has(q.quiz_id));
+        const filteredQuizzes = allQuizzes
+          .filter(q => q.is_published)
+          .filter(q => !attemptedQuizIds.has(q.quiz_id));
 
         setAvailableQuizzes(filteredQuizzes);
         
@@ -310,106 +304,56 @@ const SimpleStudentDashboard = () => {
     navigate('/student-login');
   };
 
-  const handleQuizLinkSubmit = async () => {
+  const handleQuizLinkSubmit = () => {
     if (!quizLink.trim()) return;
-    
-    try {
-      console.log('Processing quiz link:', quizLink);
-      
-      // Extract quiz ID from various link formats
-      const patterns = [
-        /quiz[\/=](\d+)/i,           // quiz/186 or quiz=186
-        /quiz[\/=](\w+)[\/]/i,       // quiz/186/join/ 
-        /id[\/=](\d+)/i,             // id/186 or id=186
-        /\/(\d+)\/join/i,            // /186/join
-        /quiz_id[\/=](\d+)/i,        // quiz_id/186 or quiz_id=186
-        /([a-f0-9-]{36})/i,          // UUID format
-        /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i // Full UUID
-      ];
-      
-      let quizId = null;
-      
-      // Try each pattern
-      for (const pattern of patterns) {
-        const match = quizLink.match(pattern);
-        if (match) {
-          quizId = match[1];
-          console.log(`Extracted quiz ID "${quizId}" using pattern:`, pattern);
-          break;
-        }
+
+    console.log('Processing quiz link:', quizLink);
+
+    const patterns = [
+      /quiz[\/=](\d+)/i,
+      /quiz[\/=](\w+)[\/]/i,
+      /id[\/=](\d+)/i,
+      /\/(\d+)\/join/i,
+      /quiz_id[\/=](\d+)/i,
+      /([a-f0-9-]{36})/i,
+      /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i
+    ];
+    let quizId = null;
+
+    for (const pattern of patterns) {
+      const match = quizLink.match(pattern);
+      if (match) {
+        quizId = match[1];
+        break;
       }
-      
-      // If no pattern matched, check if the entire input is just a quiz ID
-      if (!quizId && /^[a-zA-Z0-9-]+$/.test(quizLink.trim())) {
-        quizId = quizLink.trim();
-        console.log(`Using entire input as quiz ID: ${quizId}`);
-      }
-      
-      if (!quizId) {
-        console.error('Could not extract quiz ID from:', quizLink);
-        setError('Invalid quiz link format. Please check the link and try again.');
-        return;
-      }
-      
-      // Test the quiz attempt endpoint before navigating
-      console.log(`Testing quiz access for quiz ID: ${quizId}`);
-      await handleTakeQuiz(quizId);
-      
-    } catch (error) {
-      console.error('Error with quiz link:', error);
-      setError('Could not access quiz. Please check the link.');
     }
+
+    if (!quizId && /^[a-zA-Z0-9-]+$/.test(quizLink.trim())) {
+      quizId = quizLink.trim();
+    }
+
+    if (!quizId) {
+      setError('Invalid quiz link format. Please check the link and try again.');
+      return;
+    }
+
+    handleTakeQuiz(quizId);
   };
 
-  const handleTakeQuiz = async (quizId) => {
-    try {
-      // Check if student already attempted this quiz
-      const hasAttempted = quizAttempts.some(attempt => 
-        attempt.quiz_id === parseInt(quizId) || attempt.quiz?.quiz_id === parseInt(quizId)
-      );
-      
-      if (hasAttempted) {
-        setError('You have already attempted this quiz. Each quiz can only be taken once.');
-        return;
-      }
-
-      // Get the quiz questions for taking the quiz
-      console.log(`Getting quiz questions for quiz ID: ${quizId}`);
-      
-      // Use the correct endpoint to get quiz questions for taking
-      const response = await quizApi.getForStudent(quizId);
-      
-      console.log('Quiz data response:', response.data);
-      
-      if (response.data) {
-        // Quiz is accessible, navigate to the quiz taking interface
-        navigate(`/quiz/take/${quizId}`);
-      }
-    } catch (error) {
-      console.error('Error getting quiz:', error);
-      console.error('Error details:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        headers: error.response?.headers
-      });
-      
-      let errorMessage = 'Unable to access quiz. ';
-      
-      if (error.response?.status === 404) {
-        errorMessage = 'Quiz not found or not available. The quiz may have been deleted or is not published yet.';
-      } else if (error.response?.status === 403) {
-        errorMessage = 'You do not have permission to access this quiz. Please make sure you are logged in as a student.';
-      } else if (error.response?.status === 401) {
-        errorMessage = 'Authentication required. Please log in again.';
-      } else if (error.response?.status === 500) {
-        errorMessage = 'Server error. Please try again later or contact support.';
-      } else {
-        errorMessage += 'Please check the quiz link and try again.';
-      }
-      
-      setError(errorMessage);
+  const handleTakeQuiz = (quizId) => {
+    const hasAttempted = quizAttempts.some(attempt => 
+      (attempt.quiz_id || attempt.quiz?.quiz_id) === parseInt(quizId)
+    );
+    
+    if (hasAttempted) {
+      setError('You have already attempted this quiz. Each quiz can only be taken once.');
+      return;
     }
+
+    // Directly navigate to the quiz view. 
+    // The StudentQuizView component will handle loading, validation, and errors.
+    console.log(`Navigating to quiz ID: ${quizId}`);
+    navigate(`/quiz/take/${quizId}`);
   };
 
   const handleViewResult = (attempt) => {

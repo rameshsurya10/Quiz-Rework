@@ -252,7 +252,7 @@ const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
                   borderColor="gray.200"
                   bg={question.correct_answer === key ? "green.50" : "white"}
                 >
-                  <Text>{key}. {value}</Text>
+                  <Text>{key}. {String(value)}</Text>
                 </Box>
               ))}
             </VStack>

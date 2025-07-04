@@ -206,31 +206,43 @@ const StudentQuizView = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
   const theme = useTheme();
-  const submissionStarted = useRef(false);
   
-  // Initialize session manager
-  const [sessionManager] = useState(() => new QuizSessionManager(quizId));
-  
+  // Core quiz state
   const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
-  const [timePerQuestion, setTimePerQuestion] = useState(null);
-  const [questionTimeLeft, setQuestionTimeLeft] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [showWarningDialog, setShowWarningDialog] = useState(false);
-  const [tabChangeCount, setTabChangeCount] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [warningMessage, setWarningMessage] = useState('');
-  const [showSnackbar, setShowSnackbar] = useState(false);
-  const [alertSeverity, setAlertSeverity] = useState('warning');
-  const [showSecurityAlert, setShowSecurityAlert] = useState(false);
+  
+  // Session and security state
   const [quizSession, setQuizSession] = useState(null);
   const [wasRefreshed, setWasRefreshed] = useState(false);
+  const [showSecurityAlert, setShowSecurityAlert] = useState(false);
+  const [showWarningDialog, setShowWarningDialog] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [warningCount, setWarningCount] = useState(0);
+  const [timePerQuestion, setTimePerQuestion] = useState(0);
+  const [questionTimeLeft, setQuestionTimeLeft] = useState(0);
+  
+  // Alert system
+  const [showSnackbar, setShowSnackbar] = useState(false);
+  const [warningMessage, setWarningMessage] = useState('');
+  const [alertSeverity, setAlertSeverity] = useState('info');
+  
+  // Refs for cleanup and prevent duplicate submissions
+  const submissionStarted = useRef(false);
+  const timerRef = useRef(null);
+  const questionTimerRef = useRef(null);
+  const sessionManager = useRef(new QuizSessionManager(quizId));
+
+  // Load quiz data on initial mount or when quizId changes
+  useEffect(() => {
+    loadQuiz();
+  }, [quizId]); // React ESLint recommends adding loadQuiz, but it causes re-renders. quizId is the correct trigger.
 
   const generateSubmissionPayload = useCallback((currentAnswers) => {
     return {
@@ -240,12 +252,18 @@ const StudentQuizView = () => {
         
         let options = {};
         if (question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
-          options = question.options;
+          // Handle object format {A: "text", B: "text"}
+          options = Object.fromEntries(
+            Object.entries(question.options).map(([key, value]) => [key, String(value)])
+          );
         } else if (question.question_options && typeof question.question_options === 'object') {
-          options = question.question_options;
+          options = Object.fromEntries(
+            Object.entries(question.question_options).map(([key, value]) => [key, String(value)])
+          );
         } else if (Array.isArray(question.options)) {
+          // Convert array to object format for submission
           options = question.options.reduce((acc, opt, idx) => {
-            acc[String.fromCharCode(65 + idx)] = opt;
+            acc[String.fromCharCode(65 + idx)] = String(opt);
             return acc;
           }, {});
         }
@@ -277,7 +295,7 @@ const StudentQuizView = () => {
 
   // Tab change detection with immediate submission
   const handleTabChange = useCallback(() => {
-    setTabChangeCount(prev => {
+    setTabSwitchCount(prev => {
       const newCount = prev + 1;
       showAlert('Tab switching detected! Quiz will be submitted automatically for security.', 'error', 2000);
       setShowWarningDialog(true);
@@ -292,19 +310,19 @@ const StudentQuizView = () => {
     if (!submissionStarted.current && !isSubmitted && questions.length > 0 && quizSession && quizSession.isActive) {
       submissionStarted.current = true;
       // Check if session is still valid
-      if (sessionManager.isExpired()) {
-        sessionManager.clearSession();
+      if (sessionManager.current.isExpired()) {
+        sessionManager.current.clearSession();
         return;
       }
       
-      const currentAnswers = sessionManager.getAnswers();
+      const currentAnswers = sessionManager.current.getAnswers();
       const submissionData = generateSubmissionPayload(currentAnswers);
 
       // Auto-submit and prevent reload dialog
       setIsSubmitted(true);
       
       // End the session
-      sessionManager.endSession();
+      sessionManager.current.endSession();
       
       // Use sendBeacon for reliable submission
       const token = localStorage.getItem('token');
@@ -350,7 +368,6 @@ const StudentQuizView = () => {
     
     if (requestMethod) {
       requestMethod.call(element).then(() => {
-        setIsFullscreen(true);
         showAlert('Fullscreen mode activated for secure quiz environment.', 'success');
       }).catch(() => {
         showAlert('Please enable fullscreen mode for better security.', 'info');
@@ -367,24 +384,23 @@ const StudentQuizView = () => {
                           document.msExitFullscreen;
         
         if (exitMethod) {
-          exitMethod.call(document).then(() => setIsFullscreen(false)).catch(() => {
-            setIsFullscreen(false);
+          exitMethod.call(document).then(() => showAlert('Fullscreen mode exited.', 'success')).catch(() => {
+            showAlert('Fullscreen mode exit error (non-critical).', 'info');
           });
         }
       }
     } catch (error) {
       console.log('Fullscreen exit error (non-critical):', error);
-      setIsFullscreen(false);
+      showAlert('Fullscreen mode exit error (non-critical).', 'info');
     }
-  }, []);
+  }, [showAlert]);
 
   useEffect(() => {
-    if (!hasLoadedOnce && quizId) {
-      loadQuiz();
-      setHasLoadedOnce(true);
+    // Set up security listeners only when the quiz is active and loaded
+    if (isSubmitted || isLoading || !quiz) {
+      return;
     }
-    
-    // Enhanced security setup
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
     
@@ -419,13 +435,13 @@ const StudentQuizView = () => {
       document.removeEventListener('keydown', handleKeyDown);
       exitFullScreen();
     };
-  }, [quizId, hasLoadedOnce, handleVisibilityChange, handleBeforeUnload, handleTabChange, requestFullScreen, exitFullScreen, showAlert]);
+  }, [isLoading, isSubmitted, quiz, handleVisibilityChange, handleBeforeUnload, requestFullScreen, exitFullScreen, showAlert]);
 
   // Timer effect - now uses persistent session time
   useEffect(() => {
     if (quizSession && quizSession.isActive) {
       const updateTimer = () => {
-        const remaining = sessionManager.getRemainingTime();
+        const remaining = sessionManager.current.getRemainingTime();
         setTimeLeft(remaining);
         
         if (remaining <= 0) {
@@ -464,7 +480,7 @@ const StudentQuizView = () => {
 
   // Warn if multiple tabs are open for the same quiz
   useEffect(() => {
-    if (!sessionManager.checkMultipleTabAccess()) {
+    if (!sessionManager.current.checkMultipleTabAccess()) {
       showAlert('Warning: Quiz is open in multiple tabs. Only one tab is allowed!', 'error', 8000);
     }
     // Clean up on unmount
@@ -476,47 +492,55 @@ const StudentQuizView = () => {
 
   // Update activity on every answer and navigation
   useEffect(() => {
-    sessionManager.updateActivity();
+    sessionManager.current.updateActivity();
   }, [answers, currentQuestion]);
 
   const loadQuiz = async () => {
     try {
       setIsLoading(true);
+      setLoadingProgress(0);
       
       // Check if session exists and is expired or submitted
-      const existingSession = sessionManager.getSession();
+      const existingSession = sessionManager.current.getSession();
       if (existingSession) {
-        if (sessionManager.isExpired()) {
+        if (sessionManager.current.isExpired()) {
           showAlert('Quiz session has expired. Redirecting to dashboard.', 'error');
-          sessionManager.clearSession();
+          sessionManager.current.clearSession();
           setTimeout(() => navigate('/student-dashboard'), 2000);
           return;
         }
         if (!existingSession.isActive) {
           showAlert('This quiz has already been submitted. Redirecting to dashboard.', 'info');
-          sessionManager.clearSession();
+          sessionManager.current.clearSession();
           setTimeout(() => navigate('/student-dashboard'), 2000);
           return;
         }
       }
       
+      setLoadingProgress(20);
+      
       // Use the correct student endpoint
       const response = await quizApi.getForStudent(quizId);
       const quizData = response.data;
       
+      setLoadingProgress(40);
       setQuiz(quizData);
       
       // Initialize or restore session
-      const session = sessionManager.initializeSession(quizData);
+      const session = sessionManager.current.initializeSession(quizData);
       setQuizSession(session);
       
+      setLoadingProgress(60);
+      
       // Check if this was a refresh
-      const refreshDetected = sessionManager.wasRefreshed();
+      const refreshDetected = sessionManager.current.wasRefreshed();
       setWasRefreshed(refreshDetected);
       
       if (refreshDetected) {
         showAlert('Page refresh detected. Quiz timer continues from where it left off.', 'warning', 3000);
       }
+      
+      setLoadingProgress(70);
       
       let questionsData = quizData.current_questions || quizData.questions || [];
       
@@ -531,32 +555,79 @@ const StudentQuizView = () => {
       const flattenedQuestions = [];
       let questionIndex = 0;
 
-            console.log('Processing questions data:', questionsData);
+      console.log('Processing questions data:', questionsData);
       console.log('Quiz no_of_questions:', quizData.no_of_questions);
 
       if (Array.isArray(questionsData)) {
-        questionsData.forEach((questionBlock, blockIndex) => {
-          if (Array.isArray(questionBlock)) {
-            // Handle nested array of questions
-            questionBlock.forEach((question, subIndex) => {
-              if (question && typeof question === 'object' && (question.question || question.text)) {
+        questionsData.forEach((questionItem, index) => {
+          // Handle questions from SlimQuestionSerializer format
+          if (questionItem && typeof questionItem === 'object') {
+            // Helper function to process options (simplified since backend sends arrays)
+            const processOptions = (options) => {
+              if (!options) return [];
+              if (Array.isArray(options)) {
+                return options.filter(opt => opt && typeof opt === 'string' && opt.trim() !== '');
+              }
+              // Fallback for any unexpected formats
+              return [];
+            };
+
+            // Check if question field contains JSON array (for mixed type questions)
+            if (typeof questionItem.question === 'string') {
+              try {
+                const parsedQuestions = JSON.parse(questionItem.question);
+                if (Array.isArray(parsedQuestions)) {
+                  // Handle multiple questions within one question object
+                  parsedQuestions.forEach((subQuestion, subIndex) => {
+                    if (subQuestion && (subQuestion.question || subQuestion.text)) {
+                      flattenedQuestions.push({
+                        ...subQuestion,
+                        uniqueId: `${questionItem.question_id}-${subIndex}`,
+                        displayIndex: questionIndex++,
+                        question_id: questionItem.question_id,
+                        options: processOptions(subQuestion.options || questionItem.options)
+                      });
+                    }
+                  });
+                } else {
+                  // Single question as JSON string
+                  flattenedQuestions.push({
+                    ...parsedQuestions,
+                    uniqueId: `${questionItem.question_id}-${index}`,
+                    displayIndex: questionIndex++,
+                    question_id: questionItem.question_id,
+                    options: processOptions(parsedQuestions.options || questionItem.options)
+                  });
+                }
+              } catch (e) {
+                // If parsing fails, treat as regular question text
+                if (questionItem.question.trim()) {
+                  flattenedQuestions.push({
+                    question: questionItem.question,
+                    uniqueId: `${questionItem.question_id}-${index}`,
+                    displayIndex: questionIndex++,
+                    question_id: questionItem.question_id,
+                    question_type: questionItem.question_type || 'text',
+                    options: processOptions(questionItem.options)
+                  });
+                }
+              }
+            } else {
+              // Handle direct question object
+              if (questionItem.question || questionItem.text) {
                 flattenedQuestions.push({
-                  ...question,
-                  uniqueId: `${blockIndex}-${subIndex}`,
+                  ...questionItem,
+                  uniqueId: `${questionItem.question_id || index}-${index}`,
                   displayIndex: questionIndex++,
+                  options: processOptions(questionItem.options)
                 });
               }
-            });
-          } else if (typeof questionBlock === 'object' && questionBlock !== null && (questionBlock.question || questionBlock.text)) {
-            // Handle single question object
-            flattenedQuestions.push({
-              ...questionBlock,
-              uniqueId: `${blockIndex}`,
-              displayIndex: questionIndex++,
-            });
+            }
           }
         });
       }
+
+      setLoadingProgress(85);
 
       // Filter valid questions and limit to the quiz's specified count
       let validQuestions = flattenedQuestions.filter(q => 
@@ -573,12 +644,14 @@ const StudentQuizView = () => {
 
       setQuestions(validQuestions);
       
+      setLoadingProgress(90);
+      
       // Restore answers from session
-      const savedAnswers = sessionManager.getAnswers();
+      const savedAnswers = sessionManager.current.getAnswers();
       setAnswers(savedAnswers);
       
       // Set timer based on session (remaining time)
-      const remainingTime = sessionManager.getRemainingTime();
+      const remainingTime = sessionManager.current.getRemainingTime();
       setTimeLeft(remainingTime);
       
       // Calculate time per question (distribute remaining time equally)
@@ -588,11 +661,15 @@ const StudentQuizView = () => {
         setQuestionTimeLeft(timePerQuestionSeconds);
       }
       
-            if (refreshDetected) {
-        showAlert(`Quiz resumed after refresh. ${Object.keys(savedAnswers).length} answers restored. Time continues from ${formatTime(remainingTime)}.`, 'info', 5000);
-      } else {
-        showAlert(`Quiz loaded successfully! ${validQuestions.length} questions to answer. Duration: ${formatTime(remainingTime)}.`, 'success');
-      }
+      setLoadingProgress(100);
+      
+      setTimeout(() => {
+        if (refreshDetected) {
+          showAlert(`Quiz resumed after refresh. ${Object.keys(savedAnswers).length} answers restored. Time continues from ${formatTime(remainingTime)}.`, 'info', 5000);
+        } else {
+          showAlert(`Quiz loaded successfully! ${validQuestions.length} questions to answer. Duration: ${formatTime(remainingTime)}.`, 'success');
+        }
+      }, 500);
       
     } catch (error) {
       console.error('Error loading quiz:', error);
@@ -602,7 +679,9 @@ const StudentQuizView = () => {
         navigate('/student-dashboard');
       }, 3000);
     } finally {
-      setIsLoading(false);
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 1000); // Delay to show 100% completion
     }
   };
 
@@ -614,11 +693,11 @@ const StudentQuizView = () => {
     setAnswers(newAnswers);
     
     // Save answers to persistent session
-    sessionManager.saveAnswers(newAnswers);
+    sessionManager.current.saveAnswers(newAnswers);
     
     // Update session activity
     if (quizSession) {
-      sessionManager.saveSession(quizSession);
+      sessionManager.current.saveSession(quizSession);
     }
   };
 
@@ -665,9 +744,9 @@ const StudentQuizView = () => {
         setIsSubmitted(true);
         
         // End the session and clear data
-        sessionManager.endSession();
+        sessionManager.current.endSession();
         setTimeout(() => {
-          sessionManager.clearSession();
+          sessionManager.current.clearSession();
         }, 1000);
         
         showAlert('Quiz submitted successfully! Redirecting to dashboard...', 'success');
@@ -704,8 +783,7 @@ const StudentQuizView = () => {
 
   // Enhanced input component for different question types
   const renderQuestionInput = (question) => {
-    const questionType = question.question_type?.toLowerCase() || 'text';
-    const isAnswered = answers[question.uniqueId];
+    const questionType = (question.question_type || question.type || 'text').toLowerCase();
     
     // Fill-in-the-blank questions
     if (questionType.includes('fill') || questionType.includes('blank')) {
@@ -791,9 +869,26 @@ const StudentQuizView = () => {
       );
     }
     
-    // Multiple choice questions
-    const options = question.options || question.question_options || [];
-    if (Array.isArray(options) && options.length > 0) {
+    // Multiple choice & True/False questions
+    let options = question.options || question.question_options || [];
+    
+    // Handle different option formats
+    if (options && typeof options === 'object' && !Array.isArray(options)) {
+      // Convert object format {A: "text", B: "text"} to array
+      options = Object.values(options).map(text => String(text));
+    } else if (!Array.isArray(options)) {
+      options = [];
+    }
+    
+    // Ensure all options are strings to prevent rendering objects
+    options = options.map(opt => String(opt)).filter(opt => opt && opt.trim());
+    
+    // Backend now always sends arrays, but add fallback for True/False
+    if ((questionType.includes('true') || questionType.includes('tf') || questionType.includes('boolean')) && options.length === 0) {
+      options = ['True', 'False'];
+    }
+
+    if (options.length > 0) {
       return (
         <FormControl component="fieldset" fullWidth sx={{ mt: 2 }}>
           <RadioGroup
@@ -808,17 +903,17 @@ const StudentQuizView = () => {
                 transition={{ delay: index * 0.1 }}
               >
                 <FormControlLabel
-                  value={option}
+                  value={String(option)}
                   control={<Radio sx={{ color: theme.palette.primary.main }} />}
-                  label={option}
+                  label={String(option)}
                   sx={{
                     margin: 1,
                     padding: 2,
                     borderRadius: 2,
-                    backgroundColor: answers[question.uniqueId] === option 
+                    backgroundColor: answers[question.uniqueId] === String(option) 
                       ? alpha(theme.palette.primary.main, 0.1)
                       : alpha('#fff', 0.7),
-                    border: `2px solid ${answers[question.uniqueId] === option 
+                    border: `2px solid ${answers[question.uniqueId] === String(option) 
                       ? theme.palette.primary.main 
                       : 'transparent'}`,
                     transition: 'all 0.3s ease',
@@ -903,17 +998,85 @@ const StudentQuizView = () => {
               borderRadius: 4,
               background: alpha('#fff', 0.95),
               backdropFilter: 'blur(20px)',
+              minWidth: 400,
             }}
           >
             <Avatar sx={{ mx: 'auto', mb: 3, bgcolor: 'primary.main', width: 64, height: 64 }}>
               <QuizIcon fontSize="large" />
             </Avatar>
-            <CircularProgress size={60} sx={{ mb: 3 }} />
+            
             <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, color: 'primary.main' }}>
               Preparing Your Quiz
-        </Typography>
-            <Typography variant="body1" color="text.secondary">
+            </Typography>
+            
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
               Setting up secure environment...
+            </Typography>
+            
+            {/* Progress Circle */}
+            <Box sx={{ position: 'relative', display: 'inline-flex', mb: 3 }}>
+              <CircularProgress
+                variant="determinate"
+                value={loadingProgress}
+                size={80}
+                thickness={4}
+                sx={{
+                  color: 'primary.main',
+                  '& .MuiCircularProgress-circle': {
+                    strokeLinecap: 'round',
+                  },
+                }}
+              />
+              <Box
+                sx={{
+                  top: 0,
+                  left: 0,
+                  bottom: 0,
+                  right: 0,
+                  position: 'absolute',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Typography
+                  variant="h6"
+                  component="div"
+                  color="primary.main"
+                  sx={{ fontWeight: 700 }}
+                >
+                  {`${Math.round(loadingProgress)}%`}
+                </Typography>
+              </Box>
+            </Box>
+            
+            {/* Progress Bar */}
+            <Box sx={{ width: '100%', mb: 3 }}>
+              <LinearProgress
+                variant="determinate"
+                value={loadingProgress}
+                sx={{
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: alpha('#667eea', 0.2),
+                  '& .MuiLinearProgress-bar': {
+                    borderRadius: 4,
+                    background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                  },
+                }}
+              />
+            </Box>
+            
+            {/* Loading Status Text */}
+            <Typography variant="body2" color="text.secondary">
+              {loadingProgress < 20 && 'Initializing...'}
+              {loadingProgress >= 20 && loadingProgress < 40 && 'Fetching quiz data...'}
+              {loadingProgress >= 40 && loadingProgress < 60 && 'Setting up session...'}
+              {loadingProgress >= 60 && loadingProgress < 70 && 'Checking session state...'}
+              {loadingProgress >= 70 && loadingProgress < 85 && 'Processing questions...'}
+              {loadingProgress >= 85 && loadingProgress < 90 && 'Validating questions...'}
+              {loadingProgress >= 90 && loadingProgress < 100 && 'Finalizing setup...'}
+              {loadingProgress >= 100 && 'Ready to start!'}
             </Typography>
           </Paper>
         </motion.div>

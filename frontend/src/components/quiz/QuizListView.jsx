@@ -283,7 +283,7 @@ const QuizListView = () => {
                         {question.options.map((option, optIndex) => (
                           <Text key={optIndex} color={option.is_correct ? "green.500" : "inherit"}>
                             {option.is_correct && <CheckIcon mr={2} />}
-                            {option.option_text}
+                            {String(option.option_text || option)}
                           </Text>
                         ))}
                       </VStack>

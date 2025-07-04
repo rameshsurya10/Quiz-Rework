@@ -326,7 +326,7 @@ const QuizQuestionManager = ({ quizId, initialQuestions, additionalQuestions }) 
             {Object.entries(question.options).map(([key, value]) => (
               <HStack key={key} p={2} bg={key === question.correct_answer ? 'green.50' : 'white'} borderRadius="md">
                 <Text fontWeight={key === question.correct_answer ? 'bold' : 'normal'}>
-                  {key}. {value}
+                  {key}. {String(value)}
                 </Text>
                 {key === question.correct_answer && (
                   <Badge colorScheme="green" ml="auto">Correct</Badge>
