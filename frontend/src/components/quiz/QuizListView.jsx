@@ -12,10 +12,6 @@ import {
 } from '@chakra-ui/react';
 import { AddIcon, SearchIcon, ChevronDownIcon, EditIcon, ViewIcon, DeleteIcon, CheckIcon, RepeatIcon } from '@chakra-ui/icons';
 import quizService from '../../services/quizService';
-import { CircularProgress } from '@mui/material';
-import { Typography } from '@mui/material';
-import { Edit, Delete, Visibility } from '@mui/icons-material';
-import { quizApi } from '../../services/api';
 
 const QuizListView = () => {
   const navigate = useNavigate();
@@ -26,7 +22,6 @@ const QuizListView = () => {
     past: []
   });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedQuiz, setSelectedQuiz] = useState(null);
@@ -35,31 +30,27 @@ const QuizListView = () => {
   const [activeTab, setActiveTab] = useState(0);
 
   useEffect(() => {
-    loadQuizzes();
-  }, []);
+    const fetchQuizzes = async () => {
+      try {
+        setLoading(true);
+        const data = await quizService.getUserquiz();
+        setQuizzes(data || []);
+      } catch (error) {
+        toast({
+          title: 'Error fetching quizzes',
+          description: error.message,
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const loadQuizzes = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await quizApi.getAll();
-      
-      // Handle the new response structure
-      const quizzesData = {
-        current: response.data.current_quizzes || [],
-        upcoming: response.data.upcoming_quizzes || [],
-        past: response.data.past_quizzes || []
-      };
-      
-      setQuizzes(quizzesData);
-    } catch (err) {
-      setError('Failed to load quizzes. Please try again.');
-      console.error('Error loading quizzes:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+    fetchQuizzes();
+  }, [toast]);
+  
   const handleViewClick = async (quizId) => {
     try {
       setQuestionsLoading(true);
@@ -109,99 +100,17 @@ const QuizListView = () => {
     }
   };
 
-  const filterQuizzes = (quizList) => {
-    return quizList.filter(quiz => {
-      const matchesSearch = !searchTerm || 
-        quiz.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (quiz.description && quiz.description.toLowerCase().includes(searchTerm.toLowerCase()));
-        
-      const matchesStatus = !statusFilter || 
-        (statusFilter === 'published' && quiz.is_published) ||
-        (statusFilter === 'draft' && !quiz.is_published);
-        
-      return matchesSearch && matchesStatus;
-    });
-  };
-
-  const renderQuizList = (quizList, listType) => {
-    const filteredList = filterQuizzes(quizList);
-    
-    if (filteredList.length === 0) {
-      return (
-        <Box p={4} textAlign="center">
-          <Text>No {listType} quizzes found</Text>
-        </Box>
-      );
-    }
-
-    return (
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
-        {filteredList.map(quiz => (
-          <Card key={quiz.id}>
-            <CardHeader>
-              <Heading size="md">{quiz.title}</Heading>
-              <Badge colorScheme={quiz.is_published ? "green" : "yellow"} mt={2}>
-                {quiz.is_published ? "Published" : "Draft"}
-              </Badge>
-            </CardHeader>
-            <CardBody>
-              <Text noOfLines={2}>{quiz.description}</Text>
-              <Text mt={2}>
-                <strong>Date:</strong> {new Date(quiz.quiz_date).toLocaleDateString()}
-              </Text>
-              <Text>
-                <strong>Duration:</strong> {quiz.duration} minutes
-              </Text>
-            </CardBody>
-            <CardFooter>
-              <HStack spacing={2}>
-                <IconButton
-                  icon={<ViewIcon />}
-                  onClick={() => handleViewClick(quiz.id)}
-                  aria-label="View quiz"
-                  colorScheme="blue"
-                />
-                <IconButton
-                  icon={<EditIcon />}
-                  onClick={() => navigate(`/quiz/${quiz.id}/edit`)}
-                  aria-label="Edit quiz"
-                  colorScheme="green"
-                />
-                <IconButton
-                  icon={<DeleteIcon />}
-                  onClick={() => handleDelete(quiz.id)}
-                  aria-label="Delete quiz"
-                  colorScheme="red"
-                />
-              </HStack>
-            </CardFooter>
-          </Card>
-        ))}
-      </SimpleGrid>
-    );
-  };
-
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert status="error">
-        <AlertIcon />
-        <VStack align="start">
-          <Text>{error}</Text>
-          <Button onClick={loadQuizzes} leftIcon={<RepeatIcon />} size="sm">
-            Retry
-          </Button>
-        </VStack>
-      </Alert>
-    );
-  }
+  const filteredQuizzes = quizzes.filter(quiz => {
+    const matchesSearch = !searchTerm || 
+      quiz.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (quiz.description && quiz.description.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+    const matchesStatus = !statusFilter || 
+      (statusFilter === 'published' && quiz.is_published) ||
+      (statusFilter === 'draft' && !quiz.is_published);
+      
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <Box p={4}>
@@ -236,27 +145,117 @@ const QuizListView = () => {
           <option value="published">Published</option>
           <option value="draft">Draft</option>
         </Select>
-      </HStack>
+      </Flex>
+      
+      {loading ? (
+        <Box textAlign="center" py={10}>
+          <Spinner size="xl" />
+          <Text mt={4}>Loading quizzes...</Text>
+        </Box>
+      ) : filteredQuizzes.length === 0 ? (
+        <Alert status="info" borderRadius="md">
+          <AlertIcon />
+          {quizzes.length === 0 
+            ? "You haven't created any quizzes yet. Click 'Create New Quiz' to get started."
+            : "No quizzes match your search criteria."
+          }
+        </Alert>
+      ) : (
+        <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={6}>
+          {filteredQuizzes.map(quiz => (
+            <Card key={quiz.id} variant="outline" boxShadow="sm" d="flex" flexDirection="column" justifyContent="space-between">
+                <CardHeader>
+                    <Flex justifyContent="space-between" alignItems="flex-start">
+                        <Box flex="1" mr={2}>
+                            <Heading size="md" noOfLines={1} title={quiz.title}>
+                                {quiz.title}
+                            </Heading>
+                            <Text fontSize="sm" color="gray.500" mt={1} noOfLines={1}>
+                                {quiz.description || 'No description available.'}
+                            </Text>
+                        </Box>
+                        <Badge colorScheme={!quiz.is_published ? 'orange' : 'green'} variant="solid" fontSize="0.8em">
+                            {!quiz.is_published ? 'Draft' : 'Published'}
+                        </Badge>
+                    </Flex>
+                </CardHeader>
 
-      <Tabs index={activeTab} onChange={setActiveTab}>
-        <TabList>
-          <Tab>Current ({quizzes.current.length})</Tab>
-          <Tab>Upcoming ({quizzes.upcoming.length})</Tab>
-          <Tab>Past ({quizzes.past.length})</Tab>
-        </TabList>
+                <CardBody py={4}>
+                    <VStack align="stretch" spacing={2}>
+                        <HStack justifyContent="space-between">
+                            <Text fontSize="sm" color="gray.600">{quiz.no_of_questions || 0} Questions</Text>
+                            <Text fontSize="sm" color="gray.600">{quiz.time_limit_minutes ? `${quiz.time_limit_minutes} min limit` : '30 min limit'}</Text>
+                        </HStack>
+                        <HStack justifyContent="space-between">
+                            <Text fontSize="sm" color="gray.600">
+                              Dept: {quiz.department_name || (quiz.department && quiz.department.name) || 'Not assigned'}
+                            </Text>
+                            <Text fontSize="sm" color="gray.600">
+                              Type: {quiz.quiz_type_display || quiz.quiz_type || 'Easy'}
+                            </Text>
+                        </HStack>
+                        <HStack justifyContent="space-between">
+                            <Text fontSize="sm" color="gray.600">
+                              Pass Score: {
+                                quiz.passing_score !== undefined && quiz.passing_score !== null 
+                                  ? `${quiz.passing_score}%` 
+                                  : 'Not set'
+                              }
+                            </Text>
+                            <Text fontSize="sm" color="gray.600">
+                              {new Date(quiz.quiz_date).toLocaleDateString()}
+                            </Text>
+                        </HStack>
+                        <HStack justifyContent="space-between">
+                            <Text fontSize="sm" color="gray.600">
+                              Pages: {
+                                quiz.pages && Array.isArray(quiz.pages) && quiz.pages.length > 0 
+                                  ? (typeof quiz.pages[0] === 'number' 
+                                      ? quiz.pages.join(', ')
+                                      : typeof quiz.pages[0] === 'object' && quiz.pages[0].start && quiz.pages[0].end
+                                        ? quiz.pages.map(range => `${range.start}-${range.end}`).join(', ')
+                                        : quiz.pages.join(', ')
+                                    )
+                                  : 'All pages'
+                              }
+                            </Text>
+                        </HStack>
+                    </VStack>
+                </CardBody>
 
-        <TabPanels>
-          <TabPanel>
-            {renderQuizList(quizzes.current, 'current')}
-          </TabPanel>
-          <TabPanel>
-            {renderQuizList(quizzes.upcoming, 'upcoming')}
-          </TabPanel>
-          <TabPanel>
-            {renderQuizList(quizzes.past, 'past')}
-          </TabPanel>
-        </TabPanels>
-      </Tabs>
+                <CardFooter pt={3} borderTop="1px solid" borderColor="gray.200">
+                    <HStack spacing={2} width="100%" justify="space-between">
+                        <Button 
+                            colorScheme={quiz.is_published ? "green" : "blue"}
+                            size="sm"
+                            leftIcon={<ViewIcon />}
+                            onClick={() => handleViewClick(quiz.id)}
+                        >
+                            {quiz.is_published ? "View Quiz" : "View & PUBLISH"}
+                        </Button>
+                        <HStack>
+                            <IconButton
+                                icon={<EditIcon />}
+                                variant="ghost"
+                                size="sm"
+                                aria-label="Edit Quiz"
+                                onClick={() => navigate(`/quiz/${quiz.id}/edit`)}
+                            />
+                            <IconButton
+                                icon={<DeleteIcon />}
+                                variant="ghost"
+                                colorScheme="red"
+                                size="sm"
+                                aria-label="Delete Quiz"
+                                onClick={() => handleDelete(quiz.id)}
+                            />
+                        </HStack>
+                    </HStack>
+                </CardFooter>
+            </Card>
+          ))}
+        </SimpleGrid>
+      )}
 
       <Modal isOpen={isViewModalOpen} onClose={closeViewModal} size="xl">
         <ModalOverlay />
@@ -301,7 +300,31 @@ const QuizListView = () => {
             )}
           </ModalBody>
           <ModalFooter>
-            <Button onClick={closeViewModal}>Close</Button>
+            <Button variant="ghost" onClick={closeViewModal} mr={3}>Close</Button>
+            {selectedQuiz && !selectedQuiz.is_published && (
+              <Button colorScheme="blue" onClick={() => {
+                if (selectedQuiz) {
+                  navigate(`/PUBLISH-quiz/${selectedQuiz.id}`);
+                  closeViewModal();
+                }
+              }}>
+                Proceed to PUBLISH
+              </Button>
+            )}
+            {selectedQuiz && selectedQuiz.is_published && (
+              <Button colorScheme="green" variant="outline" onClick={() => {
+                const shareUrl = selectedQuiz.share_url || selectedQuiz.url_link || `${window.location.origin}/quiz/${selectedQuiz.id}/join/`;
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                  // You might want to add a toast notification here
+                  console.log('Quiz link copied to clipboard!');
+                }).catch(() => {
+                  console.error('Failed to copy link');
+                });
+                closeViewModal();
+              }}>
+                Copy Quiz Link
+              </Button>
+            )}
           </ModalFooter>
         </ModalContent>
       </Modal>

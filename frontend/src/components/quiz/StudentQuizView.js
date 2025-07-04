@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -20,20 +20,7 @@ import {
   DialogContent,
   DialogActions,
   IconButton,
-  TextField,
-  Alert,
-  AlertTitle,
-  Snackbar,
-  Container,
-  Fade,
-  Slide,
-  Zoom,
-  Grow,
-  InputAdornment,
-  Divider,
-  Avatar,
-  CircularProgress,
-  Backdrop
+  TextField
 } from '@mui/material';
 import {
   NavigateNext as NextIcon,
@@ -41,643 +28,126 @@ import {
   CheckCircle as CheckIcon,
   Timer as TimerIcon,
   Quiz as QuizIcon,
-  Close as CloseIcon,
-  Warning as WarningIcon,
-  Lock as LockIcon,
-  Send as SendIcon,
-  Flag as FlagIcon,
-  Psychology as BrainIcon,
-  Security as SecurityIcon,
-  Lightbulb as LightbulbIcon,
-  Schedule as ScheduleIcon,
-  Assignment as AssignmentIcon
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { quizApi } from '../../services/api';
-
-// Persistent Quiz Session Manager
-class QuizSessionManager {
-  constructor(quizId) {
-    this.quizId = quizId;
-    this.sessionKey = `quiz_session_${quizId}`;
-    this.answersKey = `quiz_answers_${quizId}`;
-    this.startTimeKey = `quiz_start_time_${quizId}`;
-  }
-
-  // Initialize or restore quiz session
-  initializeSession(quizData) {
-    const existingSession = this.getSession();
-    const now = Date.now();
-    
-    if (existingSession && existingSession.quizId === this.quizId) {
-      // Restore existing session
-      console.log('Restoring existing quiz session');
-      return existingSession;
-    } else {
-      // Create new session
-      const newSession = {
-        quizId: this.quizId,
-        startTime: now,
-        duration: (quizData.time_limit_minutes || quizData.duration || 20) * 60 * 1000, // in milliseconds
-        totalQuestions: quizData.no_of_questions || quizData.total_questions,
-        isActive: true,
-        attempts: 0,
-        lastActivity: now
-      };
-      
-      this.saveSession(newSession);
-      this.saveAnswers({});
-      console.log('Created new quiz session');
-      return newSession;
-    }
-  }
-
-  // Save session data
-  saveSession(sessionData) {
-    localStorage.setItem(this.sessionKey, JSON.stringify({
-      ...sessionData,
-      lastActivity: Date.now()
-    }));
-  }
-
-  // Get session data
-  getSession() {
-    try {
-      const data = localStorage.getItem(this.sessionKey);
-      return data ? JSON.parse(data) : null;
-    } catch (error) {
-      console.error('Error parsing session data:', error);
-      return null;
-    }
-  }
-
-  // Save answers
-  saveAnswers(answers) {
-    localStorage.setItem(this.answersKey, JSON.stringify(answers));
-  }
-
-  // Get answers
-  getAnswers() {
-    try {
-      const data = localStorage.getItem(this.answersKey);
-      return data ? JSON.parse(data) : {};
-    } catch (error) {
-      console.error('Error parsing answers data:', error);
-      return {};
-    }
-  }
-
-  // Calculate remaining time based on start time
-  getRemainingTime() {
-    const session = this.getSession();
-    if (!session || !session.isActive) return 0;
-    
-    const now = Date.now();
-    const elapsed = now - session.startTime;
-    const remaining = Math.max(0, session.duration - elapsed);
-    
-    return Math.floor(remaining / 1000); // return in seconds
-  }
-
-  // Check if session is expired
-  isExpired() {
-    return this.getRemainingTime() <= 0;
-  }
-
-  // End session
-  endSession() {
-    const session = this.getSession();
-    if (session) {
-      session.isActive = false;
-      session.endTime = Date.now();
-      this.saveSession(session);
-    }
-  }
-
-  // Clear session data
-  clearSession() {
-    localStorage.removeItem(this.sessionKey);
-    localStorage.removeItem(this.answersKey);
-    localStorage.removeItem(this.startTimeKey);
-  }
-
-  // Check for refresh/reload
-  wasRefreshed() {
-    const session = this.getSession();
-    if (!session) return false;
-    
-    // If there's a gap of more than 5 seconds in activity, consider it a refresh
-    const now = Date.now();
-    const timeSinceLastActivity = now - (session.lastActivity || session.startTime);
-    return timeSinceLastActivity > 5000; // 5 seconds gap indicates refresh
-  }
-
-  // Check if quiz is being accessed from multiple tabs
-  checkMultipleTabAccess() {
-    const tabId = Date.now() + Math.random();
-    const activeTabKey = `quiz_active_tab_${this.quizId}`;
-    
-    // Set current tab as active
-    sessionStorage.setItem(activeTabKey, tabId);
-    
-    // Check after a small delay if our tab is still the active one
-    setTimeout(() => {
-      const currentActiveTab = sessionStorage.getItem(activeTabKey);
-      if (currentActiveTab !== tabId.toString()) {
-        return false; // Another tab is active
-      }
-    }, 100);
-    
-    return true;
-  }
-
-  // Update activity timestamp
-  updateActivity() {
-    const session = this.getSession();
-    if (session && session.isActive) {
-      session.lastActivity = Date.now();
-      this.saveSession(session);
-    }
-  }
-}
+import { motion } from 'framer-motion';
+import apiService from '../../api';
 
 const StudentQuizView = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
   const theme = useTheme();
   
-  // Core quiz state
   const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [timeLeft, setTimeLeft] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  
-  // Session and security state
-  const [quizSession, setQuizSession] = useState(null);
-  const [wasRefreshed, setWasRefreshed] = useState(false);
-  const [showSecurityAlert, setShowSecurityAlert] = useState(false);
-  const [showWarningDialog, setShowWarningDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [tabSwitchCount, setTabSwitchCount] = useState(0);
-  const [warningCount, setWarningCount] = useState(0);
-  const [timePerQuestion, setTimePerQuestion] = useState(0);
-  const [questionTimeLeft, setQuestionTimeLeft] = useState(0);
-  
-  // Alert system
-  const [showSnackbar, setShowSnackbar] = useState(false);
-  const [warningMessage, setWarningMessage] = useState('');
-  const [alertSeverity, setAlertSeverity] = useState('info');
-  
-  // Refs for cleanup and prevent duplicate submissions
-  const submissionStarted = useRef(false);
-  const timerRef = useRef(null);
-  const questionTimerRef = useRef(null);
-  const sessionManager = useRef(new QuizSessionManager(quizId));
 
-  // Load quiz data on initial mount or when quizId changes
   useEffect(() => {
     loadQuiz();
-  }, [quizId]); // React ESLint recommends adding loadQuiz, but it causes re-renders. quizId is the correct trigger.
-
-  const generateSubmissionPayload = useCallback((currentAnswers) => {
-    return {
-      quiz_id: parseInt(quizId),
-      questions: questions.map((question, index) => {
-        const userAnswer = currentAnswers[question.uniqueId] || '';
-        
-        let options = {};
-        if (question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
-          // Handle object format {A: "text", B: "text"}
-          options = Object.fromEntries(
-            Object.entries(question.options).map(([key, value]) => [key, String(value)])
-          );
-        } else if (question.question_options && typeof question.question_options === 'object') {
-          options = Object.fromEntries(
-            Object.entries(question.question_options).map(([key, value]) => [key, String(value)])
-          );
-        } else if (Array.isArray(question.options)) {
-          // Convert array to object format for submission
-          options = question.options.reduce((acc, opt, idx) => {
-            acc[String.fromCharCode(65 + idx)] = String(opt);
-            return acc;
-          }, {});
-        }
-
-        return {
-          question_id: question.id || question.question_id || question.uniqueId,
-          question_number: index + 1,
-          question: question.question || question.text || question.content,
-          question_type: question.question_type || 'text',
-          options: options,
-          answer: userAnswer,
-          is_correct: false
-        };
-      })
-    };
-  }, [quizId, questions]);
-
-  // Enhanced alert system for beautiful popups
-  const showAlert = useCallback((message, severity = 'warning', duration = 4000) => {
-    setWarningMessage(message);
-    setAlertSeverity(severity);
-    setShowSnackbar(true);
-    
-    if (severity === 'error') {
-      setShowSecurityAlert(true);
-      setTimeout(() => setShowSecurityAlert(false), duration);
-    }
-  }, []);
-
-  // Tab change detection with immediate submission
-  const handleTabChange = useCallback(() => {
-    setTabSwitchCount(prev => {
-      const newCount = prev + 1;
-      showAlert('Tab switching detected! Quiz will be submitted automatically for security.', 'error', 2000);
-      setShowWarningDialog(true);
-      setTimeout(() => {
-        handleSubmitQuiz(true);
-      }, 2000);
-      return newCount;
-    });
-  }, [showAlert]);
-
-  const handleBeforeUnload = useCallback((e) => {
-    if (!submissionStarted.current && !isSubmitted && questions.length > 0 && quizSession && quizSession.isActive) {
-      submissionStarted.current = true;
-      // Check if session is still valid
-      if (sessionManager.current.isExpired()) {
-        sessionManager.current.clearSession();
-        return;
-      }
-      
-      const currentAnswers = sessionManager.current.getAnswers();
-      const submissionData = generateSubmissionPayload(currentAnswers);
-
-      // Auto-submit and prevent reload dialog
-      setIsSubmitted(true);
-      
-      // End the session
-      sessionManager.current.endSession();
-      
-      // Use sendBeacon for reliable submission
-      const token = localStorage.getItem('token');
-      const url = `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/students/quiz_submit/`;
-
-      if (navigator.sendBeacon) {
-        const formData = new FormData();
-        formData.append('data', JSON.stringify(submissionData));
-        formData.append('token', token);
-        navigator.sendBeacon(url, formData);
-      } else {
-        fetch(url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(submissionData),
-          keepalive: true
-        }).catch(err => console.log('Auto-submit failed:', err));
-      }
-      
-      // Prevent the default reload dialog
-      e.preventDefault();
-      e.returnValue = '';
-      return '';
-    }
-  }, [isSubmitted, questions, quizSession, sessionManager, generateSubmissionPayload]);
-
-  const handleVisibilityChange = useCallback(() => {
-    if (document.hidden && !isSubmitted) {
-      handleTabChange();
-    }
-  }, [handleTabChange, isSubmitted]);
-
-  // Enhanced security monitoring
-  const requestFullScreen = useCallback(() => {
-    const element = document.documentElement;
-    const requestMethod = element.requestFullscreen || 
-                         element.mozRequestFullScreen || 
-                         element.webkitRequestFullscreen || 
-                         element.msRequestFullscreen;
-    
-    if (requestMethod) {
-      requestMethod.call(element).then(() => {
-        showAlert('Fullscreen mode activated for secure quiz environment.', 'success');
-      }).catch(() => {
-        showAlert('Please enable fullscreen mode for better security.', 'info');
-      });
-    }
-  }, [showAlert]);
-
-  const exitFullScreen = useCallback(() => {
-    try {
-      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement) {
-        const exitMethod = document.exitFullscreen || 
-                          document.mozCancelFullScreen || 
-                          document.webkitExitFullscreen || 
-                          document.msExitFullscreen;
-        
-        if (exitMethod) {
-          exitMethod.call(document).then(() => showAlert('Fullscreen mode exited.', 'success')).catch(() => {
-            showAlert('Fullscreen mode exit error (non-critical).', 'info');
-          });
-        }
-      }
-    } catch (error) {
-      console.log('Fullscreen exit error (non-critical):', error);
-      showAlert('Fullscreen mode exit error (non-critical).', 'info');
-    }
-  }, [showAlert]);
+  }, [quizId]);
 
   useEffect(() => {
-    // Set up security listeners only when the quiz is active and loaded
-    if (isSubmitted || isLoading || !quiz) {
-      return;
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    requestFullScreen();
-    
-    const handleContextMenu = (e) => {
-      e.preventDefault();
-      showAlert('Right-click is disabled during quiz for security.', 'info');
-    };
-    document.addEventListener('contextmenu', handleContextMenu);
-    
-    const handleKeyDown = (e) => {
-      const blockedKeys = [
-        { condition: e.ctrlKey && ['c', 'v', 'a', 'r', 's'].includes(e.key), message: 'Copy/paste shortcuts are disabled' },
-        { condition: e.key === 'F12', message: 'Developer tools are disabled' },
-        { condition: e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key), message: 'Developer shortcuts are disabled' },
-        { condition: e.altKey && e.key === 'Tab', message: 'Alt+Tab is disabled during quiz' }
-      ];
-      
-      const blocked = blockedKeys.find(block => block.condition);
-      if (blocked) {
-        e.preventDefault();
-        showAlert(blocked.message, 'warning');
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.removeEventListener('contextmenu', handleContextMenu);
-      document.removeEventListener('keydown', handleKeyDown);
-      exitFullScreen();
-    };
-  }, [isLoading, isSubmitted, quiz, handleVisibilityChange, handleBeforeUnload, requestFullScreen, exitFullScreen, showAlert]);
-
-  // Timer effect - now uses persistent session time
-  useEffect(() => {
-    if (quizSession && quizSession.isActive) {
-      const updateTimer = () => {
-        const remaining = sessionManager.current.getRemainingTime();
-        setTimeLeft(remaining);
-        
-        if (remaining <= 0) {
-          showAlert('Time\'s up! Submitting quiz automatically.', 'error');
-          handleSubmitQuiz(true);
-          return;
-        }
-      };
-      
-      updateTimer(); // Initial update
-      const timer = setInterval(updateTimer, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [quizSession, sessionManager, showAlert]);
-
-  // Per-question timer
-  useEffect(() => {
-    if (questionTimeLeft > 0) {
-      const timer = setTimeout(() => setQuestionTimeLeft(questionTimeLeft - 1), 1000);
+    if (timeLeft > 0) {
+      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
-    } else if (questionTimeLeft === 0 && timePerQuestion) {
-      showAlert('Time for this question is up! Moving to next question.', 'warning');
-      if (currentQuestion < questions.length - 1) {
-        handleNextQuestion();
-        setQuestionTimeLeft(timePerQuestion); // Reset timer for next question
-      }
+    } else if (timeLeft === 0) {
+      handleSubmitQuiz(true); // Auto-submit when time expires
     }
-  }, [questionTimeLeft, timePerQuestion, currentQuestion, questions.length, showAlert]);
-
-  // Reset question timer when changing questions
-  useEffect(() => {
-    if (timePerQuestion) {
-      setQuestionTimeLeft(timePerQuestion);
-    }
-  }, [currentQuestion, timePerQuestion]);
-
-  // Warn if multiple tabs are open for the same quiz
-  useEffect(() => {
-    if (!sessionManager.current.checkMultipleTabAccess()) {
-      showAlert('Warning: Quiz is open in multiple tabs. Only one tab is allowed!', 'error', 8000);
-    }
-    // Clean up on unmount
-    return () => {
-      const activeTabKey = `quiz_active_tab_${quizId}`;
-      sessionStorage.removeItem(activeTabKey);
-    };
-  }, [quizId, sessionManager, showAlert]);
-
-  // Update activity on every answer and navigation
-  useEffect(() => {
-    sessionManager.current.updateActivity();
-  }, [answers, currentQuestion]);
+  }, [timeLeft]);
 
   const loadQuiz = async () => {
     try {
       setIsLoading(true);
       setLoadingProgress(0);
       
-      // Check if session exists and is expired or submitted
-      const existingSession = sessionManager.current.getSession();
-      if (existingSession) {
-        if (sessionManager.current.isExpired()) {
-          showAlert('Quiz session has expired. Redirecting to dashboard.', 'error');
-          sessionManager.current.clearSession();
-          setTimeout(() => navigate('/student-dashboard'), 2000);
-          return;
-        }
-        if (!existingSession.isActive) {
-          showAlert('This quiz has already been submitted. Redirecting to dashboard.', 'info');
-          sessionManager.current.clearSession();
-          setTimeout(() => navigate('/student-dashboard'), 2000);
-          return;
-        }
-      }
-      
-      setLoadingProgress(20);
-      
-      // Use the correct student endpoint
-      const response = await quizApi.getForStudent(quizId);
+      // Use the correct endpoint to get quiz questions for taking
+      const response = await apiService.get(`/api/quiz/${quizId}/`);
       const quizData = response.data;
       
       setLoadingProgress(40);
       setQuiz(quizData);
       
-      // Initialize or restore session
-      const session = sessionManager.current.initializeSession(quizData);
-      setQuizSession(session);
-      
-      setLoadingProgress(60);
-      
-      // Check if this was a refresh
-      const refreshDetected = sessionManager.current.wasRefreshed();
-      setWasRefreshed(refreshDetected);
-      
-      if (refreshDetected) {
-        showAlert('Page refresh detected. Quiz timer continues from where it left off.', 'warning', 3000);
-      }
-      
-      setLoadingProgress(70);
-      
+      // Backend returns questions in current_questions field, not questions
       let questionsData = quizData.current_questions || quizData.questions || [];
       
+      // Attempt to parse if it's a string
       if (typeof questionsData === 'string') {
         try {
           questionsData = JSON.parse(questionsData);
         } catch (e) {
           console.error("Failed to parse questions data:", e);
+          // Keep it as a string if parsing fails, so it can be debugged
         }
       }
 
+      // Flatten nested question arrays and assign unique identifiers
       const flattenedQuestions = [];
       let questionIndex = 0;
 
-      console.log('Processing questions data:', questionsData);
-      console.log('Quiz no_of_questions:', quizData.no_of_questions);
-
       if (Array.isArray(questionsData)) {
-        questionsData.forEach((questionItem, index) => {
-          // Handle questions from SlimQuestionSerializer format
-          if (questionItem && typeof questionItem === 'object') {
-            // Helper function to process options (simplified since backend sends arrays)
-            const processOptions = (options) => {
-              if (!options) return [];
-              if (Array.isArray(options)) {
-                return options.filter(opt => opt && typeof opt === 'string' && opt.trim() !== '');
-              }
-              // Fallback for any unexpected formats
-              return [];
-            };
-
-            // Check if question field contains JSON array (for mixed type questions)
-            if (typeof questionItem.question === 'string') {
-              try {
-                const parsedQuestions = JSON.parse(questionItem.question);
-                if (Array.isArray(parsedQuestions)) {
-                  // Handle multiple questions within one question object
-                  parsedQuestions.forEach((subQuestion, subIndex) => {
-                    if (subQuestion && (subQuestion.question || subQuestion.text)) {
-                      flattenedQuestions.push({
-                        ...subQuestion,
-                        uniqueId: `${questionItem.question_id}-${subIndex}`,
-                        displayIndex: questionIndex++,
-                        question_id: questionItem.question_id,
-                        options: processOptions(subQuestion.options || questionItem.options)
-                      });
-                    }
-                  });
-                } else {
-                  // Single question as JSON string
-                  flattenedQuestions.push({
-                    ...parsedQuestions,
-                    uniqueId: `${questionItem.question_id}-${index}`,
-                    displayIndex: questionIndex++,
-                    question_id: questionItem.question_id,
-                    options: processOptions(parsedQuestions.options || questionItem.options)
-                  });
-                }
-              } catch (e) {
-                // If parsing fails, treat as regular question text
-                if (questionItem.question.trim()) {
-                  flattenedQuestions.push({
-                    question: questionItem.question,
-                    uniqueId: `${questionItem.question_id}-${index}`,
-                    displayIndex: questionIndex++,
-                    question_id: questionItem.question_id,
-                    question_type: questionItem.question_type || 'text',
-                    options: processOptions(questionItem.options)
-                  });
-                }
-              }
-            } else {
-              // Handle direct question object
-              if (questionItem.question || questionItem.text) {
-                flattenedQuestions.push({
-                  ...questionItem,
-                  uniqueId: `${questionItem.question_id || index}-${index}`,
-                  displayIndex: questionIndex++,
-                  options: processOptions(questionItem.options)
-                });
-              }
-            }
+        questionsData.forEach((questionBlock, blockIndex) => {
+          if (Array.isArray(questionBlock)) {
+            // This is a nested array from SlimQuestionSerializer
+            questionBlock.forEach((question, subIndex) => {
+              flattenedQuestions.push({
+                ...question,
+                uniqueId: `${blockIndex}-${subIndex}`,
+                displayIndex: questionIndex++,
+                question_number: question.question_number || (questionIndex),
+                id: question.question_id || `${blockIndex}-${subIndex}`,
+                text: question.question || '',
+                type: question.question_type || question.type || 'mcq'
+              });
+            });
+          } else {
+            // Single question object
+            flattenedQuestions.push({
+              ...questionBlock,
+              uniqueId: `single-${blockIndex}`,
+              displayIndex: questionIndex++,
+              question_number: questionBlock.question_number || (questionIndex),
+              id: questionBlock.question_id || `single-${blockIndex}`,
+              text: questionBlock.question || '',
+              type: questionBlock.question_type || questionBlock.type || 'mcq'
+            });
           }
         });
       }
 
       setLoadingProgress(85);
 
-      // Filter valid questions and limit to the quiz's specified count
-      let validQuestions = flattenedQuestions.filter(q => 
-        q && (q.question || q.text || q.content) && (q.question || q.text || q.content).trim() !== ''
-      );
-
-      // Limit to the actual number of questions specified in the quiz
-      const maxQuestions = quizData.no_of_questions || quizData.total_questions || validQuestions.length;
-      if (validQuestions.length > maxQuestions) {
-        validQuestions = validQuestions.slice(0, maxQuestions);
-      }
-
-      console.log('Valid questions found:', validQuestions.length, 'out of max:', maxQuestions);
-
-      setQuestions(validQuestions);
+      setQuestions(flattenedQuestions);
       
-      setLoadingProgress(90);
-      
-      // Restore answers from session
-      const savedAnswers = sessionManager.current.getAnswers();
-      setAnswers(savedAnswers);
-      
-      // Set timer based on session (remaining time)
-      const remainingTime = sessionManager.current.getRemainingTime();
-      setTimeLeft(remainingTime);
-      
-      // Calculate time per question (distribute remaining time equally)
-      if (validQuestions.length > 0 && remainingTime > 0) {
-        const timePerQuestionSeconds = Math.floor(remainingTime / validQuestions.length);
-        setTimePerQuestion(timePerQuestionSeconds);
-        setQuestionTimeLeft(timePerQuestionSeconds);
+      // Debug: Log the structure of questions to understand the format
+      console.log('Quiz data:', quizData);
+      console.log('Flattened questions:', flattenedQuestions);
+      if (flattenedQuestions.length > 0) {
+        console.log('First question structure:', flattenedQuestions[0]);
       }
       
-      setLoadingProgress(100);
-      
-      setTimeout(() => {
-        if (refreshDetected) {
-          showAlert(`Quiz resumed after refresh. ${Object.keys(savedAnswers).length} answers restored. Time continues from ${formatTime(remainingTime)}.`, 'info', 5000);
-        } else {
-          showAlert(`Quiz loaded successfully! ${validQuestions.length} questions to answer. Duration: ${formatTime(remainingTime)}.`, 'success');
-        }
-      }, 500);
-      
+      // Set timer if quiz has time limit
+      if (quizData.time_limit) {
+        setTimeLeft(quizData.time_limit * 60); // Convert minutes to seconds
+      }
     } catch (error) {
       console.error('Error loading quiz:', error);
-      showAlert('Failed to load quiz. Please check your connection and try again.', 'error');
       
-      setTimeout(() => {
-        navigate('/student-dashboard');
-      }, 3000);
+      // Show more specific error messages
+      if (error.response?.status === 404) {
+        alert('Quiz not found or not available for students.');
+      } else if (error.response?.status === 403) {
+        alert('You do not have permission to access this quiz.');
+      } else {
+        alert('Failed to load quiz. Please try again.');
+      }
+      
+      navigate('/student-dashboard');
     } finally {
       setTimeout(() => {
         setIsLoading(false);
@@ -686,19 +156,11 @@ const StudentQuizView = () => {
   };
 
   const handleAnswerChange = (questionId, answer) => {
-    const newAnswers = {
-      ...answers,
+    console.log('Answer changed:', questionId, answer);
+    setAnswers(prev => ({
+      ...prev,
       [questionId]: answer
-    };
-    setAnswers(newAnswers);
-    
-    // Save answers to persistent session
-    sessionManager.current.saveAnswers(newAnswers);
-    
-    // Update session activity
-    if (quizSession) {
-      sessionManager.current.saveSession(quizSession);
-    }
+    }));
   };
 
   const handleNextQuestion = () => {
@@ -713,907 +175,424 @@ const StudentQuizView = () => {
     }
   };
 
-  const getUnansweredQuestions = () => {
-    return questions.filter(q => !answers[q.uniqueId] || answers[q.uniqueId].trim() === '');
-  };
-
   const handleSubmitQuiz = async (autoSubmit = false) => {
-    if (submissionStarted.current) {
-      return;
-    }
-    const unansweredQuestions = getUnansweredQuestions();
-    
-    if (!autoSubmit && unansweredQuestions.length > 0) {
-      showAlert(`Please answer all questions before submitting. ${unansweredQuestions.length} questions remaining.`, 'warning');
-      return;
-    }
-
-    submissionStarted.current = true;
-
+    setShowConfirmDialog(false);
     try {
-      setIsLoading(true);
+      // Build the formatted answers for backend submission
+      const formattedAnswers = [];
       
-      const submissionData = generateSubmissionPayload(answers);
+      questions.forEach((question) => {
+        const answer = answers[question.uniqueId];
+        if (answer !== undefined && answer !== null && answer !== '') {
+          formattedAnswers.push({
+            question_id: parseInt(question.question_id || question.id, 10),
+            question_number: parseInt(question.question_number, 10),
+            answer: answer,
+          });
+        }
+      });
 
-      console.log('Submitting quiz with payload:', submissionData);
+      console.log('Formatted answers for submission:', formattedAnswers);
 
-      // Use the correct submission endpoint
-      const response = await quizApi.submitQuizAttempt(submissionData);
-      
-      if (response.status === 201 || response.status === 200) {
-        setIsSubmitted(true);
-        
-        // End the session and clear data
-        sessionManager.current.endSession();
-        setTimeout(() => {
-          sessionManager.current.clearSession();
-        }, 1000);
-        
-        showAlert('Quiz submitted successfully! Redirecting to dashboard...', 'success');
-        
-        setTimeout(() => {
-          navigate('/student-dashboard');
-        }, 2000);
+      if (formattedAnswers.length === 0 && !autoSubmit) {
+        if (!window.confirm("You haven't answered any questions. Are you sure you want to submit?")) {
+          return;
+        }
       }
+
+      const submissionData = {
+        quiz_id: parseInt(quizId, 10),
+        questions: formattedAnswers,
+      };
+
+      console.log('Submitting quiz with data:', submissionData);
+
+      await apiService.post('/api/students/quiz_submit/', submissionData);
+      
+      setIsSubmitted(true);
+      alert(autoSubmit ? 'Quiz auto-submitted due to time limit!' : 'Quiz submitted successfully!');
+      navigate('/student-dashboard');
       
     } catch (error) {
       console.error('Error submitting quiz:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to submit quiz. Please try again.';
-      showAlert(errorMessage, 'error');
-      submissionStarted.current = false; // Allow re-submission on error
-    } finally {
-      setIsLoading(false);
+      const errorMessage = error.response?.data 
+        ? JSON.stringify(error.response.data)
+        : 'Failed to submit quiz. Please try again.';
+      alert(`Submission failed: ${errorMessage}`);
     }
   };
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getProgressPercentage = () => {
-    if (questions.length === 0) return 0;
     return ((currentQuestion + 1) / questions.length) * 100;
   };
 
-  const getAnsweredQuestionsCount = () => {
-    return Object.keys(answers).filter(key => answers[key] && answers[key].trim() !== '').length;
-  };
-
-  // Enhanced input component for different question types
-  const renderQuestionInput = (question) => {
-    const questionType = (question.question_type || question.type || 'text').toLowerCase();
+  const getQuestionOptions = (question) => {
+    // Handle different formats of question options
+    if (!question) return [];
     
-    // Fill-in-the-blank questions
-    if (questionType.includes('fill') || questionType.includes('blank')) {
-      return (
-        <TextField
-          fullWidth
-          multiline={false}
-          rows={1}
-          variant="outlined"
-          placeholder="Type your answer here..."
-          value={answers[question.uniqueId] || ''}
-          onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
-          sx={{
-            mt: 2,
-            '& .MuiOutlinedInput-root': {
-              backgroundColor: 'rgba(227, 242, 253, 0.95)',
-              borderRadius: 2,
-              border: '2px solid rgba(33, 150, 243, 0.3)',
-              '&:hover': {
-                backgroundColor: 'rgba(227, 242, 253, 1)',
-                border: '2px solid rgba(33, 150, 243, 0.5)',
-              },
-              '&.Mui-focused': {
-                backgroundColor: 'rgba(227, 242, 253, 1)',
-                border: '2px solid #2196f3',
-              }
-            },
-            '& .MuiInputBase-input': {
-              color: '#333 !important',
-              fontWeight: '600 !important',
-              fontSize: '1.1rem !important'
-            }
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <LightbulbIcon color="primary" />
-              </InputAdornment>
-            ),
-          }}
-        />
-      );
+    // If options is an object (like {A: "option1", B: "option2", ...})
+    if (question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
+      return Object.values(question.options).filter(opt => opt && opt.trim && opt.trim().length > 0);
     }
     
-    // One-line text questions
-    if (questionType.includes('text') || questionType.includes('short')) {
-      return (
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="Enter your answer..."
-          value={answers[question.uniqueId] || ''}
-          onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
-          sx={{
-            mt: 2,
-            '& .MuiOutlinedInput-root': {
-              backgroundColor: 'rgba(243, 229, 245, 0.95)',
-              borderRadius: 2,
-              border: '2px solid rgba(156, 39, 176, 0.3)',
-              '&:hover': {
-                backgroundColor: 'rgba(243, 229, 245, 1)',
-                border: '2px solid rgba(156, 39, 176, 0.5)',
-              },
-              '&.Mui-focused': {
-                backgroundColor: 'rgba(243, 229, 245, 1)',
-                border: '2px solid #9c27b0',
-              }
-            },
-            '& .MuiInputBase-input': {
-              color: '#333 !important',
-              fontWeight: '600 !important',
-              fontSize: '1.1rem !important'
-            }
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <BrainIcon color="secondary" />
-              </InputAdornment>
-            ),
-          }}
-        />
-      );
+    // If options is already an array, return it
+    if (Array.isArray(question.options)) {
+      return question.options;
     }
     
-    // Multiple choice & True/False questions
-    let options = question.options || question.question_options || [];
-    
-    // Handle different option formats
-    if (options && typeof options === 'object' && !Array.isArray(options)) {
-      // Convert object format {A: "text", B: "text"} to array
-      options = Object.values(options).map(text => String(text));
-    } else if (!Array.isArray(options)) {
-      options = [];
+    // If options is a string (might be JSON or comma-separated)
+    if (typeof question.options === 'string') {
+      try {
+        // Try to parse as JSON first
+        const parsed = JSON.parse(question.options);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+        // If it's an object, extract values
+        if (typeof parsed === 'object') {
+          return Object.values(parsed).filter(opt => opt && opt.trim && opt.trim().length > 0);
+        }
+      } catch (e) {
+        // If JSON parsing fails, try comma-separated
+        return question.options.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0);
+      }
     }
     
-    // Ensure all options are strings to prevent rendering objects
-    options = options.map(opt => String(opt)).filter(opt => opt && opt.trim());
+    // Check for individual option fields (option_a, option_b, etc.)
+    const options = [];
+    ['option_a', 'option_b', 'option_c', 'option_d', 'option_e'].forEach(key => {
+      if (question[key] && question[key].trim()) {
+        options.push(question[key].trim());
+      }
+    });
     
-    // Backend now always sends arrays, but add fallback for True/False
-    if ((questionType.includes('true') || questionType.includes('tf') || questionType.includes('boolean')) && options.length === 0) {
-      options = ['True', 'False'];
-    }
-
     if (options.length > 0) {
-      return (
-        <FormControl component="fieldset" fullWidth sx={{ mt: 2 }}>
-          <RadioGroup
-            value={answers[question.uniqueId] || ''}
-            onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
-          >
-            {options.map((option, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <FormControlLabel
-                  value={String(option)}
-                  control={<Radio sx={{ color: theme.palette.primary.main }} />}
-                  label={String(option)}
-                  sx={{
-                    margin: 1,
-                    padding: 2,
-                    borderRadius: 2,
-                    backgroundColor: answers[question.uniqueId] === String(option) 
-                      ? alpha(theme.palette.primary.main, 0.1)
-                      : alpha('#fff', 0.7),
-                    border: `2px solid ${answers[question.uniqueId] === String(option) 
-                      ? theme.palette.primary.main 
-                      : 'transparent'}`,
-                    transition: 'all 0.3s ease',
-                    '&:hover': {
-                      backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                      transform: 'translateX(4px)',
-                    }
-                  }}
-                />
-              </motion.div>
-            ))}
-          </RadioGroup>
-        </FormControl>
-      );
+      return options;
     }
     
-    // Default text area for long answers
-    return (
-      <TextField
-        fullWidth
-        multiline
-        rows={4}
-        variant="outlined"
-        placeholder="Write your detailed answer here..."
-        value={answers[question.uniqueId] || ''}
-        onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
-        sx={{
-          mt: 2,
-          '& .MuiOutlinedInput-root': {
-              backgroundColor: 'rgba(255, 243, 224, 0.95)',
-              borderRadius: 2,
-              border: '2px solid rgba(255, 152, 0, 0.3)',
-              '&:hover': {
-                backgroundColor: 'rgba(255, 243, 224, 1)',
-                border: '2px solid rgba(255, 152, 0, 0.5)',
-              },
-              '&.Mui-focused': {
-                backgroundColor: 'rgba(255, 243, 224, 1)',
-                border: '2px solid #ff9800',
-              }
-            },
-            '& .MuiInputBase-input': {
-              color: '#333 !important',
-              fontWeight: '600 !important',
-              fontSize: '1.1rem !important'
-            }
-        }}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <QuizIcon color="warning" />
-            </InputAdornment>
-          ),
-        }}
-      />
-    );
+    // Fallback: check for alternatives or choices field
+    if (question.alternatives && Array.isArray(question.alternatives)) {
+      return question.alternatives;
+    }
+    
+    if (question.choices && Array.isArray(question.choices)) {
+      return question.choices;
+    }
+    
+    // If all else fails, return empty array
+    console.warn('No valid options found for question:', question);
+    return [];
   };
 
-  // Loading screen with attractive design
-  if (isLoading && !quiz) {
+  if (isLoading) {
     return (
       <Box
         sx={{
           minHeight: '100vh',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          p: 3
+          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
         }}
       >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Paper
-            elevation={8}
-            sx={{
-              p: 6,
-              textAlign: 'center',
-              borderRadius: 4,
-              background: alpha('#fff', 0.95),
-              backdropFilter: 'blur(20px)',
-              minWidth: 400,
-            }}
-          >
-            <Avatar sx={{ mx: 'auto', mb: 3, bgcolor: 'primary.main', width: 64, height: 64 }}>
-              <QuizIcon fontSize="large" />
-            </Avatar>
-            
-            <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, color: 'primary.main' }}>
-              Preparing Your Quiz
-            </Typography>
-            
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-              Setting up secure environment...
-            </Typography>
-            
-            {/* Progress Circle */}
-            <Box sx={{ position: 'relative', display: 'inline-flex', mb: 3 }}>
-              <CircularProgress
-                variant="determinate"
-                value={loadingProgress}
-                size={80}
-                thickness={4}
-                sx={{
-                  color: 'primary.main',
-                  '& .MuiCircularProgress-circle': {
-                    strokeLinecap: 'round',
-                  },
-                }}
-              />
-              <Box
-                sx={{
-                  top: 0,
-                  left: 0,
-                  bottom: 0,
-                  right: 0,
-                  position: 'absolute',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Typography
-                  variant="h6"
-                  component="div"
-                  color="primary.main"
-                  sx={{ fontWeight: 700 }}
-                >
-                  {`${Math.round(loadingProgress)}%`}
-                </Typography>
-              </Box>
-            </Box>
-            
-            {/* Progress Bar */}
-            <Box sx={{ width: '100%', mb: 3 }}>
-              <LinearProgress
-                variant="determinate"
-                value={loadingProgress}
-                sx={{
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: alpha('#667eea', 0.2),
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 4,
-                    background: 'linear-gradient(45deg, #667eea, #764ba2)',
-                  },
-                }}
-              />
-            </Box>
-            
-            {/* Loading Status Text */}
-            <Typography variant="body2" color="text.secondary">
-              {loadingProgress < 20 && 'Initializing...'}
-              {loadingProgress >= 20 && loadingProgress < 40 && 'Fetching quiz data...'}
-              {loadingProgress >= 40 && loadingProgress < 60 && 'Setting up session...'}
-              {loadingProgress >= 60 && loadingProgress < 70 && 'Checking session state...'}
-              {loadingProgress >= 70 && loadingProgress < 85 && 'Processing questions...'}
-              {loadingProgress >= 85 && loadingProgress < 90 && 'Validating questions...'}
-              {loadingProgress >= 90 && loadingProgress < 100 && 'Finalizing setup...'}
-              {loadingProgress >= 100 && 'Ready to start!'}
-            </Typography>
-          </Paper>
-        </motion.div>
+        <Typography variant="h6" color="white">
+          Loading Quiz...
+        </Typography>
       </Box>
     );
   }
 
   if (!quiz || questions.length === 0) {
     return (
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        <Alert severity="error" sx={{ borderRadius: 3 }}>
-          <AlertTitle>Quiz Not Available</AlertTitle>
-          Unable to load quiz questions. Please contact your instructor.
-        </Alert>
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+          gap: 2
+        }}
+      >
+        <Typography variant="h6" color="white">
+          Quiz not found or no questions available
+        </Typography>
         <Button 
-          startIcon={<CloseIcon />}
+          variant="contained" 
           onClick={() => navigate('/student-dashboard')}
-          sx={{ mt: 3 }}
+          sx={{
+            background: 'linear-gradient(135deg, #45b7d1 0%, #96c93d 100%)',
+          }}
         >
-          Return to Dashboard
+          Back to Dashboard
         </Button>
-      </Container>
+      </Box>
     );
   }
 
-  const currentQuestionData = questions[currentQuestion];
+  const question = questions[currentQuestion];
 
   return (
-    <Container
+    <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-        py: 2,
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+        p: 2,
       }}
-      maxWidth="lg"
     >
-      {/* Persistent Timer and State Indicator */}
-      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2, p: 2, backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 2 }}>
-        <TimerIcon color="primary" />
-        <Typography variant="h6" color={timeLeft < 60 ? 'error' : 'textPrimary'}>
-          Time Left: {formatTime(timeLeft || 0)}
-        </Typography>
-        <Chip label={wasRefreshed ? 'Resumed after refresh' : 'Session Active'} color={wasRefreshed ? 'warning' : 'success'} size="small" />
-        <Chip label="Quiz State Saved" color="info" size="small" />
-      </Box>
-
-      {/* Attractive Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-      >
-        <Paper
-          elevation={6}
-          sx={{
-            p: 3,
-            mb: 3,
-            background: 'linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%)',
-            color: 'white',
-            borderRadius: 3,
-            position: 'relative',
-            overflow: 'hidden'
-          }}
-        >
-          <Box sx={{ position: 'relative', zIndex: 2 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={3}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Avatar sx={{ bgcolor: alpha('#fff', 0.2), width: 48, height: 48 }}>
-                  <QuizIcon fontSize="large" />
-                </Avatar>
-                <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5, color: 'white' }}>
-                    {quiz.title}
-                  </Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.9, color: 'white' }}>
-                    Question {currentQuestion + 1} of {questions.length}
-                  </Typography>
-                </Box>
-              </Box>
-            
-              {/* Timer */}
-              {timeLeft !== null && (
-                <Paper
-                  elevation={4}
-                  sx={{
-                    p: 1.5,
-                    background: timeLeft <= 300 ? 'linear-gradient(45deg, #ff6b6b, #ffa500)' : 'linear-gradient(45deg, #1565c0, #0d47a1)',
-                    color: 'white',
-                    borderRadius: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    fontWeight: 'bold',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    minWidth: 'auto'
-                  }}
-                >
-                  <TimerIcon fontSize="small" />
-                  <Typography variant="body1" sx={{ 
-                    fontWeight: '700 !important', 
-                    fontFamily: 'monospace', 
-                    fontSize: '1rem !important',
-                    color: 'white !important',
-                    textShadow: '1px 1px 2px rgba(0,0,0,0.7)'
-                  }}>
-                    {formatTime(timeLeft)}
-                  </Typography>
-                </Paper>
-              )}
-              
-              {/* Per-Question Timer */}
-              {questionTimeLeft !== null && timePerQuestion && (
-                <Paper
-                  elevation={3}
-                  sx={{
-                    p: 1,
-                    mt: 1,
-                    background: questionTimeLeft <= 30 ? 'linear-gradient(45deg, #ff6b6b, #ffa500)' : 'linear-gradient(45deg, #4caf50, #66bb6a)',
-                    color: 'white',
-                    borderRadius: 1.5,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    fontWeight: 'bold',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    minWidth: 'auto'
-                  }}
-                >
-                  <AssignmentIcon fontSize="small" />
-                  <Typography variant="caption" sx={{ 
-                    fontWeight: '600 !important', 
-                    fontFamily: 'monospace', 
-                    fontSize: '0.8rem !important',
-                    color: 'white !important',
-                    textShadow: '1px 1px 2px rgba(0,0,0,0.6)'
-                  }}>
-                    Q{currentQuestion + 1}: {formatTime(questionTimeLeft)}
-                  </Typography>
-                </Paper>
-              )}
-            </Stack>
-            
-            {/* Progress Bar */}
-            <Box sx={{ mt: 3 }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                <Typography variant="body2" sx={{ opacity: 0.9, color: 'white', fontWeight: 600 }}>
-                  Progress: {Math.round(getProgressPercentage())}%
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9, color: 'white', fontWeight: 600 }}>
-                  Answered: {getAnsweredQuestionsCount()}/{questions.length}
-                </Typography>
-              </Stack>
-              <LinearProgress 
-                variant="determinate" 
-                value={getProgressPercentage()}
-                sx={{
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: alpha('#fff', 0.3),
-                  '& .MuiLinearProgress-bar': {
-                    borderRadius: 4,
-                    background: 'linear-gradient(45deg, #4CAF50, #8BC34A)',
-                  },
-                }}
-              />
-            </Box>
-          </Box>
-          
-          {/* Decorative background */}
-          <Box
-            sx={{
-              position: 'absolute',
-              top: -50,
-              right: -50,
-              width: 200,
-              height: 200,
-              background: alpha('#fff', 0.1),
-              borderRadius: '50%',
-              zIndex: 1
-            }}
-          />
-        </Paper>
-      </motion.div>
-
-      {/* Question Card */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentQuestion}
-          initial={{ opacity: 0, x: 50 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -50 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Paper
-            elevation={8}
-            sx={{
-              p: 4,
-              mb: 3,
-              borderRadius: 4,
-              background: alpha('#fff', 0.98),
-              backdropFilter: 'blur(20px)',
-              border: `1px solid ${alpha('#667eea', 0.1)}`,
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-          >
-            {/* Question Number Badge */}
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                background: 'linear-gradient(45deg, #667eea, #764ba2)',
-                color: 'white',
-                px: 2,
-                py: 1,
-                borderRadius: 3,
-                fontWeight: 600
-              }}
-            >
-              Q{currentQuestion + 1}
-            </Box>
-            
-            {/* Question Content */}
-            <Box sx={{ pr: 8 }}>
-              <Chip
-                icon={<FlagIcon />}
-                label={currentQuestionData.question_type || 'General'}
-                color="primary"
-                variant="outlined"
-                sx={{ mb: 3 }}
-              />
-              
-              <Typography 
-                variant="h6" 
-                sx={{
-                  mb: 3, 
-                  fontWeight: 600,
-                  lineHeight: 1.6,
-                  color: '#333 !important',
-                  fontSize: '1.3rem !important'
-                }}
-              >
-                {currentQuestionData.question || currentQuestionData.text || currentQuestionData.content || 'Question text not available'}
-              </Typography>
-              
-              {renderQuestionInput(currentQuestionData)}
-            </Box>
-            
-            {/* Answer Status Indicator */}
-            {answers[currentQuestionData.uniqueId] && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3 }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-                  <CheckIcon color="success" />
-                  <Typography variant="body2" color="success.main" sx={{ fontWeight: 600 }}>
-                    Question answered
-                </Typography>
-              </Box>
-              </motion.div>
-            )}
-          </Paper>
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Navigation Controls */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
-        <Paper
-          elevation={6}
-          sx={{
-            p: 3,
-            borderRadius: 3,
-            background: alpha('#fff', 0.95),
-            backdropFilter: 'blur(20px)',
-          }}
-        >
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Button
-              startIcon={<PrevIcon />}
-              onClick={handlePrevQuestion}
-              disabled={currentQuestion === 0}
-              variant="outlined"
-              sx={{
-                px: 3,
-                py: 1.5,
-                borderRadius: 2,
-                borderColor: alpha('#667eea', 0.5),
-                color: '#667eea',
-                '&:hover': {
-                  borderColor: '#667eea',
-                  backgroundColor: alpha('#667eea', 0.1),
-                  transform: 'translateX(-2px)',
-                },
-                '&:disabled': {
-                  opacity: 0.3
-                }
-              }}
-            >
-              Previous
-            </Button>
-
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              {questions.map((_, index) => (
-                <motion.div
-                  key={index}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Box
-                    onClick={() => setCurrentQuestion(index)}
-                    sx={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: '50%',
-                      backgroundColor: index === currentQuestion 
-                        ? '#667eea' 
-                        : answers[questions[index]?.uniqueId] 
-                          ? '#4CAF50' 
-                          : alpha('#000', 0.2),
-                      cursor: 'pointer',
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        transform: 'scale(1.2)',
-                      }
-                    }}
-                  />
-                </motion.div>
-              ))}
-            </Box>
-
-            {currentQuestion === questions.length - 1 ? (
-              <Button
-                startIcon={<SendIcon />}
-                onClick={() => setShowConfirmDialog(true)}
-                variant="contained"
-                sx={{
-                  px: 4,
-                  py: 1.5,
-                  borderRadius: 2,
-                  background: 'linear-gradient(45deg, #4CAF50, #8BC34A)',
-                  '&:hover': {
-                    background: 'linear-gradient(45deg, #45a049, #7cb342)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 25px rgba(76, 175, 80, 0.3)',
-                  }
-                }}
-              >
-                Submit Quiz
-              </Button>
-            ) : (
-              <Button
-                endIcon={<NextIcon />}
-                onClick={handleNextQuestion}
-                variant="contained"
-                sx={{
-                  px: 3,
-                  py: 1.5,
-                  borderRadius: 2,
-                  background: 'linear-gradient(45deg, #667eea, #764ba2)',
-                  '&:hover': {
-                    background: 'linear-gradient(45deg, #5a6fd8, #6a4190)',
-                    transform: 'translateX(2px)',
-                  }
-                }}
-              >
-                Next
-              </Button>
-            )}
-          </Stack>
-        </Paper>
-      </motion.div>
-
-      {/* Enhanced Security Alert Backdrop */}
-      <Backdrop
-        sx={{ color: '#fff', zIndex: 9999, backgroundColor: alpha('#000', 0.8) }}
-        open={showSecurityAlert}
-      >
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.5, opacity: 0 }}
-        >
-          <Paper
-            elevation={24}
-            sx={{
-              p: 4,
-              borderRadius: 4,
-              background: 'linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%)',
-              color: 'white',
-              textAlign: 'center',
-              maxWidth: 400
-            }}
-          >
-            <SecurityIcon sx={{ fontSize: 64, mb: 2 }} />
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
-              Security Alert!
-            </Typography>
-            <Typography variant="body1">
-              {warningMessage}
-            </Typography>
-          </Paper>
-        </motion.div>
-      </Backdrop>
-
-      {/* Beautiful Snackbar Alerts */}
-      <Snackbar
-        open={showSnackbar}
-        autoHideDuration={4000}
-        onClose={() => setShowSnackbar(false)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        TransitionComponent={Slide}
-      >
-        <Alert
-          onClose={() => setShowSnackbar(false)}
-          severity={alertSeverity}
-          variant="filled"
-          sx={{
-            borderRadius: 3,
-            fontWeight: 600,
-            '& .MuiAlert-icon': {
-              fontSize: '1.5rem'
-            }
-          }}
-        >
-          {warningMessage}
-        </Alert>
-      </Snackbar>
-
-      {/* Confirmation Dialog */}
-      <Dialog
-        open={showConfirmDialog}
-        onClose={() => setShowConfirmDialog(false)}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 4,
-            background: alpha('#fff', 0.98),
-            backdropFilter: 'blur(20px)',
-          }
+      {/* Header */}
+      <Paper
+        sx={{
+          p: 3,
+          mb: 3,
+          background: alpha(theme.palette.background.paper, 0.95),
+          backdropFilter: 'blur(20px)',
+          border: `1px solid ${alpha('#45b7d1', 0.2)}`,
         }}
       >
-        <DialogTitle sx={{ textAlign: 'center', pb: 1 }}>
-          <Avatar sx={{ mx: 'auto', mb: 2, bgcolor: 'warning.main', width: 56, height: 56 }}>
-            <SendIcon fontSize="large" />
-          </Avatar>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h5" sx={{ fontWeight: 600 }}>
-            Submit Quiz?
+            {quiz.title}
           </Typography>
-        </DialogTitle>
-        <DialogContent sx={{ textAlign: 'center', pt: 0 }}>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            You have answered {getAnsweredQuestionsCount()} out of {questions.length} questions.
-          </Typography>
-          {getUnansweredQuestions().length > 0 && (
-            <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
-              {getUnansweredQuestions().length} questions are still unanswered. 
-              You must answer all questions before submitting.
-            </Alert>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {timeLeft !== null && (
+              <Chip
+                icon={<TimerIcon />}
+                label={formatTime(timeLeft)}
+                color={timeLeft < 300 ? 'error' : 'primary'}
+                sx={{ fontWeight: 600 }}
+              />
+            )}
+            <IconButton onClick={() => navigate('/student-dashboard')}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </Box>
+
+        {/* Progress */}
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Question {currentQuestion + 1} of {questions.length}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {Math.round(getProgressPercentage())}% Complete
+            </Typography>
+          </Box>
+          <LinearProgress 
+            variant="determinate" 
+            value={getProgressPercentage()}
+            sx={{
+              height: 8,
+              borderRadius: 4,
+              '& .MuiLinearProgress-bar': {
+                background: 'linear-gradient(135deg, #45b7d1 0%, #96c93d 100%)',
+              }
+            }}
+          />
+        </Box>
+      </Paper>
+
+      {/* Question Card */}
+      <motion.div
+        key={currentQuestion}
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <Card
+          sx={{
+            mb: 3,
+            background: alpha(theme.palette.background.paper, 0.95),
+            backdropFilter: 'blur(20px)',
+            border: `1px solid ${alpha('#45b7d1', 0.2)}`,
+          }}
+        >
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+              {question.text}
+            </Typography>
+
+            <FormControl component="fieldset" fullWidth>
+              {/* Handle different question types */}
+              {(question.type === 'mcq' || question.question_type === 'mcq') && getQuestionOptions(question).length > 0 ? (
+                <RadioGroup
+                  value={answers[question.uniqueId] || ''}
+                  onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
+                >
+                  <Stack spacing={2}>
+                    {getQuestionOptions(question).map((option, idx) => (
+                      <FormControlLabel
+                        key={idx}
+                        value={option}
+                        control={<Radio />}
+                        label={option}
+                        sx={{
+                          border: `1px solid ${alpha('#45b7d1', 0.2)}`,
+                          borderRadius: 2,
+                          p: 2,
+                          m: 0,
+                          '&:hover': {
+                            backgroundColor: alpha('#45b7d1', 0.05),
+                          },
+                          '& .Mui-checked': {
+                            color: '#45b7d1',
+                          },
+                        }}
+                      />
+                    ))}
+                  </Stack>
+                </RadioGroup>
+              ) : (question.type === 'truefalse' || question.question_type === 'truefalse') ? (
+                <RadioGroup
+                  value={answers[question.uniqueId] || ''}
+                  onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
+                >
+                  <Stack spacing={2}>
+                    <FormControlLabel value="True" control={<Radio />} label="True" />
+                    <FormControlLabel value="False" control={<Radio />} label="False" />
+                  </Stack>
+                </RadioGroup>
+              ) : (question.type === 'fill' || question.question_type === 'fill' || question.type === 'oneline' || question.question_type === 'oneline') ? (
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  variant="outlined"
+                  placeholder="Enter your answer here..."
+                  value={answers[question.uniqueId] || ''}
+                  onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: alpha(theme.palette.background.paper, 0.9),
+                      borderColor: alpha('#45b7d1', 0.2),
+                      '&:hover': {
+                        borderColor: '#45b7d1',
+                      },
+                      '&.Mui-focused': {
+                        borderColor: '#45b7d1',
+                      },
+                    },
+                  }}
+                />
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <Typography variant="body1" color="text.secondary">
+                    Unsupported question type: {question.type || question.question_type}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Please contact your instructor about this issue.
+                  </Typography>
+                </Box>
+              )}
+            </FormControl>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Navigation */}
+      <Paper
+        sx={{
+          p: 3,
+          background: alpha(theme.palette.background.paper, 0.95),
+          backdropFilter: 'blur(20px)',
+          border: `1px solid ${alpha('#45b7d1', 0.2)}`,
+        }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Button
+            variant="outlined"
+            startIcon={<PrevIcon />}
+            onClick={handlePrevQuestion}
+            disabled={currentQuestion === 0}
+            sx={{
+              borderColor: '#45b7d1',
+              color: '#45b7d1',
+            }}
+          >
+            Previous
+          </Button>
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {questions.map((q, index) => (
+              <Box
+                key={q.uniqueId}
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  backgroundColor: 
+                    answers[q.uniqueId] ? '#45b7d1' :
+                    index === currentQuestion ? '#96c93d' : 
+                    alpha('#45b7d1', 0.3),
+                  cursor: 'pointer',
+                }}
+                onClick={() => setCurrentQuestion(index)}
+              />
+            ))}
+          </Box>
+
+          {currentQuestion === questions.length - 1 ? (
+            <Button
+              variant="contained"
+              startIcon={<CheckIcon />}
+              onClick={() => setShowConfirmDialog(true)}
+              sx={{
+                background: 'linear-gradient(135deg, #45b7d1 0%, #96c93d 100%)',
+              }}
+            >
+              Submit Quiz
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              endIcon={<NextIcon />}
+              onClick={handleNextQuestion}
+              sx={{
+                background: 'linear-gradient(135deg, #45b7d1 0%, #96c93d 100%)',
+              }}
+            >
+              Next
+            </Button>
           )}
-          <Typography variant="body2" color="text.secondary">
-            Once submitted, you cannot make changes to your answers.
+        </Box>
+      </Paper>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onClose={() => setShowConfirmDialog(false)}>
+        <DialogTitle>Submit Quiz</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to submit your quiz? You won't be able to change your answers after submission.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            Answered: {Object.keys(answers).length} / {questions.length} questions
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
-          <Button
-            onClick={() => setShowConfirmDialog(false)}
-            variant="outlined"
-            sx={{ px: 3, borderRadius: 2 }}
-          >
+        <DialogActions>
+          <Button onClick={() => setShowConfirmDialog(false)}>
             Cancel
           </Button>
           <Button 
-            onClick={() => {
-              setShowConfirmDialog(false);
-              handleSubmitQuiz(false);
-            }}
+            onClick={() => handleSubmitQuiz(false)} 
             variant="contained"
-            disabled={getUnansweredQuestions().length > 0}
             sx={{
-              px: 3,
-              borderRadius: 2,
-              background: 'linear-gradient(45deg, #4CAF50, #8BC34A)',
+              background: 'linear-gradient(135deg, #45b7d1 0%, #96c93d 100%)',
             }}
           >
-            Submit Quiz
+            Submit
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Warning Dialog */}
-      <Dialog
-        open={showWarningDialog}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 4,
-            background: 'linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%)',
-            color: 'white',
-          }
-        }}
-      >
-        <DialogTitle sx={{ textAlign: 'center' }}>
-          <WarningIcon sx={{ fontSize: 64, mb: 1 }} />
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Security Violation Detected
-          </Typography>
-        </DialogTitle>
-        <DialogContent sx={{ textAlign: 'center' }}>
-          <Typography variant="body1">
-            Maximum tab switches exceeded. Your quiz will be submitted automatically for security reasons.
-          </Typography>
-        </DialogContent>
-      </Dialog>
-
-      {/* Loading Overlay */}
-      {isLoading && (
-        <Backdrop sx={{ color: '#fff', zIndex: 9998 }} open={isLoading}>
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          >
-            <CircularProgress size={60} />
-          </motion.div>
-        </Backdrop>
-      )}
-    </Container>
+    </Box>
   );
 };
 

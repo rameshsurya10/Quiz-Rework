@@ -1,65 +1,77 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, CircularProgress, Button, Paper } from '@mui/material';
 import { motion } from 'framer-motion';
-import { quizApi } from '../../services/api';
-import CreatingQuizLoader from './CreatingQuizLoader';
+import apiService from '../../api';
 
 const DirectQuizAccess = () => {
-  const { id } = useParams();
-  const location = useLocation();
+  const { quizId } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [quiz, setQuiz] = useState(null);
 
   useEffect(() => {
-    // If the id is 'create', we are navigating to the form, not fetching a quiz.
-    if (id === 'create') {
-      setLoading(false);
-      return;
-    }
-    
-    const fetchQuizForStudent = async () => {
-      try {
-        const response = await quizApi.getForStudent(id);
-        console.log('Quiz access successful, navigating to quiz interface');
-        navigate(`/quiz/take/${id}`);
-      } catch (error) {
-        console.error('Direct quiz access error:', error);
-        
-        let errorMessage = 'Could not access quiz';
-        let shouldRedirectToLogin = false;
-        
-        if (error.response?.status === 401) {
-          errorMessage = 'Authentication required. Please log in.';
-          shouldRedirectToLogin = true;
-        } else if (error.response?.status === 403) {
-          errorMessage = 'Access denied. You may need to log in as a student.';
-          shouldRedirectToLogin = true;
-        } else if (error.response?.status === 404) {
-          errorMessage = 'Quiz not found or not available.';
-        } else if (!error.response) {
-          errorMessage = 'Network error. Please check your connection.';
-        } else {
-          errorMessage = `Error ${error.response.status}: ${error.response.statusText}`;
-        }
-        
-        setError({
-          message: errorMessage,
-          shouldRedirectToLogin,
-          details: error.response?.data
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
+    checkQuizAccess();
+  }, [quizId]);
 
-    fetchQuizForStudent();
-  }, [id, navigate]);
+  const checkQuizAccess = async () => {
+    try {
+      console.log(`Direct quiz access attempt for quiz ID: ${quizId}`);
+      console.log('Authentication status:', {
+        token: localStorage.getItem('token') ? 'exists' : 'missing',
+        userRole: localStorage.getItem('userRole'),
+        userEmail: localStorage.getItem('user_email')
+      });
+
+      // Check if user is authenticated
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('No authentication token found, redirecting to student login');
+        // Store the quiz ID for after login
+        localStorage.setItem('pending_quiz_id', quizId);
+        navigate('/student-login');
+        return;
+      }
+
+      // Try to access the quiz
+      const response = await apiService.get(`/api/students/quiz_attempt/${quizId}`);
+      
+      if (response.data) {
+        console.log('Quiz access successful, navigating to quiz interface');
+        navigate(`/quiz/take/${quizId}`);
+      }
+    } catch (error) {
+      console.error('Direct quiz access error:', error);
+      
+      let errorMessage = 'Could not access quiz';
+      let shouldRedirectToLogin = false;
+      
+      if (error.response?.status === 401) {
+        errorMessage = 'Authentication required. Please log in.';
+        shouldRedirectToLogin = true;
+      } else if (error.response?.status === 403) {
+        errorMessage = 'Access denied. You may need to log in as a student.';
+        shouldRedirectToLogin = true;
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Quiz not found or not available.';
+      } else if (!error.response) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else {
+        errorMessage = `Error ${error.response.status}: ${error.response.statusText}`;
+      }
+      
+      setError({
+        message: errorMessage,
+        shouldRedirectToLogin,
+        details: error.response?.data
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLoginRedirect = () => {
-    localStorage.setItem('pending_quiz_id', id);
+    localStorage.setItem('pending_quiz_id', quizId);
     navigate('/student-login');
   };
 
@@ -86,7 +98,7 @@ const DirectQuizAccess = () => {
           <Box sx={{ textAlign: 'center', color: 'white' }}>
             <CircularProgress sx={{ color: '#45b7d1', mb: 2 }} />
             <Typography variant="h6">
-              Accessing Quiz {id}...
+              Accessing Quiz {quizId}...
             </Typography>
             <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
               Please wait while we verify your access
@@ -133,7 +145,7 @@ const DirectQuizAccess = () => {
             </Typography>
             
             <Typography variant="body2" sx={{ mb: 3, color: 'text.secondary' }}>
-              Quiz ID: {id}
+              Quiz ID: {quizId}
             </Typography>
 
             {error.details && (

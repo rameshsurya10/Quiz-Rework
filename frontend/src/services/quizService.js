@@ -165,40 +165,6 @@ export const quizService = {
     }
   },
 
-  // Upload multiple files for a quiz
-  uploadFilesForQuiz: async (quizId, files, onUploadProgress) => {
-    const totalSize = files.reduce((acc, file) => acc + file.size, 0);
-    let uploadedSize = 0;
-
-    for (const file of files) {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const token = localStorage.getItem('token');
-      const config = {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-        },
-        onUploadProgress: (progressEvent) => {
-          if (onUploadProgress) {
-            const currentFileProgress = progressEvent.loaded / progressEvent.total;
-            const progress = uploadedSize + currentFileProgress * file.size;
-            onUploadProgress({ loaded: progress, total: totalSize });
-          }
-        },
-      };
-
-      try {
-        await axios.post(`${API_BASE_URL}/api/quiz/${quizId}/upload/`, formData, config);
-        uploadedSize += file.size;
-      } catch (error) {
-        console.error(`Error uploading file ${file.name}:`, error);
-        throw new Error(`Failed to upload ${file.name}.`);
-      }
-    }
-  },
-
   // Upload a single file for a quiz
   uploadFileForQuiz: async (quizId, file, pageRange = null, onUploadProgress) => {
     const formData = new FormData();

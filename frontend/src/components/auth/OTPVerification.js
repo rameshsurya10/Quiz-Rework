@@ -173,17 +173,7 @@ const OTPVerification = () => {
 
         // Store user info if available
         if (response.data.user) {
-          const user = response.data.user;
-          localStorage.setItem('user', JSON.stringify(user));
-          
-          // Extract and store user's name for display
-          const userName = user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email;
-          localStorage.setItem('user_name', userName);
-          
-          // Also store student ID if available
-          if (user.student_id) {
-            localStorage.setItem('student_id', user.student_id);
-          }
+          localStorage.setItem('user', JSON.stringify(response.data.user));
         }
         
         // Store role and email for consistency

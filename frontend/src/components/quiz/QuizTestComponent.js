@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Button, TextField, Typography, Paper } from '@mui/material';
-import { quizApi } from '../../services/api';
+import apiService from '../../api';
 
 const QuizTestComponent = () => {
   const [quizId, setQuizId] = useState('186');
@@ -13,7 +13,7 @@ const QuizTestComponent = () => {
     
     try {
       console.log(`Testing GET /api/students/quiz_attempt/${quizId}`);
-      const response = await quizApi.getQuizAttempt(quizId);
+      const response = await apiService.get(`/api/students/quiz_attempt/${quizId}`);
       
       setResult({
         success: true,

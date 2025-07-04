@@ -6,10 +6,13 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import TeacherSection from './components/teachers/TeacherSection';
 import StudentSection from './components/students/StudentSection';
+import TeacherStudentSection from './components/students/TeacherStudentSection';
 import QuizSection from './components/quiz/QuizSection';
+import TeacherQuizSection from './components/quiz/TeacherQuizSection';
 import ResultsSection from './components/results/ResultsSection';
 import ProfilePage from './components/profile/ProfilePage';
 import SettingsPage from './components/settings/SettingsPage';
+import TeacherSettingsPage from './components/settings/TeacherSettingsPage';
 import DepartmentSection from './components/departments/DepartmentSection';
 import StudentReportSection from './components/results/StudentReportSection'; // Added for student reports
 import FullLayout from './components/FullLayout';
@@ -18,6 +21,7 @@ import apiService from './api';
 import PageLoader from './common/PageLoader';
 
 // New authentication components
+import TeacherDashboard, { TeacherLayout } from './components/dashboards/TeacherDashboard';
 import StudentDashboard from './components/dashboards/StudentDashboard';
 import SimpleStudentDashboard from './components/dashboards/SimpleStudentDashboard';
 // Add OTP Verification component import
@@ -25,16 +29,8 @@ import OTPVerification from './components/auth/OTPVerification';
 // Student-specific components
 import StudentLogin from './components/auth/StudentLogin';
 import StudentQuizView from './components/quiz/StudentQuizView';
-import StudentQuizResultView from './components/quiz/StudentQuizResultView';
 import QuizTestComponent from './components/quiz/QuizTestComponent';
 import DirectQuizAccess from './components/quiz/DirectQuizAccess';
-
-// Teacher-specific components
-import TeacherDashboard from './components/dashboards/TeacherDashboard';
-import TeacherQuizSection from './components/teacher/TeacherQuizSection';
-import TeacherStudentSection from './components/teacher/TeacherStudentSection';
-import TeacherSubjectSection from './components/teacher/TeacherSubjectSection';
-import TeacherSettingsPage from './components/teacher/TeacherSettingsPage';
 
 // Protected route component
 const ProtectedRoute = ({ children }) => {
@@ -111,6 +107,11 @@ function App() {
           <Route path="/auth/otp/:role" element={<OTPVerification />} />
           
           {/* Role-specific dashboards */}
+          <Route path="/teacher-dashboard" element={
+            <ProtectedRoute>
+              <TeacherDashboard />
+            </ProtectedRoute>
+          } />
           <Route path="/student-dashboard" element={
             <ProtectedRoute>
               <SimpleStudentDashboard />
@@ -124,13 +125,6 @@ function App() {
             </ProtectedRoute>
           } />
           
-          {/* Student Quiz Result View */}
-          <Route path="/quiz/result/:quizId" element={
-            <ProtectedRoute>
-              <StudentQuizResultView />
-            </ProtectedRoute>
-          } />
-          
           {/* Direct Quiz Access Routes */}
           <Route path="/quiz/:quizId/join" element={<DirectQuizAccess />} />
           <Route path="/quiz/:quizId/join/" element={<DirectQuizAccess />} />
@@ -139,88 +133,36 @@ function App() {
           {/* Test Component - Remove in production */}
           <Route path="/test-quiz-api" element={<QuizTestComponent />} />
 
-          {/* Teacher Routes */}
-          <Route path="/teacher-dashboard" element={
-            <ProtectedRoute>
-              <TeacherDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/dashboard" element={
-            <ProtectedRoute>
-              <TeacherDashboard />
-            </ProtectedRoute>
-          } />
+          {/* Teacher-specific routes with TeacherLayout */}
           <Route path="/teacher/quiz" element={
             <ProtectedRoute>
-              <TeacherQuizSection />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/quiz/create" element={
-            <ProtectedRoute>
-              <TeacherQuizSection />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/quiz/:quizId" element={
-            <ProtectedRoute>
-              <TeacherQuizSection />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/quiz/edit/:quizId" element={
-            <ProtectedRoute>
-              <TeacherQuizSection />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/quiz/:quizId/results" element={
-            <ProtectedRoute>
-              <ResultsSection />
+              <TeacherLayout>
+                <TeacherQuizSection />
+              </TeacherLayout>
             </ProtectedRoute>
           } />
           <Route path="/teacher/students" element={
             <ProtectedRoute>
-              <TeacherStudentSection />
+              <TeacherLayout>
+                <TeacherStudentSection />
+              </TeacherLayout>
             </ProtectedRoute>
           } />
-          <Route path="/teacher/students/add" element={
+          <Route path="/teacher/departments" element={
             <ProtectedRoute>
-              <TeacherStudentSection />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/students/:studentId" element={
-            <ProtectedRoute>
-              <TeacherStudentSection />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/students/:studentId/quizzes" element={
-            <ProtectedRoute>
-              <TeacherStudentSection />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/subjects" element={
-            <ProtectedRoute>
-              <TeacherSubjectSection />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/subjects/:subjectId" element={
-            <ProtectedRoute>
-              <TeacherSubjectSection />
-            </ProtectedRoute>
-          } />
-          <Route path="/teacher/subjects/:subjectId/quizzes" element={
-            <ProtectedRoute>
-              <TeacherSubjectSection />
+              <TeacherLayout>
+                <DepartmentSection />
+              </TeacherLayout>
             </ProtectedRoute>
           } />
           <Route path="/teacher/settings" element={
             <ProtectedRoute>
-              <TeacherSettingsPage />
+              <TeacherLayout>
+                <TeacherSettingsPage />
+              </TeacherLayout>
             </ProtectedRoute>
           } />
-          <Route path="/teacher/results" element={
-            <ProtectedRoute>
-              <ResultsSection />
-            </ProtectedRoute>
-          } />
-
+          
           {/* Protected routes - Admin Dashboard */}
           <Route path="/dashboard" element={
             <ProtectedRoute>

@@ -616,14 +616,10 @@ const FullLayout = ({ children, hideToolbar = false }) => {
               }
             }}
           >
-          {userRole !== 'ADMIN' && (
-            <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/profile'); }}>
-              <ListItemIcon>
-                <PersonIcon fontSize="small" />
-              </ListItemIcon>
+          <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/profile'); }}>
+              <ListItemIcon><AccountCircleIcon fontSize="small" /></ListItemIcon>
               Profile
             </MenuItem>
-          )}
           <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
               <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
               Settings

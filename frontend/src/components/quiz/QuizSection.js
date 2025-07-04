@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress, Alert
+  Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -53,35 +53,16 @@ const QuizSection = () => {
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [isViewModalOpen, setViewModalOpen] = useState(false);
   const [isQuestionsLoading, setQuestionsLoading] = useState(false);
-  const [replacementCount, setReplacementCount] = useState(0);
 
   const fetchQuizzes = useCallback(async () => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await quizApi.getAll({ filter: activeTab === 'all' ? undefined : activeTab });
-      const data = response.data;
-      let allQuizzes = [];
-
-      // Case 1: categorized quizzes
-      if (data.current_quizzes || data.upcoming_quizzes || data.past_quizzes) {
-        allQuizzes = [
-          ...(data.current_quizzes || []),
-          ...(data.upcoming_quizzes || []),
-          ...(data.past_quizzes || []),
-        ];
-      }
-      // Case 2: plain array
-      else if (Array.isArray(data)) {
-        allQuizzes = data;
-      }
-      // Case 3: paginated results
-      else if (Array.isArray(data.results)) {
-        allQuizzes = data.results;
-      }
-
-      if (!Array.isArray(allQuizzes)) {
-        console.error('Invalid quiz data format:', data);
+      const quizzesData = await quizService.getUserquiz(activeTab);
+      console.log('Fetched quizzes:', quizzesData);
+      
+      if (!Array.isArray(quizzesData)) {
+        console.error('Invalid quiz data format:', quizzesData);
         throw new Error('Invalid response format from server');
       }
 
@@ -123,7 +104,7 @@ const QuizSection = () => {
     
     loadData();
     // Only re-run when isCreating changes, not on function reference changes
-  }, [isCreating, fetchQuizzes, fetchDepartments]);
+  }, [isCreating]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -133,31 +114,11 @@ const QuizSection = () => {
     setIsCreating(true);
   };
 
-  const handleCreateQuiz = async (quizData) => {
-    const response = await quizService.createQuiz(quizData);
-    if (!response || !response.quiz_id) {
-      throw new Error("Failed to create quiz or get a valid quiz_id");
-    }
-    return response;
-  };
-
-  const handleUploadFiles = async (quizId, files, onUploadProgress) => {
-    if (!quizId) {
-      throw new Error("Missing quizId for file upload");
-    }
-    return await quizService.uploadFilesForQuiz(quizId, files, onUploadProgress);
-  };
-
-  const handleFinalizeQuiz = async (quizId) => {
-    console.log(`Quiz ${quizId} finalization step.`);
-    return Promise.resolve();
-  };
-
   const handleCancelCreate = () => {
     setIsCreating(false);
   };
 
-  const handleCreateQuizSubmit = async (formData, onUploadProgress) => {
+  const handleCreateQuiz = async (formData, onUploadProgress) => {
     try {
       setIsCreating(true);
       
@@ -240,7 +201,6 @@ const QuizSection = () => {
       setQuestionsLoading(true);
       setSelectedQuiz(null);
       setViewModalOpen(true);
-      setReplacementCount(0); // Reset count when modal opens
       
       // Use getQuizDetails to get complete quiz data with questions
       const quizData = await quizService.getQuizDetails(quizId);
@@ -313,68 +273,10 @@ const QuizSection = () => {
     }
   };
 
-  const refreshQuizView = async () => {
-    if (!selectedQuiz) return;
-    try {
-      setQuestionsLoading(true);
-      const quizData = await quizService.getQuizDetails(selectedQuiz.quiz_id);
-      
-      const questionsToDisplay = quizData.current_questions || [];
-      const processedQuestions = questionsToDisplay.map((q) => {
-        const processed = { ...q };
-        processed.question_text = q.question || q.question_text || 'No question text';
-        processed.type = q.question_type || q.type || 'mcq';
-        if (processed.type === 'mcq' && q.options) {
-          if (Array.isArray(q.options)) {
-            // Already in array format, just ensure consistency
-            processed.options = q.options.map((opt, index) => {
-              if (typeof opt === 'object' && opt.option_text) {
-                return opt; // Already properly formatted
-              }
-              // Convert simple array items to proper format
-              return {
-                option_text: String(opt),
-                is_correct: false, // Will be determined elsewhere
-                id: String.fromCharCode(65 + index) // A, B, C, D...
-              };
-            });
-          } else if (typeof q.options === 'object') {
-            // Convert object format to array
-            const correctKey = q.correct_answer?.toString().split(':')[0].trim();
-            processed.options = Object.entries(q.options).map(([key, value]) => {
-              // Ensure the option text is a string, even if it's a nested object.
-              const optionText = (value && typeof value === 'object') ? JSON.stringify(value) : String(value);
-              return {
-                option_text: optionText,
-                is_correct: key === correctKey,
-                id: key
-              };
-            });
-          } else {
-            processed.options = [];
-          }
-        } else {
-          processed.options = [];
-        }
-        return processed;
-      });
-
-      setSelectedQuiz({
-        ...quizData,
-        questions: processedQuestions
-      });
-
-    } catch (error) {
-      console.error('Failed to refresh quiz details:', error);
-      showSnackbar('Failed to refresh quiz questions.', 'error');
-    } finally {
-      setQuestionsLoading(false);
-    }
-  };
-
   const handleReplaceQuestion = async (questionNumber) => {
     if (!selectedQuiz) return;
     
+    // Add validation to prevent sending bad requests
     if (typeof questionNumber === 'undefined' || questionNumber === null) {
       console.error("Attempted to replace a question with an invalid number:", questionNumber);
       showSnackbar('Cannot replace question: Invalid question number.', 'error');
@@ -383,18 +285,9 @@ const QuizSection = () => {
 
     try {
       await quizService.replaceQuestion(selectedQuiz.quiz_id, questionNumber);
-      
-      const newCount = replacementCount + 1;
-      setReplacementCount(newCount);
-
-      if (newCount >= 5) {
-        showSnackbar('Last replacement used. No more exchanges available for this quiz.', 'warning');
-      } else {
-        showSnackbar('Question replaced successfully!', 'success');
-      }
-
-      await refreshQuizView();
-
+      showSnackbar('Question replaced successfully!', 'success');
+      // Refresh the view
+      await handleViewQuiz(selectedQuiz.quiz_id);
     } catch (error) {
       console.error('Failed to replace question:', error);
       showSnackbar('Failed to replace question', 'error');
@@ -552,11 +445,11 @@ const QuizSection = () => {
       <Container maxWidth={false} sx={{ mt: 4, mb: 4 }}>
         {isCreating ? (
           <QuizFormModern 
-            onSave={{
-              createQuiz: handleCreateQuiz,
-              uploadFiles: handleUploadFiles,
-              finalizeQuiz: handleFinalizeQuiz
+            onSave={{ 
+              createQuiz: quizService.createQuiz, 
+              uploadFile: quizService.uploadFileForQuiz 
             }} 
+            className="glass-effect" 
             onCancel={handleCancelCreate} 
             departments={departments} 
           />
@@ -640,11 +533,6 @@ const QuizSection = () => {
             {selectedQuiz?.title}
           </DialogTitle>
           <DialogContent dividers>
-            {selectedQuiz && !selectedQuiz.is_published && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Only 5 replacements are allowed for this quiz. You have {5 - replacementCount} remaining.
-              </Alert>
-            )}
             {isQuestionsLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
                 <CircularProgress />
@@ -657,15 +545,13 @@ const QuizSection = () => {
                       <Typography variant="subtitle1" sx={{ fontWeight: 'bold', flexGrow: 1 }}>
                         {index + 1}. {question.question_text}
                       </Typography>
-                      {selectedQuiz && !selectedQuiz.is_published && replacementCount < 5 && (
-                        <IconButton 
-                          edge="end" 
-                          aria-label="replace" 
-                          onClick={() => handleReplaceQuestion(question.question_number)}
-                        >
-                          <ReplayIcon />
-                        </IconButton>
-                      )}
+                      <IconButton 
+                        edge="end" 
+                        aria-label="replace" 
+                        onClick={() => handleReplaceQuestion(question.question_number)}
+                      >
+                        <ReplayIcon />
+                      </IconButton>
                     </Box>
                     
                     {/* Options for MCQ */}
@@ -723,8 +609,17 @@ const QuizSection = () => {
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={closeViewModal} sx={{ textTransform: 'none' }}>
-              Close
+            <Button onClick={closeViewModal}>Close</Button>
+            <Button 
+              variant="contained" 
+              onClick={() => {
+                if (selectedQuiz) {
+                  navigate(`/PUBLISH-quiz/${selectedQuiz.quiz_id}`);
+                  closeViewModal();
+                }
+              }}
+            >
+              Proceed to PUBLISH
             </Button>
           </DialogActions>
         </Dialog>

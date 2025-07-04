@@ -312,35 +312,66 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
       };
 
       const createdQuiz = await onSave.createQuiz(quizPayload);
-      const quizId = createdQuiz.quiz_id || createdQuiz.id;
-      if (!quizId) throw new Error('Failed to get quiz ID');
+      const quizId = createdQuiz.quiz_id;
 
-      setUploadProgress(30);
-      if (form.files?.length > 0) {
-        await onSave.uploadFiles(quizId, form.files, (progressEvent) => {
-          const progress = 30 + (progressEvent.loaded / progressEvent.total) * 60;
-          setUploadProgress(progress);
-        });
+      if (!quizId) {
+        throw new Error('Failed to get quiz_id after creation.');
       }
-      setUploadProgress(90);
-      await onSave.finalizeQuiz(quizId);
-      setUploadProgress(100);
+      
+      console.log(`Step 1 successful. Quiz created with ID: ${quizId}`);
+      setUploadProgress(30);
 
+      // Step 2: Upload files if they exist
+      const filesToUpload = form.files || [];
+      if (filesToUpload.length > 0) {
+        console.log(`Step 2: Uploading ${filesToUpload.length} files...`);
+        const totalFiles = filesToUpload.length;
+        let filesUploaded = 0;
+
+        for (const file of filesToUpload) {
+          try {
+            // Find the page range for this specific file
+            const fileData = form.filesData?.find(fd => fd.file === file);
+            const pageRange = fileData?.page_range || null;
+            
+            console.log(`Uploading ${file.name} with page range: ${pageRange}`);
+            await onSave.uploadFile(quizId, file, pageRange);
+            filesUploaded++;
+            // Update progress based on number of files uploaded
+            const fileProgress = (filesUploaded / totalFiles) * 60; // Files upload takes 60% of progress
+            setUploadProgress(30 + fileProgress);
+          } catch (uploadError) {
+            console.error(`Failed to upload ${file.name}:`, uploadError);
+            // Decide if you want to continue or stop on first file error
+          }
+        }
+      } else {
+          // If no files, just jump progress to near completion
+          setUploadProgress(90);
+      }
+
+      console.log('All steps completed successfully!');
+      setUploadProgress(100);
+      
+      // Use the snackbar from context for success message
+      showSnackbar('Quiz created successfully!', 'success');
+
+      // Hold at 100% for a bit, then fade out and redirect
       setTimeout(() => {
         setIsFadingOut(true);
         setTimeout(() => {
           setLoading(false);
-          onCancel();
-          showSnackbar('Quiz created successfully!', 'success');
+          onCancel(); // Call onCancel to go back to the list view
         }, 500);
-      }, 1000);
+      }, 1000); // Hold for 1 second to show completion
 
-    } catch (error) {
+    } catch (err) {
+      console.error('Quiz creation process failed:', err);
       setLoading(false);
       setErrorDialog({
         open: true,
         title: 'Error',
-        message: error.message || 'An unexpected error occurred.'
+        message: err.message || 'An unexpected error occurred.'
       });
     }
   };
