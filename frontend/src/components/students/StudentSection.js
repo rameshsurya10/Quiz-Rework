@@ -247,20 +247,50 @@ const StudentSection = ({ initialOpenDialog = false }) => {
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Typography variant="h4" gutterBottom>Student Management</Typography>
 
-      {/* <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={4}><SummaryCard icon={<SchoolIcon />} title="Total Students" value={students.length} color={theme.palette.primary.main} index={0} /></Grid>
-        <Grid item xs={12} sm={4}><SummaryCard icon={<PeopleIcon />} title="Total Teachers" value={teachers.length} color={theme.palette.secondary.main} index={1} /></Grid>
-        <Grid item xs={12} sm={4}><SummaryCard icon={<ClassIcon />} title="Total Subjects" value={departments.length} color={theme.palette.success.main} index={2} /></Grid>
-      </Grid> */}
+      {/* Summary Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard 
+            title="Total Students" 
+            value={students.length} 
+            icon={<PeopleIcon sx={{ fontSize: 40 }} />} 
+            color="primary"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard 
+            title="Subjects" 
+            value={departments.length} 
+            icon={<ClassIcon sx={{ fontSize: 40 }} />} 
+            color="secondary"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard 
+            title="Teachers" 
+            value={teachers.length} 
+            icon={<SchoolIcon sx={{ fontSize: 40 }} />} 
+            color="success"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <SummaryCard 
+            title="Verified Students" 
+            value={students.filter(s => s.is_verified).length} 
+            icon={<CheckCircleIcon sx={{ fontSize: 40 }} />} 
+            color="info"
+          />
+        </Grid>
+      </Grid>
       
-      <Card sx={{ mb: 2 }}>
+      <DashboardStyledCard>
         <CardContent>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={4}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+            <Typography variant="h6">All Students</Typography>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <TextField
-                fullWidth
-                label="Search Students"
-                variant="outlined"
+                size="small"
+                placeholder="Search by name or email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 InputProps={{
@@ -271,9 +301,7 @@ const StudentSection = ({ initialOpenDialog = false }) => {
                   ),
                 }}
               />
-            </Grid>
-            <Grid item xs={12} sm={6} md={4}>
-              <FormControl fullWidth variant="outlined">
+              <FormControl size="small" sx={{ minWidth: 150 }}>
                 <InputLabel>Subject</InputLabel>
                 <Select
                   value={selectedDept}
@@ -288,94 +316,98 @@ const StudentSection = ({ initialOpenDialog = false }) => {
                   ))}
                 </Select>
               </FormControl>
-            </Grid>
-            <Grid item xs={12} md={4} sx={{ textAlign: { md: 'right' } }}>
-              <Box sx={{ 
-                display: 'flex', 
-                gap: 1.5, 
-                justifyContent: { xs: 'flex-start', md: 'flex-end' },
-                flexWrap: { xs: 'wrap', sm: 'nowrap' }
-              }}>
-                <Button
-                  variant="outlined"
-                  startIcon={<UploadIcon />}
-                  onClick={() => setOpenBulkUpload(true)}
-                  sx={{ 
-                    flexShrink: 0,
-                    minWidth: { xs: '120px', sm: 'auto' },
-                    fontSize: { xs: '0.8rem', sm: '0.875rem' }
-                  }}
-                >
-                  Bulk Upload
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={() => handleDialogOpen()}
-                  sx={{ 
-                    flexShrink: 0,
-                    minWidth: { xs: '120px', sm: 'auto' },
-                    fontSize: { xs: '0.8rem', sm: '0.875rem' }
-                  }}
-                >
-                  Add Student
-                </Button>
-              </Box>
-            </Grid>
-          </Grid>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => handleDialogOpen()}
+              >
+                Add Student
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<UploadIcon />}
+                onClick={() => setOpenBulkUpload(true)}
+              >
+                Bulk Upload
+              </Button>
+            </Box>
+          </Box>
+          
+          {paginatedStudents.length > 0 ? (
+            <>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Student</TableCell>
+                      <TableCell>Subject</TableCell>
+                      <TableCell>Class</TableCell>
+                      <TableCell>Section</TableCell>
+                      <TableCell>Register No.</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {paginatedStudents.map((student) => (
+                      <TableRow key={student.id} hover>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Avatar sx={{ mr: 2, bgcolor: 'primary.light' }}>
+                              <PersonIcon />
+                            </Avatar>
+                            <Box>
+                              <Typography variant="subtitle2" fontWeight="bold">{student.name}</Typography>
+                              <Typography variant="body2" color="text.secondary">{student.email}</Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>{student.department?.name || 'N/A'}</TableCell>
+                        <TableCell>{student.class_name || 'N/A'}</TableCell>
+                        <TableCell>{student.section || 'N/A'}</TableCell>
+                        <TableCell>{student.register_number || 'N/A'}</TableCell>
+                        <TableCell align="right">
+                          <Tooltip title="View Details">
+                            <IconButton onClick={() => handleView(student)} color="primary">
+                              <VisibilityIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Edit Student">
+                            <IconButton onClick={() => handleDialogOpen(student)} color="secondary">
+                              <EditIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete Student">
+                            <IconButton onClick={() => handleDeleteClick(student)} color="error">
+                              <DeleteIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                rowsPerPageOptions={[10, 25, 50]}
+                component="div"
+                count={filteredStudents.length}
+                rowsPerPage={rowsPerPage}
+                page={page}
+                onPageChange={(e, newPage) => setPage(newPage)}
+                onRowsPerPageChange={(e) => {
+                  setRowsPerPage(parseInt(e.target.value, 10));
+                  setPage(0);
+                }}
+              />
+            </>
+          ) : (
+            <Box sx={{ textAlign: 'center', p: 4 }}>
+              <Typography>No students found for the selected criteria.</Typography>
+            </Box>
+          )}
         </CardContent>
-      </Card>
+      </DashboardStyledCard>
 
-      <Card>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Email</TableCell>
-                <TableCell>Department</TableCell>
-                <TableCell>Mobile No</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paginatedStudents.map((student) => (
-                <TableRow key={student.id} hover>
-                  <TableCell>{student.name}</TableCell>
-                  <TableCell>{student.email}</TableCell>
-                  <TableCell>{student.department ? student.department.name : 'N/A'}</TableCell>
-                  <TableCell>{student.phone || 'N/A'}</TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="View">
-                      <IconButton onClick={() => handleView(student)}><VisibilityIcon /></IconButton>
-                    </Tooltip>
-                    <Tooltip title="Edit">
-                      <IconButton onClick={() => handleDialogOpen(student)}><EditIcon /></IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton onClick={() => handleDeleteClick(student)} disabled={isDeleting}><DeleteIcon /></IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          rowsPerPageOptions={[5, 10, 25, { label: 'All', value: -1 }]}
-          component="div"
-          count={filteredStudents.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={(e, newPage) => setPage(newPage)}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
-            setPage(0);
-          }}
-        />
-      </Card>
-
-      {/* Add/Edit Dialog */}
       <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
         <DialogTitle>{editingStudent ? 'Edit Student' : 'Add New Student'}</DialogTitle>
         <DialogContent>
@@ -392,7 +424,6 @@ const StudentSection = ({ initialOpenDialog = false }) => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog
         open={openDeleteConfirm}
         onClose={handleCloseDeleteConfirm}
@@ -411,39 +442,18 @@ const StudentSection = ({ initialOpenDialog = false }) => {
         </DialogActions>
       </Dialog>
 
-      {/* View Dialog - New Dashboard */}
       <Dialog open={openViewDialog} onClose={handleCloseViewDialog} maxWidth="lg" fullWidth>
         {viewingStudent && 
           <StudentDetailsDashboard student={viewingStudent} onClose={handleCloseViewDialog} />
         }
       </Dialog>
 
-      {/* Bulk Upload Dialog */}
       <BulkUploadDialog
         open={openBulkUpload}
         onClose={() => setOpenBulkUpload(false)}
         onSuccess={handleBulkUploadSuccess}
         departments={departments}
       />
-
-      {/* Old View Dialog - Commented out */}
-      {/* {viewingStudent && (
-        <Dialog open={openViewDialog} onClose={handleCloseViewDialog} maxWidth="sm" fullWidth>
-          <DialogTitle>Student Details</DialogTitle>
-          <DialogContent>
-            <Typography variant="h6">{viewingStudent.name}</Typography>
-            <Typography color="text.secondary" gutterBottom>ID: {viewingStudent.student_id}</Typography>
-            <Grid container spacing={2} sx={{ mt: 2 }}>
-                <Grid item xs={12} sm={6}><Typography><strong>Email:</strong> {viewingStudent.email}</Typography></Grid>
-                <Grid item xs={12} sm={6}><Typography><strong>Phone:</strong> {viewingStudent.phone || 'N/A'}</Typography></Grid>
-                <Grid item xs={12}><Typography><strong>Department:</strong> {viewingStudent.department ? viewingStudent.department.name : 'N/A'}</Typography></Grid>
-            </Grid>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseViewDialog}>Close</Button>
-          </DialogActions>
-        </Dialog>
-      )} */}
 
       <Snackbar
         open={snackbar.open}

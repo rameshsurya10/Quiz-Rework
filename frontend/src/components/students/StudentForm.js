@@ -19,7 +19,10 @@ const StudentForm = ({ student = null, departments = [], onSuccess, onError }) =
     name: '',
     email: '',
     department: '',
-    phone: ''
+    phone: '',
+    class_name: '',
+    section: '',
+    register_number: ''
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,9 +34,12 @@ const StudentForm = ({ student = null, departments = [], onSuccess, onError }) =
         email: student.email || '',
         department: student.department_id || student.department || '',
         phone: student.phone || '',
+        class_name: student.class_name || '',
+        section: student.section || '',
+        register_number: student.register_number || ''
       });
     } else {
-      setFormData({ name: '', email: '', department: '', phone: '' });
+      setFormData({ name: '', email: '', department: '', phone: '', class_name: '', section: '', register_number: '' });
     }
   }, [student]);
 
@@ -51,6 +57,9 @@ const StudentForm = ({ student = null, departments = [], onSuccess, onError }) =
     if (!formData.email.trim()) newErrors.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Invalid email format';
     if (!formData.department) newErrors.department = 'Subject is required';
+    if (!formData.class_name) newErrors.class_name = 'Class is required';
+    if (!formData.section) newErrors.section = 'Section is required';
+    if (!formData.register_number) newErrors.register_number = 'Register number is required';
     if (formData.phone && !/^[0-9]{10}$/.test(formData.phone)) {
       newErrors.phone = 'Phone number must be 10 digits';
     }
@@ -71,6 +80,9 @@ const StudentForm = ({ student = null, departments = [], onSuccess, onError }) =
         email: formData.email.trim(),
         phone: formData.phone.trim(),
         department_id: formData.department,
+        class_name: formData.class_name,
+        section: formData.section,
+        register_number: formData.register_number
       };
 
       if (student) {
@@ -146,6 +158,42 @@ const StudentForm = ({ student = null, departments = [], onSuccess, onError }) =
         margin="normal"
         error={!!errors.phone}
         helperText={errors.phone || 'Optional: 10-digit phone number'}
+      />
+
+      <TextField
+        fullWidth
+        label="Class"
+        name="class_name"
+        value={formData.class_name}
+        onChange={handleInputChange}
+        margin="normal"
+        required
+        error={!!errors.class_name}
+        helperText={errors.class_name}
+      />
+
+      <TextField
+        fullWidth
+        label="Section"
+        name="section"
+        value={formData.section}
+        onChange={handleInputChange}
+        margin="normal"
+        required
+        error={!!errors.section}
+        helperText={errors.section}
+      />
+
+      <TextField
+        fullWidth
+        label="Register Number"
+        name="register_number"
+        value={formData.register_number}
+        onChange={handleInputChange}
+        margin="normal"
+        required
+        error={!!errors.register_number}
+        helperText={errors.register_number}
       />
 
       <Button

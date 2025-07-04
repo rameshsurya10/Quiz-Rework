@@ -24,7 +24,11 @@ import {
   DialogTitle,
   DialogContent,
   DialogContentText,
-  DialogActions
+  DialogActions,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormLabel
 } from '@mui/material';
 import { Autocomplete } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -47,6 +51,35 @@ const formatQuestionType = (value) => {
   }
 };
 
+// Get available question types based on standard
+const getAvailableQuestionTypes = (standard) => {
+  if (standard === '10') {
+    // 10th standard (X) supports all question types
+    return ['MCQ', 'Fill ups', 'Mixed', 'True/False', 'One Line'];
+  } else {
+    // 11th and 12th standards (XI, XII) support MCQ, Fill ups, Mixed, and One Line
+    return ['MCQ', 'Fill ups', 'Mixed', 'One Line'];
+  }
+};
+
+// Get question type description for better user understanding
+const getQuestionTypeDescription = (type) => {
+  switch (type) {
+    case 'MCQ':
+      return 'Multiple Choice Questions';
+    case 'Fill ups':
+      return 'Fill in the Blank Questions';
+    case 'True/False':
+      return 'True or False Questions';
+    case 'One Line':
+      return 'One Line Answer Questions';
+    case 'Mixed':
+      return 'Mixed Question Types';
+    default:
+      return '';
+  }
+};
+
 const initialFormState = {
   title: '',
   description: '',
@@ -59,7 +92,8 @@ const initialFormState = {
   quiz_type: '',
   department: '',
   passing_score: '',
-  quiz_date: ''
+  quiz_date: '',
+  standard: '10' // Default to 10th standard
 };
 
 const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, initialQuizData = null }) => {
@@ -97,6 +131,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
         department_id,
         passing_score,
         quiz_date,
+        standard,
         pages = []
       } = initialQuizData;
 
@@ -120,6 +155,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
         department: department_id || '',
         passing_score: passing_score?.toString() || '',
         quiz_date: quiz_date ? quiz_date.slice(0, 16) : '',
+        standard: standard || '10',
         files: [],
         filesData: pages.map(p => ({
           filename: p.filename,
@@ -173,7 +209,19 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
       setComplexityCounts(prev => ({ ...prev, [type]: value.target.value }));
     } else {
       const fieldValue = value && value.target ? value.target.value : value;
-      setForm(prev => ({ ...prev, [key]: fieldValue }));
+      setForm(prev => {
+        const newForm = { ...prev, [key]: fieldValue };
+        
+        // If standard is changed, check if current quiz_type is still available
+        if (key === 'standard') {
+          const availableTypes = getAvailableQuestionTypes(fieldValue);
+          if (newForm.quiz_type && !availableTypes.includes(newForm.quiz_type)) {
+            newForm.quiz_type = ''; // Reset quiz_type if not available for new standard
+          }
+        }
+        
+        return newForm;
+      });
     }
 
     if (errors[key]) {
@@ -213,7 +261,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
 
   const validate = () => {
     const errs = {};
-    ['title', 'complexity', 'quiz_type'].forEach(field => {
+    ['title', 'complexity', 'quiz_type', 'standard'].forEach(field => {
       if (!form[field]) errs[field] = 'Required';
     });
     if (!form.department) errs.department = 'Please select a subject';
@@ -308,6 +356,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
         quiz_type: form.complexity === 'Mixed' ? complexityCounts : complexityMapping[form.complexity],
         department_id: form.department,
         passing_score: parseInt(form.passing_score),
+        standard: form.standard,
         pages: form.filesData?.map(fd => ({ filename: fd.filename, page_range: fd.page_range })) || []
       };
 
@@ -559,16 +608,94 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                 />
               </Grid>
 
+              {/* Standard Selection */}
+              <Grid item xs={12}>
+                <FormControl component="fieldset" error={!!errors.standard}>
+                  <FormLabel component="legend" sx={{ fontWeight: 'bold', mb: 1 }}>
+                    Standard *
+                  </FormLabel>
+                  <RadioGroup
+                    row
+                    value={form.standard}
+                    onChange={(e) => handleField('standard', e.target.value)}
+                    sx={{ gap: 3 }}
+                  >
+                    <FormControlLabel 
+                      value="10" 
+                      control={<Radio />} 
+                      label="X (10th)" 
+                      sx={{ 
+                        '& .MuiFormControlLabel-label': { 
+                          fontSize: { xs: '0.9rem', sm: '1rem' },
+                          fontWeight: 'medium'
+                        }
+                      }}
+                    />
+                    <FormControlLabel 
+                      value="11" 
+                      control={<Radio />} 
+                      label="XI (11th)" 
+                      sx={{ 
+                        '& .MuiFormControlLabel-label': { 
+                          fontSize: { xs: '0.9rem', sm: '1rem' },
+                          fontWeight: 'medium'
+                        }
+                      }}
+                    />
+                    <FormControlLabel 
+                      value="12" 
+                      control={<Radio />} 
+                      label="XII (12th)" 
+                      sx={{ 
+                        '& .MuiFormControlLabel-label': { 
+                          fontSize: { xs: '0.9rem', sm: '1rem' },
+                          fontWeight: 'medium'
+                        }
+                      }}
+                    />
+                  </RadioGroup>
+                  {errors.standard && <FormHelperText>{errors.standard}</FormHelperText>}
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      <strong>Available Question Types:</strong>
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      {form.standard === '10' 
+                        ? '• X (10th): All types (MCQ, Fill ups, Mixed, True/False, One Line)'
+                        : form.standard === '11'
+                        ? '• XI (11th): MCQ, Fill ups, Mixed, One Line'
+                        : '• XII (12th): MCQ, Fill ups, Mixed, One Line'
+                      }
+                    </Typography>
+                  </Box>
+                </FormControl>
+              </Grid>
+
               {/* Quiz Type */}
               <Grid item xs={12} sm={6}>
                 <Autocomplete
                   disableClearable
-                  options={['MCQ','Fill ups','Mixed','True/False','One Line']}
+                  options={getAvailableQuestionTypes(form.standard)}
                   value={form.quiz_type}
                   onChange={(e, v) => handleField('quiz_type', v)}
                   isOptionEqualToValue={(option, value) => option === value}
+                  renderOption={(props, option) => (
+                    <Box component="li" {...props} sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                        {option}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {getQuestionTypeDescription(option)}
+                      </Typography>
+                    </Box>
+                  )}
                   renderInput={params => (
-                    <TextField {...params} label="Question Type" error={!!errors.quiz_type} helperText={errors.quiz_type} />
+                    <TextField 
+                      {...params} 
+                      label="Question Type" 
+                      error={!!errors.quiz_type} 
+                      helperText={errors.quiz_type || `Available for Standard ${form.standard === '10' ? 'X' : form.standard === '11' ? 'XI' : 'XII'}`}
+                    />
                   )}
                 />
               </Grid>
@@ -763,6 +890,15 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   </Grid>
 
                   <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Standard:</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" fontWeight="medium">
+                      {form.standard === '10' ? 'X (10th)' : form.standard === '11' ? 'XI (11th)' : form.standard === '12' ? 'XII (12th)' : 'Not set'}
+                    </Typography>
+                  </Grid>
+
+                  <Grid item xs={6}>
                     <Typography variant="body2" color="text.secondary">Questions:</Typography>
                   </Grid>
                   <Grid item xs={6}>
@@ -773,7 +909,14 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                     <Typography variant="body2" color="text.secondary">Question Type:</Typography>
                   </Grid>
                   <Grid item xs={6}>
-                    <Typography variant="body2" fontWeight="medium">{form.quiz_type || 'Not set'}</Typography>
+                    <Typography variant="body2" fontWeight="medium">
+                      {form.quiz_type || 'Not set'}
+                      {form.quiz_type && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
+                          {getQuestionTypeDescription(form.quiz_type)}
+                        </Typography>
+                      )}
+                    </Typography>
                   </Grid>
 
                   <Grid item xs={6}>

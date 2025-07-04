@@ -212,13 +212,36 @@ const TeacherQuizSection = () => {
         throw new Error('Quiz not found');
       }
       
-      // Use only current questions for the preview modal
-      let questions = quizDetails.current_questions || [];
+      // Handle different question data formats from backend
+      let questions = [];
+      
+      if (quizDetails.current_questions) {
+        questions = quizDetails.current_questions;
+      } else if (quizDetails.questions) {
+        questions = quizDetails.questions;
+      }
+      
+      // Handle case where questions might be a JSON string
+      if (typeof questions === 'string') {
+        try {
+          questions = JSON.parse(questions);
+        } catch (parseError) {
+          console.error('Failed to parse questions JSON:', parseError);
+          questions = [];
+        }
+      }
+      
+      // Ensure we have an array
+      if (!Array.isArray(questions)) {
+        questions = [];
+      }
       
       console.log('Raw questions from backend (current only):', questions);
       
       // Process questions to normalize the data structure
-      questions = questions.map((question, qIndex) => {
+      questions = questions
+      .filter(Boolean) // Filter out any null or undefined questions
+      .map((question, qIndex) => {
         console.log(`Processing question ${qIndex + 1}:`, {
           question: question.question,
           type: question.question_type || question.type,
@@ -679,65 +702,134 @@ const TeacherQuizSection = () => {
               <CircularProgress />
             </Box>
           ) : selectedQuiz?.questions?.length > 0 ? (
-            <List disablePadding>
+            <Box sx={{ p: 2 }}>
               {selectedQuiz.questions.map((question, index) => (
-                <React.Fragment key={question.question_id || index}>
-                  <ListItem sx={{ alignItems: 'flex-start', py: 3 }}>
-                    <ListItemIcon sx={{ mt: 1, minWidth: 40 }}>
-                      <CheckCircleIcon color="primary" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-                          {index + 1}. {question.question_text}
-                        </Typography>
-                      }
-                      secondary={
-                        <Stack spacing={2}>
-                          {question.type === 'mcq' && question.options && (
-                            <Box>
-                              {Object.entries(question.options).map(([key, value]) => (
-                                <Typography 
-                                  key={key} 
-                                  variant="body2"
-                                  sx={{ 
-                                    pl: 2, 
-                                    py: 0.5, 
-                                    borderRadius: 1, 
-                                    bgcolor: question.correct_answer === key ? 'success.light' : 'transparent',
-                                    color: question.correct_answer === key ? 'success.dark' : 'text.secondary'
-                                  }}
-                                >
-                                  <strong>{key}:</strong> {String(value)}
+                <Box key={question.question_number || index} sx={{ mb: 4, p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, backgroundColor: 'background.paper' }}>
+                  {/* Question Header */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
+                        Question {question.question_number || (index + 1)}
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 'medium', lineHeight: 1.6 }}>
+                        {question.question_text || question.question || 'No question text'}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Chip 
+                        label={question.type?.toUpperCase() || 'UNKNOWN'} 
+                        size="small" 
+                        color="primary" 
+                        variant="outlined" 
+                      />
+                      <IconButton 
+                        size="small"
+                        aria-label="replace" 
+                        onClick={() => handleReplaceQuestion(question.question_number)}
+                        sx={{ color: 'action.active' }}
+                      >
+                        <ReplayIcon />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                  
+                  {/* Question Type Specific Content */}
+                  {question.type === 'mcq' && question.options && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'text.secondary' }}>
+                        Options:
+                      </Typography>
+                      <Box sx={{ pl: 2 }}>
+                        {typeof question.options === 'object' && !Array.isArray(question.options) ? (
+                          // Handle object format options
+                          Object.entries(question.options).map(([key, text]) => {
+                            const isCorrect = question.correct_answer?.toString().split(':')[0].trim() === key;
+                            return (
+                              <Box 
+                                key={key} 
+                                sx={{ 
+                                  p: 1, 
+                                  mb: 1, 
+                                  borderRadius: 1,
+                                  backgroundColor: isCorrect ? 'success.50' : 'grey.50',
+                                  border: isCorrect ? '2px solid' : '1px solid',
+                                  borderColor: isCorrect ? 'success.main' : 'grey.300'
+                                }}
+                              >
+                                <Typography sx={{ color: isCorrect ? 'success.dark' : 'text.primary', fontWeight: isCorrect ? 'bold' : 'normal' }}>
+                                  {isCorrect && '✓ '}{key}: {String(text)}
                                 </Typography>
-                              ))}
-                            </Box>
-                          )}
-                          {(question.type !== 'mcq') && (
-                             <Typography variant="body2" sx={{ pl: 2, color: 'text.secondary' }}>
-                                <strong>Answer:</strong> {question.correct_answer}
-                             </Typography>
-                          )}
-                           {question.explanation && (
-                            <Typography variant="body2" sx={{ pl: 2, color: 'text.secondary', fontStyle: 'italic' }}>
-                              <strong>Explanation:</strong> {question.explanation}
-                            </Typography>
-                          )}
-                        </Stack>
-                      }
-                    />
-                    <IconButton 
-                      edge="end" 
-                      aria-label="replace" 
-                      onClick={() => handleReplaceQuestion(question.question_number)}
-                    >
-                      <ReplayIcon />
-                    </IconButton>
-                  </ListItem>
-                  <Divider component="li" />
-                </React.Fragment>
+                              </Box>
+                            );
+                          })
+                        ) : Array.isArray(question.options) ? (
+                          // Handle array format options
+                          question.options.map((option, optIndex) => {
+                            const isCorrect = option.is_correct || false;
+                            return (
+                              <Box 
+                                key={optIndex} 
+                                sx={{ 
+                                  p: 1, 
+                                  mb: 1, 
+                                  borderRadius: 1,
+                                  backgroundColor: isCorrect ? 'success.50' : 'grey.50',
+                                  border: isCorrect ? '2px solid' : '1px solid',
+                                  borderColor: isCorrect ? 'success.main' : 'grey.300'
+                                }}
+                              >
+                                <Typography sx={{ color: isCorrect ? 'success.dark' : 'text.primary', fontWeight: isCorrect ? 'bold' : 'normal' }}>
+                                  {isCorrect && '✓ '}{option.id || String.fromCharCode(65 + optIndex)}: {String(option.option_text || option)}
+                                </Typography>
+                              </Box>
+                            );
+                          })
+                        ) : (
+                          <Typography color="text.secondary">No options available</Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Correct Answer for Fill-ups, One Line, True/False */}
+                  {(question.type === 'fill' || question.type === 'oneline' || question.type === 'truefalse') && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'text.secondary' }}>
+                        Correct Answer:
+                      </Typography>
+                      <Box sx={{ p: 2, backgroundColor: 'success.50', borderRadius: 1, border: '1px solid', borderColor: 'success.main' }}>
+                        <Typography sx={{ color: 'success.dark', fontWeight: 'bold' }}>
+                          {String(question.correct_answer || 'No answer provided')}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Explanation */}
+                  {question.explanation && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'text.secondary' }}>
+                        Explanation:
+                      </Typography>
+                      <Box sx={{ p: 2, backgroundColor: 'info.50', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
+                        <Typography variant="body2" sx={{ color: 'info.dark' }}>
+                          {question.explanation}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Source Page */}
+                  {question.source_page && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                        Source: Page {question.source_page}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
               ))}
-            </List>
+            </Box>
           ) : (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography>No questions found for this quiz.</Typography>

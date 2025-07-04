@@ -3,7 +3,7 @@ import { Paper, Box, Typography, Avatar } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { motion } from 'framer-motion';
 
-const SummaryCard = ({ icon, title, value, color, index = 0 }) => {
+const SummaryCard = ({ icon, title, value, color = 'primary', index = 0 }) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -26,7 +26,7 @@ const SummaryCard = ({ icon, title, value, color, index = 0 }) => {
           },
         }}
       >
-        <Avatar sx={{ bgcolor: alpha(color, 0.1), color: color, mr: 2, width: 56, height: 56 }}>
+        <Avatar sx={{ bgcolor: (theme) => alpha(theme.palette[color]?.main || color, 0.1), color: (theme) => theme.palette[color]?.main || color, mr: 2, width: 56, height: 56 }}>
           {icon}
         </Avatar>
         <Box>

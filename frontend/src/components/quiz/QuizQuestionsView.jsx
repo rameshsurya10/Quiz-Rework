@@ -53,9 +53,31 @@ const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
         // Set quiz data
         setQuiz(quizData);
         
-        // Only use the current questions
-        const currentQuestions = quizData.current_questions || [];
-        setQuestions(currentQuestions);
+        // Handle different question data formats from backend
+        let questions = [];
+        
+        if (quizData.current_questions) {
+          questions = quizData.current_questions;
+        } else if (quizData.questions) {
+          questions = quizData.questions;
+        }
+        
+        // Handle case where questions might be a JSON string
+        if (typeof questions === 'string') {
+          try {
+            questions = JSON.parse(questions);
+          } catch (parseError) {
+            console.error('Failed to parse questions JSON:', parseError);
+            questions = [];
+          }
+        }
+        
+        // Ensure we have an array
+        if (!Array.isArray(questions)) {
+          questions = [];
+        }
+        
+        setQuestions(questions);
         
       } catch (error) {
         console.error('Error in fetchQuizData:', error);
@@ -236,63 +258,120 @@ const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
     return (
       <Card key={question.question_number || index} variant="outline">
         <CardHeader bg="blue.50" py={3}>
-          <Heading size="sm">Question {question.question_number || (index + 1)}</Heading>
+          <Flex justify="space-between" align="center">
+            <Heading size="sm">Question {question.question_number || (index + 1)}</Heading>
+            <Badge colorScheme="blue" variant="outline">
+              {(question.type || 'mcq').toUpperCase()}
+            </Badge>
+          </Flex>
         </CardHeader>
         <CardBody>
-          <Text fontWeight="bold">{question.question}</Text>
+          <Text fontWeight="bold" mb={3} lineHeight="1.6">
+            {question.question || question.question_text || 'No question text available'}
+          </Text>
           
           {question.type === 'mcq' && question.options && (
             <VStack align="stretch" mt={3} spacing={2}>
-              {Object.entries(question.options).map(([key, value]) => (
-                <Box 
-                  key={key} 
-                  p={2} 
-                  borderRadius="md" 
-                  border="1px solid" 
-                  borderColor="gray.200"
-                  bg={question.correct_answer === key ? "green.50" : "white"}
-                >
-                  <Text>{key}. {String(value)}</Text>
-                </Box>
-              ))}
+              <Text fontWeight="bold" color="gray.600" fontSize="sm">Options:</Text>
+              {typeof question.options === 'object' && !Array.isArray(question.options) ? (
+                // Handle object format options
+                Object.entries(question.options).map(([key, value]) => {
+                  const isCorrect = question.correct_answer?.toString().split(':')[0].trim() === key;
+                  return (
+                    <Box 
+                      key={key} 
+                      p={3} 
+                      borderRadius="md" 
+                      border="2px solid" 
+                      borderColor={isCorrect ? "green.400" : "gray.200"}
+                      bg={isCorrect ? "green.50" : "white"}
+                    >
+                      <Text fontWeight={isCorrect ? "bold" : "normal"}>
+                        {isCorrect && "✓ "}{key}. {String(value)}
+                      </Text>
+                    </Box>
+                  );
+                })
+              ) : Array.isArray(question.options) ? (
+                // Handle array format options
+                question.options.map((option, optIndex) => {
+                  const isCorrect = option.is_correct || false;
+                  return (
+                    <Box 
+                      key={optIndex} 
+                      p={3} 
+                      borderRadius="md" 
+                      border="2px solid" 
+                      borderColor={isCorrect ? "green.400" : "gray.200"}
+                      bg={isCorrect ? "green.50" : "white"}
+                    >
+                      <Text fontWeight={isCorrect ? "bold" : "normal"}>
+                        {isCorrect && "✓ "}{option.id || String.fromCharCode(65 + optIndex)}. {String(option.option_text || option)}
+                      </Text>
+                    </Box>
+                  );
+                })
+              ) : (
+                <Text color="gray.500">No options available</Text>
+              )}
             </VStack>
           )}
           
           {(question.type === 'fill' || question.type === 'oneline') && (
-            <Box mt={3} p={2} borderRadius="md" border="1px dashed" borderColor="gray.300">
-              <Text color="gray.600">Answer: {question.correct_answer}</Text>
+            <Box mt={3}>
+              <Text fontWeight="bold" color="gray.600" fontSize="sm" mb={2}>Correct Answer:</Text>
+              <Box p={3} borderRadius="md" border="2px solid" borderColor="green.400" bg="green.50">
+                <Text fontWeight="bold" color="green.700">
+                  {question.correct_answer || 'No answer provided'}
+                </Text>
+              </Box>
             </Box>
           )}
           
           {question.type === 'truefalse' && (
             <Box mt={3}>
+              <Text fontWeight="bold" color="gray.600" fontSize="sm" mb={2}>Options:</Text>
               <HStack spacing={4}>
                 <Box 
-                  p={2} 
+                  p={3} 
                   borderRadius="md" 
-                  border="1px solid" 
-                  borderColor="gray.200"
+                  border="2px solid" 
+                  borderColor={question.correct_answer === "True" ? "green.400" : "gray.200"}
                   bg={question.correct_answer === "True" ? "green.50" : "white"}
+                  flex={1}
                 >
-                  <Text>True</Text>
+                  <Text fontWeight={question.correct_answer === "True" ? "bold" : "normal"}>
+                    {question.correct_answer === "True" && "✓ "}True
+                  </Text>
                 </Box>
                 <Box 
-                  p={2} 
+                  p={3} 
                   borderRadius="md" 
-                  border="1px solid" 
-                  borderColor="gray.200"
+                  border="2px solid" 
+                  borderColor={question.correct_answer === "False" ? "green.400" : "gray.200"}
                   bg={question.correct_answer === "False" ? "green.50" : "white"}
+                  flex={1}
                 >
-                  <Text>False</Text>
+                  <Text fontWeight={question.correct_answer === "False" ? "bold" : "normal"}>
+                    {question.correct_answer === "False" && "✓ "}False
+                  </Text>
                 </Box>
               </HStack>
             </Box>
           )}
           
           {question.explanation && (
-            <Box mt={3} p={2} bg="yellow.50" borderRadius="md">
-              <Text fontWeight="bold">Explanation:</Text>
-              <Text>{question.explanation}</Text>
+            <Box mt={4} p={3} bg="blue.50" borderRadius="md" borderLeft="4px solid" borderColor="blue.400">
+              <Text fontWeight="bold" color="blue.700" mb={1}>Explanation:</Text>
+              <Text color="blue.600">{question.explanation}</Text>
+            </Box>
+          )}
+          
+          {question.source_page && (
+            <Box mt={3}>
+              <Text fontSize="sm" color="gray.500" fontStyle="italic">
+                Source: Page {question.source_page}
+              </Text>
             </Box>
           )}
         </CardBody>
@@ -337,7 +416,7 @@ const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
           </Alert>
         ) : (
           <VStack spacing={4} align="stretch">
-            {paginatedQuestions.map((question, index) => renderQuestion(question, index))}
+            {paginatedQuestions.filter(Boolean).map((question, index) => renderQuestion(question, index))}
           </VStack>
         )}
       </Box>
@@ -403,7 +482,7 @@ const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
         </Alert>
       ) : (
         <VStack spacing={4} align="stretch">
-          {questions.map((question, index) => renderQuestion(question, index))}
+          {questions.filter(Boolean).map((question, index) => renderQuestion(question, index))}
         </VStack>
       )}
     </Box>

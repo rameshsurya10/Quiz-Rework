@@ -8,7 +8,7 @@ import {
   MenuButton, MenuList, MenuItem, Divider, Tag,
   Alert, AlertIcon, Modal, ModalOverlay, ModalContent,
   ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
-  Tabs, TabList, Tab, TabPanels, TabPanel
+  Tabs, TabList, Tab, TabPanels, TabPanel, CircularProgress
 } from '@chakra-ui/react';
 import { AddIcon, SearchIcon, ChevronDownIcon, EditIcon, ViewIcon, DeleteIcon, CheckIcon, RepeatIcon } from '@chakra-ui/icons';
 import quizService from '../../services/quizService';
@@ -56,7 +56,45 @@ const QuizListView = () => {
       setQuestionsLoading(true);
       setViewModalOpen(true);
       const data = await quizService.getQuizDetails(quizId);
-      setSelectedQuiz(data);
+      
+      // Handle different question data formats from backend
+      let questions = [];
+      
+      if (data.current_questions) {
+        questions = data.current_questions;
+      } else if (data.questions) {
+        questions = data.questions;
+      }
+      
+      // Handle case where questions might be a JSON string
+      if (typeof questions === 'string') {
+        try {
+          questions = JSON.parse(questions);
+        } catch (parseError) {
+          console.error('Failed to parse questions JSON:', parseError);
+          questions = [];
+        }
+      }
+      
+      // Ensure we have an array
+      if (!Array.isArray(questions)) {
+        questions = [];
+      }
+      
+      // Process questions for better display
+      const processedQuestions = questions
+      .filter(Boolean) // Filter out any null or undefined questions
+      .map((q, index) => ({
+        ...q,
+        question_text: q.question || q.question_text || 'No question text',
+        type: q.question_type || q.type || 'mcq',
+        question_number: q.question_number || (index + 1)
+      }));
+      
+      setSelectedQuiz({
+        ...data,
+        questions: processedQuestions
+      });
     } catch (error) {
       toast({
         title: 'Error fetching quiz details',
@@ -80,7 +118,9 @@ const QuizListView = () => {
     if (window.confirm('Are you sure you want to delete this quiz? This action cannot be undone.')) {
       try {
         await quizService.deleteQuiz(quizId);
-        await loadQuizzes(); // Reload all quizzes after deletion
+        // Reload all quizzes after deletion
+        const data = await quizService.getUserquiz();
+        setQuizzes(data || []);
         toast({
           title: 'Quiz Deleted',
           description: 'The quiz has been successfully deleted.',
@@ -125,7 +165,7 @@ const QuizListView = () => {
         </Button>
       </Flex>
 
-      <HStack spacing={4} mb={6}>
+      <Flex gap={4} mb={6}>
         <InputGroup maxW="300px">
           <InputLeftElement pointerEvents="none">
             <SearchIcon color="gray.300" />
