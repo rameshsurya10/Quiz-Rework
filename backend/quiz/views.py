@@ -38,6 +38,7 @@ from documents.models import Document, DocumentVector
 from documents.services import DocumentProcessingService
 from django.utils.dateparse import parse_datetime
 from supabase import create_client, Client
+from quiz.utils import compress_file_if_needed
 
 logger = logging.getLogger(__name__)
 
@@ -66,65 +67,138 @@ class QuizFileUploadView(APIView):
 
     def get_quiz(self, quiz_id):
         return Quiz.objects.filter(pk=quiz_id).first()
-
     def post(self, request, quiz_id, format=None):
-        logger.info(f"Processing file upload for quiz {quiz_id}")
+        logger.info(f"📥 Processing file upload for quiz {quiz_id}")
         quiz = self.get_quiz(quiz_id)
         if not quiz:
             return Response({"error": "Quiz not found"}, status=status.HTTP_404_NOT_FOUND)
 
         uploaded_file = request.FILES.get('file')
-        print("uploaded_file:",uploaded_file)
         page_range = request.POST.get('page_range')  # Optional
-        print("page_range:",page_range)
 
         if not uploaded_file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Construct Supabase client
+            # ✅ Compress file if needed
+            compressed_file_data, new_file_name = compress_file_if_needed(uploaded_file)
+            compressed_file_data.seek(0)
+
+            # ✅ Upload to Supabase
+            file_path = f"{quiz.quiz_id}/{new_file_name}"
+            logger.info(f"📤 Uploading file to Supabase path: {file_path}")
             supa = create_client(supabase_url, supabase_key)
-            print("supa:",supa)
+            supa.storage.from_("fileupload").upload(file_path, compressed_file_data.read())
+            logger.info("✅ File successfully uploaded to Supabase")
 
-            # Create a storage path in Supabase bucket
-            file_name = uploaded_file.name
-            print("file_name:",file_name)
-            file_path = f"{quiz.quiz_id}/{file_name}"  # e.g., "239/python.pdf"
-            print("file_path:",file_path)
+            # Reset pointer before processing
+            compressed_file_data.seek(0)
 
-           # Upload directly to Supabase (no local save)
-            file_content = uploaded_file.read()  # This returns bytes
-            supa.storage.from_("fileupload").upload(file_path, file_content)
-            print(f"Uploaded file to Supabase: {file_path}")
-
-            # Step 2: Use DocumentProcessingService to extract text and generate questions
+            # ✅ Process the file: extract text & generate questions
             service = DocumentProcessingService()
             processing_result = service.process_single_document(
-                uploaded_file=uploaded_file,
+                uploaded_file=compressed_file_data,
                 quiz=quiz,
                 user=request.user,
-                page_range=page_range
+                page_range=page_range  # This can be None or "3-5"
             )
 
-            if not processing_result or not processing_result.get('success', False):
+            if not processing_result or not processing_result.get("success", False):
                 return Response(
-                    {"error": processing_result.get('error', 'Failed to process file.')},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    {"error": processing_result.get("error", "Failed to process file.")},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
+
+            # ✅ Print page extraction result
+            print("✅ Text extraction result:")
+            print(" - Pages extracted:", processing_result.get("pages_processed"))
+            print(" - Page ranges used:", processing_result.get("page_ranges_used"))
+            print(" - Questions generated:", processing_result.get("questions_generated"))
+            print(" - Questions with page attribution:", processing_result.get("questions_with_page_attribution"))
 
             return Response({
                 "message": "File uploaded and processed successfully",
                 "quiz_id": quiz_id,
-                "document_id": processing_result.get('document_id'),
-                "questions_generated": processing_result.get('questions_generated', 0)
+                "document_id": processing_result.get("document_id"),
+                "questions_generated": processing_result.get("questions_generated", 0),
+                "pages_used": processing_result.get("page_ranges_used"),
+                "extracted_pages": processing_result.get("pages_processed"),
+                "questions_with_page_attribution": processing_result.get("questions_with_page_attribution"),
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            logger.error(f"Unexpected error during file upload: {str(e)}", exc_info=True)
+            logger.error(f"❌ Unexpected error during file upload: {str(e)}", exc_info=True)
             return Response(
                 {"error": f"An unexpected error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+#     def post(self, request, quiz_id, format=None):
+#         logger.info(f"Processing file upload for quiz {quiz_id}")
+#         quiz = self.get_quiz(quiz_id)
+#         if not quiz:
+#             return Response({"error": "Quiz not found"}, status=status.HTTP_404_NOT_FOUND)
+
+#         uploaded_file = request.FILES.get('file')
+#         print("uploaded_file:",uploaded_file)
+#         page_range = request.POST.get('page_range')  # Optional
+#         print("page_range:",page_range)
+
+#         if not uploaded_file:
+#             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+#         try:
+#             # Construct Supabase client
+#             supa = create_client(supabase_url, supabase_key)
+#             print("supa:",supa)
+
+#             # ✅ Compress file if it's >50MB
+#             compressed_file_data, new_file_name = compress_file_if_needed(uploaded_file)
+#             print("compressed_file_data:",compressed_file_data)
+#             print("new_file_name:",new_file_name)
+#             file_path = f"{quiz.quiz_id}/{new_file_name}"
+
+
+#             # Create a storage path in Supabase bucket
+#             # file_name = uploaded_file.name
+#             # print("file_name:",file_name)
+#             # file_path = f"{quiz.quiz_id}/{file_name}"  # e.g., "239/python.pdf"
+#             print("file_path:",file_path)
+
+#         #    # Upload directly to Supabase (no local save)
+#         #     file_content = uploaded_file.read()  # This returns bytes
+#             # supa.storage.from_("fileupload").upload(file_path, compressed_file_data)
+#             supa.storage.from_("fileupload").upload(file_path, compressed_file_data.read())
+#             print(f"Uploaded file to Supabase: {file_path}")
+
+#             # Step 2: Use DocumentProcessingService to extract text and generate questions
+#             service = DocumentProcessingService()
+#             processing_result = service.process_single_document(
+#                 uploaded_file=uploaded_file,
+#                 quiz=quiz,
+#                 user=request.user,
+#                 page_range=page_range
+#             )
+
+#             if not processing_result or not processing_result.get('success', False):
+#                 return Response(
+#                     {"error": processing_result.get('error', 'Failed to process file.')},
+#                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#                 )
+
+#             return Response({
+#                 "message": "File uploaded and processed successfully",
+#                 "quiz_id": quiz_id,
+#                 "document_id": processing_result.get('document_id'),
+#                 "questions_generated": processing_result.get('questions_generated', 0)
+#             }, status=status.HTTP_201_CREATED)
+
+#         except Exception as e:
+#             logger.error(f"Unexpected error during file upload: {str(e)}", exc_info=True)
+#             return Response(
+#                 {"error": f"An unexpected error occurred: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
 
 class QuizListCreateView(generics.ListCreateAPIView):
     """API endpoint for listing and creating quizzes"""
@@ -796,18 +870,18 @@ class QuizPublishView(APIView):
                 for student in students:
                     if student.email:
                         message = f"""
-Hello {student.name},
+                            Hello {student.name},
 
-A new quiz titled "{quiz.title}" has been assigned to you.
+                            A new quiz titled "{quiz.title}" has been assigned to you.
 
-Date Assigned: {quiz.published_at.strftime('%Y-%m-%d %I:%M %p')}
+                            Date Assigned: {quiz.published_at.strftime('%Y-%m-%d %I:%M %p')}
 
-👉 Click the link below to join your quiz:
-{quiz.url_link}
+                            👉 Click the link below to join your quiz:
+                            {quiz.url_link}
 
-Best Regards,
-Redlitmus teams
-""".strip()
+                            Best Regards,
+                            Redlitmus teams
+                            """.strip()
                         send_mail(
                             subject,
                             message,
@@ -1008,27 +1082,84 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 """
         },
         'fill_in_blank': {
-            'easy': """
-                Generate easy fill-in-the-blank questions about code that:
-                1. Test basic syntax and common patterns
-                2. Have clear and unambiguous answers
-                3. Include [BLANK] in appropriate places
-                4. Are suitable for beginners
-                """,
-            'medium': """
-                Generate medium difficulty fill-in-the-blank questions about code that:
-                1. Test intermediate syntax and patterns
-                2. May include some complex scenarios
-                3. Have clear answers with some flexibility
-                4. Require some analytical thinking
-                """,
-            'hard': """
-                Generate hard fill-in-the-blank questions about code that:
-                1. Test advanced syntax and patterns
-                2. Include complex scenarios and edge cases
-                3. May have multiple valid answers
-                4. Require deep analytical thinking
-                """
+                'easy': """
+            Generate EASY fill-in-the-blank questions directly based on the provided content.
+
+            Requirements:
+            - Format the question as a sentence (not a question).
+            - Use a single blank written as "_______".
+            - Do NOT end the sentence with a question mark.
+            - Ensure the blank replaces a KEY concept, fact, or value directly from the text.
+            - Only one blank per question.
+            - Must include the following fields:
+                - "question": sentence with one blank ("_______")
+                - "type": always "fill"
+                - "correct_answer": the exact word or phrase that fills the blank
+                - "explanation": short explanation for why the answer is correct
+                - "question_number": integer starting from 1
+                - "source_page": page number or "all"
+
+            Return the result in the following JSON format:
+            {
+                "question": "Python uses the ________ statement for loops.",
+                "type": "fill",
+                "correct_answer": "for",
+                "explanation": "The 'for' statement is used for looping in Python.",
+                "question_number": 1,
+                "source_page": "5"
+            }
+            """,
+                'medium': """
+            Generate MEDIUM-difficulty fill-in-the-blank questions based on the provided content.
+
+            Requirements:
+            - Format the question as a sentence (not a question).
+            - Use a single blank written as "_______".
+            - Do NOT end the sentence with a question mark.
+            - Ensure the blank replaces a KEY concept or technical term from the passage.
+            - Include:
+                - "question"
+                - "type": "fill"
+                - "correct_answer"
+                - "explanation"
+                - "question_number"
+                - "source_page"
+
+            Return the result in this format:
+            {
+                "question": "The atomic number increases by _______ when a beta particle is emitted.",
+                "type": "fill",
+                "correct_answer": "1",
+                "explanation": "Beta emission increases atomic number by 1.",
+                "question_number": 2,
+                "source_page": "6"
+            }
+            """,
+                'hard': """
+            Generate HARD-level fill-in-the-blank questions directly from the provided content.
+
+            Requirements:
+            - Use sentence format with one blank ("_______")
+            - Do NOT end with a question mark
+            - The blank must replace an advanced or technical term or value
+            - Provide these fields:
+                - "question": sentence with a blank
+                - "type": "fill"
+                - "correct_answer": correct word/phrase from text
+                - "explanation": reasoning behind the answer
+                - "question_number": numeric ID
+                - "source_page": page number (e.g., "7")
+
+            JSON format example:
+            {
+                "question": "Curie is defined as the quantity of a radioactive substance that undergoes _______ disintegrations per second.",
+                "type": "fill",
+                "correct_answer": "3.7 × 10¹⁰",
+                "explanation": "Curie equals 3.7 × 10¹⁰ disintegrations per second.",
+                "question_number": 3,
+                "source_page": "6"
+            }
+            """
         },  
         'true_false': {
             'easy': """
@@ -1079,38 +1210,70 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 4. Focus on nuanced technical details
                 """
         },
-        'match-the-following': {
-            'easy': """
-                Generate easy match-the-following questions about code that:
-                1. Test basic understanding of programming terms and definitions.
-                2. Have clear one-to-one mappings between items in two columns.
-                3. Use simple concepts like keywords, data types, or function names.
-                4. Are suitable for beginners.
-                5. Avoid ambiguity in both left and right columns.
-                Example format:
-                Column A: ['for', 'if', 'def', 'print']
-                Column B: ['Used to define a function', 'Used to output text', 'Used for conditional branching', 'Used for looping']
-                """,
-            'medium': """
-                Generate medium difficulty match-the-following questions about code that:
-                1. Test intermediate understanding of programming structures and behaviors.
-                2. Include slightly more complex terms, like built-in functions, error types, or object-oriented terms.
-                3. Require some reasoning to match correctly.
-                4. Focus on real-world code relationships or usage patterns.
-                Example format:
-                Column A: ['__init__', 'try', 'list', 'range']
-                Column B: ['Used for defining constructors', 'Used for exception handling', 'A mutable collection type', 'Generates a sequence of numbers']
-                """,
-            'hard': """
-                Generate hard match-the-following questions about code that:
-                1. Test advanced understanding of programming concepts, libraries, or APIs.
-                2. Include complex relationships like decorators, design patterns, or advanced methods.
-                3. Require deep technical understanding to match correctly.
-                4. Avoid surface-level associations — focus on function, purpose, or mechanism.
-                Example format:
-                Column A: ['@staticmethod', 'metaclass', 'generator', 'async']
-                Column B: ['Used to define coroutines', 'Defines class behavior at creation time', 'Produces values lazily', 'Defines a method without self/cls']
-                """
+        "match-the-following": {
+        "easy": """
+            Generate ONE easy match-the-following question.
+
+            Return format:
+            {
+            "question": "Match the following scientists with their discoveries.
+            "J. J. Thomson - Electrons",
+            "Ernest Rutherford - Protons",
+            "James Chadwick - Neutrons",
+            "Democritus - Atoms",
+            "type": "match-the-following",
+            "correct_answer": {
+                "A": "J. J. Thomson - Electrons",
+                "B": "Ernest Rutherford - Protons",
+                "C": "James Chadwick - Neutrons",
+                "D": "Democritus - Atoms"
+            },
+            "explanation": "Each scientist is credited with discovering one of the components of the atom.",
+            "source_page": "<optional>"
+            }
+            """,
+                    "medium": """
+            Generate ONE medium-level match-the-following question.
+
+            Return format:
+            {
+            "question": "Match the following elements with their atomic numbers.
+            "Hydrogen - 1",
+            "Carbon - 6",
+            "Oxygen - 8",
+            "Calcium - 20",
+            "type": "match-the-following",
+            "correct_answer": {
+                "A": "Hydrogen - 1",
+                "B": "Carbon - 6",
+                "C": "Oxygen - 8",
+                "D": "Calcium - 20"
+            },
+            "explanation": "Each element is matched with its atomic number.",
+            "source_page": "<optional>"
+            }
+            """,
+                    "hard": """
+            Generate ONE hard match-the-following question.
+
+            Return format:
+            {
+            "question": "Match the following processes with their corresponding scientific principles.
+            "Beta Decay - Neutron to proton conversion",
+            "Alpha Emission - Helium nucleus release",
+            "Gamma Emission - Energy release",
+            "Positron Emission - Proton to neutron conversion",
+            "type": "match-the-following",
+            "correct_answer": {
+                "A": "Beta Decay - Neutron to proton conversion",
+                "B": "Alpha Emission - Helium nucleus release",
+                "C": "Gamma Emission - Energy release",
+                "D": "Positron Emission - Proton to neutron conversion"
+            },
+            "explanation": "Each nuclear process is paired with its correct description.",
+            "source_page": "<optional>"
+            }
+            """
                 },
         'mixed': {
             'easy': """

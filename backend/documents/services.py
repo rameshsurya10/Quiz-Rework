@@ -232,7 +232,8 @@ class DocumentProcessingService:
             - "type": The type of question. Must be one of 'mcq', 'fill', 'truefalse', 'oneline', 'match-the-following' (string)
             - "options": An object with keys "A", "B", "C", "D" for 'mcq' type, otherwise an empty object {{}}
             - "correct_answer": The correct answer (string)
-            - "explanation": A brief explanation referencing the source content (string)
+            - "explanation": A brief explanation for the answer (string).
+            - "question_number": The question number (integer)
             - "source_page": The page number where this question's content comes from (string)
 
             Return only valid JSON in this format:
@@ -243,8 +244,8 @@ class DocumentProcessingService:
                         "type": "mcq",
                         "options": {{"A": "Option 1", "B": "Option 2", "C": "Option 3", "D": "Option 4"}},
                         "correct_answer": "A",
-                        "explanation": "According to the text content...",
-                        "source_page": "{primary_page}"
+                        "explanation": "Explanation here",
+                        "question_number": 1
                     }}
                 ]
             }}
@@ -462,16 +463,36 @@ class DocumentProcessingService:
 
             # Step 3: Generate questions from the extracted text
             target_questions = quiz.no_of_questions or 5
-            total_questions_to_generate = max(target_questions + 5, 10)
+            total_questions_to_generate = target_questions + 5
 
-            logger.info(f"Generating {total_questions_to_generate} questions for quiz from specified pages")
+            logger.info(f"Generating {total_questions_to_generate} questions for quiz {quiz.quiz_id}")
+
+            # 🔁 Scale quiz_type (difficulty breakdown) if it's a dict
+            if isinstance(quiz.quiz_type, dict):
+                original_total = sum(quiz.quiz_type.values())
+                scaled_quiz_type = {}
+
+                for level, count in quiz.quiz_type.items():
+                    scaled = round((count / original_total) * total_questions_to_generate)
+                    scaled_quiz_type[level] = scaled
+
+                # 🎯 Adjust rounding to match total exactly
+                diff = total_questions_to_generate - sum(scaled_quiz_type.values())
+                if diff != 0:
+                    key_to_adjust = max(scaled_quiz_type, key=scaled_quiz_type.get)
+                    scaled_quiz_type[key_to_adjust] += diff
+            else:
+                    # Fallback if just a string like "easy"
+                scaled_quiz_type = {quiz.quiz_type: total_questions_to_generate}
+
+            logger.info(f"Final scaled difficulty distribution: {scaled_quiz_type}")
 
             # Generate questions with page-specific context
             questions = self.generate_questions_from_text(
                 extracted_text,
-                quiz.question_type,
-                quiz.quiz_type,
-                total_questions_to_generate
+                question_type=quiz.question_type,
+                quiz_type=scaled_quiz_type, 
+                num_questions=total_questions_to_generate
             )
 
             if not questions:
