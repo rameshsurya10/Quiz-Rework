@@ -27,7 +27,8 @@ class Quiz(models.Model):
     description = models.TextField(blank=True, null=True)
     quiz_type = models.JSONField(null=True, blank=True)  # stores as JSON string
     book_name = models.CharField(max_length=255, blank=True, null=True)  # if not already added
-    # quiz_type = models.CharField(max_length=50, choices=QUIZ_TYPE_CHOICES, default='medium')
+    class_name = models.CharField(max_length=100, blank=True, null=True)
+    section = models.CharField(max_length=100, blank=True, null=True)
     question_type = models.CharField(max_length=50, choices=QUESTION_TYPE_CHOICES, default='mcq')
     no_of_questions = models.IntegerField(default=5)
     time_limit_minutes = models.IntegerField(default=30)

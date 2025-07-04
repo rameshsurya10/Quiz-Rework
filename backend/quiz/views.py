@@ -38,7 +38,7 @@ from documents.models import Document, DocumentVector
 from documents.services import DocumentProcessingService
 from django.utils.dateparse import parse_datetime
 from supabase import create_client, Client
-from quiz.utils import compress_file_if_needed
+from quiz.utils import *
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,7 @@ class QuizFileUploadView(APIView):
 
     def get_quiz(self, quiz_id):
         return Quiz.objects.filter(pk=quiz_id).first()
+
     def post(self, request, quiz_id, format=None):
         logger.info(f"📥 Processing file upload for quiz {quiz_id}")
         quiz = self.get_quiz(quiz_id)
@@ -133,80 +134,13 @@ class QuizFileUploadView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-#     def post(self, request, quiz_id, format=None):
-#         logger.info(f"Processing file upload for quiz {quiz_id}")
-#         quiz = self.get_quiz(quiz_id)
-#         if not quiz:
-#             return Response({"error": "Quiz not found"}, status=status.HTTP_404_NOT_FOUND)
-
-#         uploaded_file = request.FILES.get('file')
-#         print("uploaded_file:",uploaded_file)
-#         page_range = request.POST.get('page_range')  # Optional
-#         print("page_range:",page_range)
-
-#         if not uploaded_file:
-#             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
-
-#         try:
-#             # Construct Supabase client
-#             supa = create_client(supabase_url, supabase_key)
-#             print("supa:",supa)
-
-#             # ✅ Compress file if it's >50MB
-#             compressed_file_data, new_file_name = compress_file_if_needed(uploaded_file)
-#             print("compressed_file_data:",compressed_file_data)
-#             print("new_file_name:",new_file_name)
-#             file_path = f"{quiz.quiz_id}/{new_file_name}"
-
-
-#             # Create a storage path in Supabase bucket
-#             # file_name = uploaded_file.name
-#             # print("file_name:",file_name)
-#             # file_path = f"{quiz.quiz_id}/{file_name}"  # e.g., "239/python.pdf"
-#             print("file_path:",file_path)
-
-#         #    # Upload directly to Supabase (no local save)
-#         #     file_content = uploaded_file.read()  # This returns bytes
-#             # supa.storage.from_("fileupload").upload(file_path, compressed_file_data)
-#             supa.storage.from_("fileupload").upload(file_path, compressed_file_data.read())
-#             print(f"Uploaded file to Supabase: {file_path}")
-
-#             # Step 2: Use DocumentProcessingService to extract text and generate questions
-#             service = DocumentProcessingService()
-#             processing_result = service.process_single_document(
-#                 uploaded_file=uploaded_file,
-#                 quiz=quiz,
-#                 user=request.user,
-#                 page_range=page_range
-#             )
-
-#             if not processing_result or not processing_result.get('success', False):
-#                 return Response(
-#                     {"error": processing_result.get('error', 'Failed to process file.')},
-#                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#                 )
-
-#             return Response({
-#                 "message": "File uploaded and processed successfully",
-#                 "quiz_id": quiz_id,
-#                 "document_id": processing_result.get('document_id'),
-#                 "questions_generated": processing_result.get('questions_generated', 0)
-#             }, status=status.HTTP_201_CREATED)
-
-#         except Exception as e:
-#             logger.error(f"Unexpected error during file upload: {str(e)}", exc_info=True)
-#             return Response(
-#                 {"error": f"An unexpected error occurred: {str(e)}"},
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
-
 class QuizListCreateView(generics.ListCreateAPIView):
     """API endpoint for listing and creating quizzes"""
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [JSONParser]
     pagination_class = None 
 
-    MAX_QUESTIONS = 35
+    # MAX_QUESTIONS = 35
 
     def get_queryset(self):
         return Quiz.objects.filter(is_deleted=False)
@@ -234,7 +168,8 @@ class QuizListCreateView(generics.ListCreateAPIView):
                 student = Student.objects.filter(email=user.email, is_deleted=False).first()
                 if not student:
                     return Response({"message": "Student record not found"}, status=404)
-                quiz_queryset = base_queryset.filter(department_id=student.department_id, is_published=True)
+                quiz_queryset = base_queryset.filter(department_id=student.department_id, is_published=True,
+                class_name=student.class_name, section=student.section)
 
             else:
                 return Response({"message": "Unauthorized role"}, status=403)
@@ -361,10 +296,18 @@ class QuizListCreateView(generics.ListCreateAPIView):
             # except (ValueError, TypeError):
             #     pass  # Let the serializer handle invalid inputs
 
-            # ✅ Handle book_name and quiz_type transformation
+            # ✅ Handle book_name and quiz_type, class_name, section transformation
             book_name = data.get('book_name')
             if book_name:
                 data['book_name'] = book_name
+            
+            class_name = data.get('class_name')
+            if class_name:
+                data['class_name'] = class_name
+            
+            section = data.get('section')
+            if section:
+                data['section'] = section
 
             quiz_type = data.get('quiz_type')
             if isinstance(quiz_type, dict):
@@ -861,7 +804,8 @@ class QuizPublishView(APIView):
 
                 # ✅ Fetch department students
                 department = quiz.department_id
-                students = Student.objects.filter(department_id=department,is_verified=True)
+                students = Student.objects.filter(department_id=department,is_verified=True,
+                is_deleted=False,class_name=quiz.class_name,section=quiz.section)
 
                 # Email content
                 subject = f"Quiz Assigned: {quiz.title}"

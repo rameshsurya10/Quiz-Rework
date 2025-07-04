@@ -152,7 +152,7 @@ class QuizSerializer(serializers.ModelSerializer):
         model = Quiz
         fields = [
             'quiz_id', 'title', 'description', 'no_of_questions',
-            'quiz_type', 'question_type', 'pages','book_name',
+            'quiz_type', 'question_type', 'pages','book_name', 'class_name', 'section',
             'department_id',
             'department_name',
             'quiz_date',
@@ -247,7 +247,7 @@ class AvailableQuizSerializer(serializers.ModelSerializer):
         fields = [
             'quiz_id', 'title', 'description', 'no_of_questions',
             'quiz_type', 'question_type',
-            'book_name',
+            'book_name', 'class_name', 'section',
             'department_name',
             'quiz_date',
             'time_limit_minutes', 'passing_score',
@@ -258,35 +258,37 @@ class QuizCreateSerializer(serializers.Serializer):
     quiz_id = serializers.IntegerField(read_only=True)
     title = serializers.CharField(max_length=255)
     description = serializers.CharField(allow_blank=True, required=False)
-    no_of_questions = serializers.IntegerField(required=False, min_value=1, max_value=35)
+    no_of_questions = serializers.IntegerField(required=False, min_value=1)
     time_limit_minutes = serializers.IntegerField(required=False, min_value=1)
     passing_score = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
     quiz_type = serializers.CharField(max_length=50, required=False)
     question_type = serializers.CharField(max_length=50, required=False, default='multiple_choice')
     pages = serializers.JSONField(required=False, default=list)
     book_name = serializers.CharField(max_length=255, required=False)
+    class_name = serializers.CharField(max_length=50, required=False)
+    section = serializers.CharField(max_length=50, required=False)
     department_id = serializers.IntegerField(required=False, allow_null=True)
     quiz_date = CustomDateTimeField(required=False)
     uploadedfiles = serializers.JSONField(required=False, default=list)
     metadata = serializers.JSONField(required=False, default=dict)
 
-    def validate_no_of_questions(self, value):
-        """Validate number of questions"""
-        try:
-            value = int(value) if isinstance(value, str) else value
-            if value > 35:
-                raise serializers.ValidationError({
-                    "error": "Number of questions cannot exceed 35",
-                    "message": f"You've requested {value} questions, but the maximum allowed is 35. Please reduce the number of questions.",
-                    "title": "Question Limit Exceeded"
-                })
-        except (ValueError, TypeError):
-            raise serializers.ValidationError({
-                "error": "Invalid number of questions",
-                "message": "Please enter a valid number between 1 and 35.",
-                "title": "Invalid Input"
-                })
-        return value
+    # def validate_no_of_questions(self, value):
+    #     """Validate number of questions"""
+    #     try:
+    #         value = int(value) if isinstance(value, str) else value
+    #         if value > 35:
+    #             raise serializers.ValidationError({
+    #                 "error": "Number of questions cannot exceed 35",
+    #                 "message": f"You've requested {value} questions, but the maximum allowed is 35. Please reduce the number of questions.",
+    #                 "title": "Question Limit Exceeded"
+    #             })
+    #     except (ValueError, TypeError):
+    #         raise serializers.ValidationError({
+    #             "error": "Invalid number of questions",
+    #             "message": "Please enter a valid number between 1 and 35.",
+    #             "title": "Invalid Input"
+    #             })
+    #     return value
 
     def create(self, validated_data):
         """Create and return a new Quiz instance, given the validated data."""
@@ -303,6 +305,8 @@ class QuizCreateSerializer(serializers.Serializer):
         field_mapping = {
             'quiz_type': 'quiz_type',
             'book_name': 'book_name',
+            'class_name': 'class_name',
+            'section': 'section',
             'question_type': 'question_type',
             'no_of_questions': 'no_of_questions',
             'time_limit_minutes': 'time_limit_minutes',
