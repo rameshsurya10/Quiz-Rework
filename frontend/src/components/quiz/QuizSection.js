@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress
+  Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress, Tooltip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -53,6 +53,8 @@ const QuizSection = () => {
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [isViewModalOpen, setViewModalOpen] = useState(false);
   const [isQuestionsLoading, setQuestionsLoading] = useState(false);
+  const [regenerationsUsed, setRegenerationsUsed] = useState(0);
+  const [additionalQuestionsPool, setAdditionalQuestionsPool] = useState([]);
 
   const fetchQuizzes = useCallback(async () => {
     setIsLoading(true);
@@ -209,6 +211,7 @@ const QuizSection = () => {
       
       // Handle different question data formats from backend
       let questionsToDisplay = [];
+      let additionalQuestions = [];
       
       if (quizData.current_questions) {
         questionsToDisplay = quizData.current_questions;
@@ -216,6 +219,10 @@ const QuizSection = () => {
         questionsToDisplay = quizData.questions;
       }
       
+      if (quizData.additional_questions) {
+        additionalQuestions = quizData.additional_questions;
+      }
+
       // Handle case where questions might be a JSON string
       if (typeof questionsToDisplay === 'string') {
         try {
@@ -230,69 +237,45 @@ const QuizSection = () => {
       if (!Array.isArray(questionsToDisplay)) {
         questionsToDisplay = [];
       }
+      if (!Array.isArray(additionalQuestions)) {
+        additionalQuestions = [];
+      }
       
       console.log('Processed questions to display:', questionsToDisplay);
       
       // Process questions for display, ensuring all keys are preserved correctly.
-      const processedQuestions = questionsToDisplay
-      .filter(Boolean) // Filter out any null or undefined questions
-      .map((q, index) => {
-        // Start with all properties from the source question object
-        const processed = { ...q };
-
-        // Standardize the main question text key
-        processed.question_text = q.question || q.question_text || 'No question text';
-        
-        // Standardize the type
-        processed.type = q.question_type || q.type || 'mcq';
-        
-        // Ensure question number exists
-        processed.question_number = q.question_number || (index + 1);
-
-        // Process MCQ options into a consistent format if they exist
-        if (processed.type === 'mcq' && q.options) {
-          if (Array.isArray(q.options)) {
-            // Already in array format, just ensure consistency
-            processed.options = q.options.map((opt, optIndex) => {
-              if (typeof opt === 'object' && opt.option_text) {
-                return opt; // Already properly formatted
-              }
-              // Convert simple array items to proper format
-              return {
-                option_text: String(opt),
-                is_correct: false, // Will be determined elsewhere
-                id: String.fromCharCode(65 + optIndex) // A, B, C, D...
-              };
-            });
-          } else if (typeof q.options === 'object' && q.options !== null) {
-            // Convert object format to array
-            const correctKey = q.correct_answer?.toString().split(':')[0].trim();
-            processed.options = Object.entries(q.options).map(([key, value]) => {
-              // Ensure the option text is a string, even if it's a nested object.
-              const optionText = (value && typeof value === 'object') ? JSON.stringify(value) : String(value);
-              return {
-                option_text: optionText,
-                is_correct: key === correctKey,
-                id: key
-              };
-            });
+      const processQuestionList = (list) => 
+        list.filter(Boolean).map((q, index) => {
+          const processed = { ...q };
+          processed.question_text = q.question || q.question_text || 'No question text';
+          processed.type = q.question_type || q.type || 'mcq';
+          processed.question_number = q.question_number || (index + 1);
+          if (processed.type === 'mcq' && q.options) {
+            if (Array.isArray(q.options)) {
+              processed.options = q.options.map((opt, optIndex) => (typeof opt === 'object' && opt.option_text) ? opt : { option_text: String(opt), is_correct: false, id: String.fromCharCode(65 + optIndex) });
+            } else if (typeof q.options === 'object' && q.options !== null) {
+              const correctKey = q.correct_answer?.toString().split(':')[0].trim();
+              processed.options = Object.entries(q.options).map(([key, value]) => ({ option_text: (value && typeof value === 'object') ? JSON.stringify(value) : String(value), is_correct: key === correctKey, id: key }));
+            } else {
+              processed.options = [];
+            }
           } else {
             processed.options = [];
           }
-        } else {
-          // Ensure options is an empty array for non-MCQ to prevent render errors
-          processed.options = [];
-        }
-        
-        return processed;
-      });
+          return processed;
+        });
+
+      const processedQuestions = processQuestionList(questionsToDisplay);
+      const processedAdditionalQuestions = processQuestionList(additionalQuestions);
 
       console.log('Final processed questions:', processedQuestions);
+      console.log('Final additional questions:', processedAdditionalQuestions);
 
       setSelectedQuiz({
         ...quizData,
         questions: processedQuestions
       });
+      setAdditionalQuestionsPool(processedAdditionalQuestions);
 
     } catch (error) {
       console.error('Failed to fetch quiz details:', error);
@@ -303,30 +286,41 @@ const QuizSection = () => {
     }
   };
 
-  const handleReplaceQuestion = async (questionNumber) => {
-    if (!selectedQuiz) return;
-    
-    // Add validation to prevent sending bad requests
-    if (typeof questionNumber === 'undefined' || questionNumber === null) {
-      console.error("Attempted to replace a question with an invalid number:", questionNumber);
-      showSnackbar('Cannot replace question: Invalid question number.', 'error');
+  const handleRegenerateQuestion = (questionIndex) => {
+    if (regenerationsUsed >= 5) {
+      showSnackbar('You have used all your regenerations for this quiz.', 'warning');
+      return;
+    }
+    if (additionalQuestionsPool.length === 0) {
+      showSnackbar('No additional questions are available to swap.', 'warning');
       return;
     }
 
-    try {
-      await quizService.replaceQuestion(selectedQuiz.quiz_id, questionNumber);
-      showSnackbar('Question replaced successfully!', 'success');
-      // Refresh the view
-      await handleViewQuiz(selectedQuiz.quiz_id);
-    } catch (error) {
-      console.error('Failed to replace question:', error);
-      showSnackbar('Failed to replace question', 'error');
-    }
+    // Take the first question from the pool
+    const newQuestion = additionalQuestionsPool[0];
+    
+    // Get the current question to preserve its number
+    const oldQuestion = selectedQuiz.questions[questionIndex];
+    newQuestion.question_number = oldQuestion.question_number;
+
+    // Update the questions in the selected quiz
+    const updatedQuestions = [...selectedQuiz.questions];
+    updatedQuestions[questionIndex] = newQuestion;
+    
+    setSelectedQuiz(prev => ({ ...prev, questions: updatedQuestions }));
+    
+    // Update the pool and the used count
+    setAdditionalQuestionsPool(prev => prev.slice(1));
+    setRegenerationsUsed(prev => prev + 1);
+
+    showSnackbar(`Question ${oldQuestion.question_number} replaced. ${4 - regenerationsUsed} regenerations left.`, 'success');
   };
 
   const closeViewModal = () => {
     setViewModalOpen(false);
     setSelectedQuiz(null);
+    setRegenerationsUsed(0);
+    setAdditionalQuestionsPool([]);
   };
 
   const getStatusChip = (isPublished) => {
@@ -564,153 +558,102 @@ const QuizSection = () => {
           </DialogTitle>
           <DialogContent dividers>
             {isQuestionsLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                 <CircularProgress />
               </Box>
-            ) : selectedQuiz?.questions?.length > 0 ? (
-              <Box sx={{ p: 2 }}>
-                {selectedQuiz.questions.map((question, index) => (
-                  <Box key={question.question_number || index} sx={{ mb: 4, p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, backgroundColor: 'background.paper' }}>
-                    {/* Question Header */}
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
-                          Question {question.question_number || (index + 1)}
-                        </Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 'medium', lineHeight: 1.6 }}>
-                          {question.question_text}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Chip 
-                          label={question.type?.toUpperCase() || 'UNKNOWN'} 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined" 
-                        />
-                        <IconButton 
-                          size="small"
-                          aria-label="replace" 
-                          onClick={() => handleReplaceQuestion(question.question_number)}
-                          sx={{ color: 'action.active' }}
-                        >
-                          <ReplayIcon />
-                        </IconButton>
-                      </Box>
-                    </Box>
-                    
-                    {/* Question Type Specific Content */}
-                    {question.type === 'mcq' && question.options && (
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'text.secondary' }}>
-                          Options:
-                        </Typography>
-                        <Box sx={{ pl: 2 }}>
-                          {Array.isArray(question.options) ? (
-                            // Handle processed options array
-                            question.options.map(option => (
-                              <Box 
-                                key={option.id || option.key} 
-                                sx={{ 
-                                  p: 1, 
-                                  mb: 1, 
-                                  borderRadius: 1,
-                                  backgroundColor: option.is_correct ? 'success.50' : 'grey.50',
-                                  border: option.is_correct ? '2px solid' : '1px solid',
-                                  borderColor: option.is_correct ? 'success.main' : 'grey.300'
-                                }}
-                              >
-                                <Typography sx={{ color: option.is_correct ? 'success.dark' : 'text.primary', fontWeight: option.is_correct ? 'bold' : 'normal' }}>
-                                  {option.is_correct && '✓ '}{option.id}: {String(option.option_text)}
-                                </Typography>
-                              </Box>
-                            ))
-                          ) : (
-                            // Handle raw options object
-                            Object.entries(question.options).map(([key, text]) => {
-                              const isCorrect = question.correct_answer?.toString().split(':')[0].trim() === key;
-                              return (
-                                <Box 
-                                  key={key} 
-                                  sx={{ 
-                                    p: 1, 
-                                    mb: 1, 
-                                    borderRadius: 1,
-                                    backgroundColor: isCorrect ? 'success.50' : 'grey.50',
-                                    border: isCorrect ? '2px solid' : '1px solid',
-                                    borderColor: isCorrect ? 'success.main' : 'grey.300'
-                                  }}
+            ) : selectedQuiz ? (
+              <>
+                <Box sx={{ p: 2, mb: 2, backgroundColor: 'info.50', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
+                  <Typography variant="body2" sx={{ color: 'info.dark', fontWeight: 'medium' }}>
+                    Note: You can regenerate up to 5 questions for this quiz. This will use a question from the additional questions pool. 
+                    You have {5 - regenerationsUsed} regenerations remaining.
+                  </Typography>
+                </Box>
+                <List>
+                  {selectedQuiz.questions?.map((question, index) => {
+                    const canRegenerate = regenerationsUsed < 5 && additionalQuestionsPool.length > 0;
+
+                    return (
+                      <Paper key={index} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                            Question {question.question_number}
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Chip label={question.type?.toUpperCase()} size="small" />
+                            <Tooltip title={canRegenerate ? 'Regenerate this question' : 'No more regenerations available'}>
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleRegenerateQuestion(index)}
+                                  disabled={!canRegenerate}
                                 >
-                                  <Typography sx={{ color: isCorrect ? 'success.dark' : 'text.primary', fontWeight: isCorrect ? 'bold' : 'normal' }}>
-                                    {isCorrect && '✓ '}{key}: {String(text)}
-                                  </Typography>
-                                </Box>
-                              );
-                            })
-                          )}
+                                  <ReplayIcon />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </Box>
                         </Box>
-                      </Box>
-                    )}
+                        <Typography variant="body1" sx={{ mt: 1 }}>{question.question_text}</Typography>
+                        
+                        {question.type === 'mcq' && Array.isArray(question.options) && (
+                          <List dense sx={{ pl: 2, mt: 1 }}>
+                            {question.options.map((option, optIndex) => (
+                              <ListItem key={optIndex} disablePadding sx={{ color: option.is_correct ? 'success.main' : 'text.primary' }}>
+                                <ListItemIcon sx={{ minWidth: 'auto', mr: 1, color: 'inherit' }}>
+                                  {option.is_correct && <CheckCircleIcon fontSize="small" />}
+                                </ListItemIcon>
+                                <ListItemText primary={`${String.fromCharCode(65 + optIndex)}. ${option.option_text}`} />
+                              </ListItem>
+                            ))}
+                          </List>
+                        )}
 
-                    {/* Correct Answer for Fill-ups, One Line, True/False */}
-                    {(question.type === 'fill' || question.type === 'oneline' || question.type === 'truefalse') && (
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'text.secondary' }}>
-                          Correct Answer:
-                        </Typography>
-                        <Box sx={{ p: 2, backgroundColor: 'success.50', borderRadius: 1, border: '1px solid', borderColor: 'success.main' }}>
-                          <Typography sx={{ color: 'success.dark', fontWeight: 'bold' }}>
-                            {(question.correct_answer && typeof question.correct_answer === 'object')
-                              ? JSON.stringify(question.correct_answer)
-                              : String(question.correct_answer || 'No answer provided')
-                            }
+                        {(question.type === 'fill' || question.type === 'oneline' || question.type === 'truefalse') && (
+                          <Box sx={{ mt: 1, p: 1, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: 1 }}>
+                            <Typography variant="body2" sx={{ color: 'success.dark', fontWeight: 'medium' }}>
+                              Correct Answer: {question.correct_answer}
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {question.explanation && (
+                          <Box sx={{ mt: 1, p: 1, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1 }}>
+                             <Typography variant="body2" sx={{ color: 'info.dark', fontWeight: 'medium' }}>
+                              Explanation: {question.explanation}
+                            </Typography>
+                          </Box>
+                        )}
+                        
+                        {question.source_page && (
+                          <Typography variant="caption" sx={{ display: 'block', textAlign: 'right', color: 'text.secondary', mt: 1 }}>
+                            Source: Page {question.source_page}
                           </Typography>
-                        </Box>
-                      </Box>
-                    )}
-
-                    {/* Explanation */}
-                    {question.explanation && (
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'text.secondary' }}>
-                          Explanation:
-                        </Typography>
-                        <Box sx={{ p: 2, backgroundColor: 'info.50', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
-                          <Typography variant="body2" sx={{ color: 'info.dark' }}>
-                            {question.explanation}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    )}
-
-                    {/* Source Page */}
-                    {question.source_page && (
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
-                          Source: Page {question.source_page}
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
-                ))}
-              </Box>
+                        )}
+                      </Paper>
+                    );
+                  })}
+                </List>
+              </>
             ) : (
-              <Typography sx={{ textAlign: 'center', my: 4 }}>No questions found for this quiz.</Typography>
+              <Typography>No quiz details available.</Typography>
             )}
           </DialogContent>
           <DialogActions>
             <Button onClick={closeViewModal}>Close</Button>
-            <Button 
-              variant="contained" 
-              onClick={() => {
-                if (selectedQuiz) {
-                  navigate(`/PUBLISH-quiz/${selectedQuiz.quiz_id}`);
+            {selectedQuiz && !selectedQuiz.is_published && (
+              <Button 
+                onClick={() => {
+                  // The navigation or publish action would go here
+                  console.log(`Publishing quiz ${selectedQuiz.quiz_id}`);
                   closeViewModal();
-                }
-              }}
-            >
-              Proceed to PUBLISH
-            </Button>
+                }}
+                variant="contained"
+                disabled={selectedQuiz.questions?.length !== selectedQuiz.no_of_questions}
+              >
+                Proceed to PUBLISH
+              </Button>
+            )}
           </DialogActions>
         </Dialog>
 
