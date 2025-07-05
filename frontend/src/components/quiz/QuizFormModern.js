@@ -93,14 +93,12 @@ const initialFormState = {
   department: '',
   passing_score: '',
   quiz_date: '',
-  standard: '10' // Default to 10th standard
+  standard: '10', // Default to 10th standard
+  section: ''
 };
 
 const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, initialQuizData = null }) => {
   const { showSnackbar } = useSnackbar();
-
-  const MAX_FILE_SIZE = 60; // MB
-  const MAX_QUESTIONS = 35;
 
   const [form, setForm] = useState(initialFormState);
   const [loading, setLoading] = useState(false);
@@ -132,6 +130,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
         passing_score,
         quiz_date,
         standard,
+        section,
         pages = []
       } = initialQuizData;
 
@@ -156,12 +155,13 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
         passing_score: passing_score?.toString() || '',
         quiz_date: quiz_date ? quiz_date.slice(0, 16) : '',
         standard: standard || '10',
+        section: section || '',
         files: [],
         filesData: pages.map(p => ({
           filename: p.filename,
           page_range: p.page_range,
           is_pdf: true
-        }))
+        })),
       });
 
       setComplexityCounts(complexityCountsFromBackend);
@@ -214,6 +214,9 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
         
         // If standard is changed, check if current quiz_type is still available
         if (key === 'standard') {
+            if (fieldValue !== 'other') {
+                newForm.section = '';
+            }
           const availableTypes = getAvailableQuestionTypes(fieldValue);
           if (newForm.quiz_type && !availableTypes.includes(newForm.quiz_type)) {
             newForm.quiz_type = ''; // Reset quiz_type if not available for new standard
@@ -280,17 +283,9 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
 
     if (form.files && form.files.length > 0) {
       const emptyFiles = form.files.filter(file => file.size === 0);
-      const oversized = form.files.filter(file => file.size > MAX_FILE_SIZE * 1024 * 1024);
       if (emptyFiles.length > 0) {
         errs.files = `Empty files: ${emptyFiles.map(f => f.name).join(', ')}`;
       }
-      if (oversized.length > 0) {
-        errs.files = `Oversized files: ${oversized.map(f => f.name).join(', ')}`;
-      }
-    }
-
-    if (form.no_of_questions && parseInt(form.no_of_questions) > MAX_QUESTIONS) {
-      errs.no_of_questions = `Maximum ${MAX_QUESTIONS} questions allowed`;
     }
 
     if (form.filesData) {
@@ -356,7 +351,8 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
         quiz_type: form.complexity === 'Mixed' ? complexityCounts : complexityMapping[form.complexity],
         department_id: form.department,
         passing_score: parseInt(form.passing_score),
-        standard: form.standard,
+        class_name: form.standard,
+        section: form.section,
         pages: form.filesData?.map(fd => ({ filename: fd.filename, page_range: fd.page_range })) || []
       };
 
@@ -455,15 +451,11 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   fullWidth
                   label="Quiz Title"
                   name="title"
+                  size="small"
                   value={form.title}
                   onChange={e => handleField('title', e.target.value)}
                   error={!!errors.title}
                   helperText={errors.title}
-                  sx={{
-                    '& .MuiInputBase-input': {
-                      fontSize: { xs: '0.9rem', sm: '1rem' }
-                    }
-                  }}
                 />
               </Grid>
 
@@ -473,13 +465,9 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   fullWidth
                   label="Book Name"
                   name="book_name"
+                  size="small"
                   value={form.book_name}
                   onChange={e => handleField('book_name', e.target.value)}
-                  sx={{
-                    '& .MuiInputBase-input': {
-                      fontSize: { xs: '0.9rem', sm: '1rem' }
-                    }
-                  }}
                 />
               </Grid>
 
@@ -527,6 +515,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   multiline
                   rows={4}
                   label="Description"
+                  size="small"
                   value={form.description}
                   onChange={e => handleField('description', e.target.value)}
                 />
@@ -538,37 +527,13 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   fullWidth
                   type="number"
                   label="Number of Questions"
+                  size="small"
                   value={form.no_of_questions}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value);
-                    if (!isNaN(value) && value > MAX_QUESTIONS) {
-                      setErrors(prev => ({
-                        ...prev,
-                        no_of_questions: `Maximum ${MAX_QUESTIONS} questions allowed`
-                      }));
-                      // Optionally cap the value at MAX_QUESTIONS
-                      handleField('no_of_questions', MAX_QUESTIONS.toString());
-                    } else {
-                      handleField('no_of_questions', e.target.value);
-                      if (errors.no_of_questions) {
-                        setErrors(prev => {
-                          const newErrors = { ...prev };
-                          delete newErrors.no_of_questions;
-                          return newErrors;
-                        });
-                      }
-                    }
-                  }}
+                  onChange={(e) => handleField('no_of_questions', e.target.value)}
                   error={!!errors.no_of_questions}
-                  helperText={errors.no_of_questions || `Maximum ${MAX_QUESTIONS} questions allowed`}
+                  helperText={errors.no_of_questions}
                   inputProps={{
                     min: 1,
-                    max: MAX_QUESTIONS
-                  }}
-                  sx={{
-                    '& .MuiInputBase-input': {
-                      fontSize: { xs: '0.9rem', sm: '1rem' }
-                    }
                   }}
                 />
               </Grid>
@@ -577,13 +542,9 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   fullWidth
                   type="number"
                   label="Time Limit (min)"
+                  size="small"
                   value={form.time_limit_minutes}
                   onChange={e => handleField('time_limit_minutes', e.target.value)}
-                  sx={{
-                    '& .MuiInputBase-input': {
-                      fontSize: { xs: '0.9rem', sm: '1rem' }
-                    }
-                  }}
                 />
               </Grid>
 
@@ -592,6 +553,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   fullWidth
                   type="datetime-local"
                   label="Quiz Date & Time"
+                  size="small"
                   value={form.quiz_date}
                   onChange={(e) => handleField('quiz_date', e.target.value)}
                   inputProps={{
@@ -600,11 +562,6 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   InputLabelProps={{ shrink: true }}
                   error={!!errors.quiz_date}
                   helperText={errors.quiz_date || "Optional - defaults to current time if not set"}
-                  sx={{
-                    '& .MuiInputBase-input': {
-                      fontSize: { xs: '0.9rem', sm: '1rem' }
-                    }
-                  }}
                 />
               </Grid>
 
@@ -671,6 +628,18 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                 </FormControl>
               </Grid>
 
+              {/* Section */}
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Section"
+                  name="section"
+                  size="small"
+                  value={form.section}
+                  onChange={e => handleField('section', e.target.value)}
+                />
+              </Grid>
+
               {/* Quiz Type */}
               <Grid item xs={12} sm={6}>
                 <Autocomplete
@@ -693,6 +662,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                     <TextField 
                       {...params} 
                       label="Question Type" 
+                      size="small"
                       error={!!errors.quiz_type} 
                       helperText={errors.quiz_type || `Available for Standard ${form.standard === '10' ? 'X' : form.standard === '11' ? 'XI' : 'XII'}`}
                     />
@@ -709,7 +679,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   onChange={(e, val) => handleField('complexity', val)}
                   isOptionEqualToValue={(option, value) => option === value}
                   renderInput={params => (
-                    <TextField {...params} label="Complexity" error={!!errors.complexity} helperText={errors.complexity} />
+                    <TextField {...params} label="Complexity" size="small" error={!!errors.complexity} helperText={errors.complexity} />
                   )}
                 />
               </Grid>
@@ -721,6 +691,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                       fullWidth
                       label="Easy Questions"
                       type="number"
+                      size="small"
                       value={complexityCounts.easy}
                       onChange={(e) => handleField('complexity_easy', e)}
                       error={!!errors.complexity}
@@ -731,6 +702,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                       fullWidth
                       label="Medium Questions"
                       type="number"
+                      size="small"
                       value={complexityCounts.medium}
                       onChange={(e) => handleField('complexity_medium', e)}
                       error={!!errors.complexity}
@@ -741,6 +713,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                       fullWidth
                       label="Hard Questions"
                       type="number"
+                      size="small"
                       value={complexityCounts.hard}
                       onChange={(e) => handleField('complexity_hard', e)}
                       error={!!errors.complexity}
@@ -752,27 +725,32 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
               {/* Department Single Select */}
               <Grid item xs={12}>
                 <FormControl fullWidth error={!!errors.department} required>
-                  <InputLabel id="department-select-label">Subject *</InputLabel>
-                  <Select
-                    labelId="department-select-label"
-                    id="department-select"
-                    value={form.department || ''}
-                    onChange={(e) => handleField('department', e.target.value)}
-                    label="Subject *"
-                  >
-                    {deptLoading ? (
-                      <MenuItem disabled>Loading subjects...</MenuItem>
-                    ) : departments.length === 0 ? (
-                      <MenuItem disabled>No subjects available.</MenuItem>
-                    ) : (
-                      departments.map((dept) => (
-                        <MenuItem key={dept.uuid} value={dept.department_id}>
-                          {dept.name}
-                        </MenuItem>
-                      ))
-                    )}
-                  </Select>
-                  {errors.department && <FormHelperText>{errors.department}</FormHelperText>}
+                <Autocomplete
+                  id="department-select"
+                  freeSolo
+                  value={
+                      departments.find(d => d.department_id === form.department)?.name ||
+                      (typeof form.department === 'string' ? form.department : '')
+                  }
+                  options={departments.map(d => d.name)}
+                  onChange={(e, value) => {
+                      const selectedDept = departments.find(d => d.name === value);
+                      if (selectedDept) {
+                          handleField('department', selectedDept.department_id);
+                      } else {
+                          handleField('department', value);
+                      }
+                  }}
+                  renderInput={params => (
+                      <TextField 
+                          {...params} 
+                          label="Subject *" 
+                          size="small"
+                          error={!!errors.department} 
+                          helperText={errors.department}
+                      />
+                  )}
+              />
                 </FormControl>
               </Grid>
               {/* Passing Score */}
@@ -781,6 +759,7 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                   fullWidth
                   type="number"
                   label="Passing Score"
+                  size="small"
                   value={form.passing_score}
                   onChange={e => handleField('passing_score', e.target.value)}
                   InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
@@ -896,6 +875,13 @@ const QuizFormModern = ({ onSave, onCancel, departments: initialDepartments, ini
                     <Typography variant="body2" fontWeight="medium">
                       {form.standard === '10' ? 'X (10th)' : form.standard === '11' ? 'XI (11th)' : form.standard === '12' ? 'XII (12th)' : 'Not set'}
                     </Typography>
+                  </Grid>
+
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary">Section:</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" fontWeight="medium">{form.section || 'Not set'}</Typography>
                   </Grid>
 
                   <Grid item xs={6}>

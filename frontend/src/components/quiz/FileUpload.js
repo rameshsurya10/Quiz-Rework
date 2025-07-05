@@ -33,10 +33,6 @@ const FileUpload = ({ onFilesSelect, onFilesDataChange }) => {
     const [expandedPageRanges, setExpandedPageRanges] = useState({});
     const [showSupportedFormats, setShowSupportedFormats] = useState(false);
     
-    // Add file size limits
-    const MAX_FILE_SIZE = 60 * 1024 * 1024; // 60MB in bytes
-    const MAX_TOTAL_SIZE = 60 * 1024 * 1024; // 60MB in bytes
-
     const supportedFileTypes = [
         { type: 'PDF', extensions: ['.pdf'], icon: 'pdf' },
         { type: 'Documents', extensions: ['.doc', '.docx', '.txt', '.rtf', '.md'], icon: 'doc' },
@@ -61,7 +57,6 @@ const FileUpload = ({ onFilesSelect, onFilesDataChange }) => {
     const handleFileChange = (selectedFiles) => {
         // Check file size limits and supported types
         const newFilesArray = Array.from(selectedFiles);
-        const oversizedFiles = [];
         const unsupportedFiles = [];
         const emptyFiles = [];
         const validFiles = [];
@@ -70,8 +65,6 @@ const FileUpload = ({ onFilesSelect, onFilesDataChange }) => {
         newFilesArray.forEach(file => {
             if (file.size === 0) {
                 emptyFiles.push(file);
-            } else if (file.size > MAX_FILE_SIZE) {
-                oversizedFiles.push(file);
             } else if (!isSupportedFileType(file)) {
                 unsupportedFiles.push(file);
             } else {
@@ -84,25 +77,12 @@ const FileUpload = ({ onFilesSelect, onFilesDataChange }) => {
             alert(`The following files are empty:\n${emptyFiles.map(f => f.name).join('\n')}\n\nPlease select files with content.`);
         }
         
-        if (oversizedFiles.length > 0) {
-            alert(`The following files exceed the maximum size limit of ${MAX_FILE_SIZE / (1024 * 1024)}MB:\n${oversizedFiles.map(f => f.name).join('\n')}`);
-        }
-        
         if (unsupportedFiles.length > 0) {
             alert(`The following files are not supported:\n${unsupportedFiles.map(f => f.name).join('\n')}\n\nPlease upload only PDF, document, spreadsheet, or image files.`);
         }
         
         if (validFiles.length === 0) {
             return; // No valid files to add
-        }
-        
-        // Check total size
-        const currentTotalSize = files.reduce((total, f) => total + f.file.size, 0);
-        const newFilesSize = validFiles.reduce((total, f) => total + f.size, 0);
-        
-        if (currentTotalSize + newFilesSize > MAX_TOTAL_SIZE) {
-            alert(`Total file size would exceed the maximum allowed (${MAX_TOTAL_SIZE / (1024 * 1024)}MB). Please remove some files.`);
-            return;
         }
         
         // Add the valid files
@@ -312,7 +292,6 @@ const FileUpload = ({ onFilesSelect, onFilesDataChange }) => {
                 <p className="drop-zone-text">Drag & Drop your files here</p>
                 <p className="drop-zone-or">OR</p>
                 <button type="button" className="browse-files-btn" onClick={(e) => {e.stopPropagation(); handleBrowseClick();}}>Browse Files</button>
-                <p className="file-size-limit">Maximum file size: {MAX_FILE_SIZE / (1024 * 1024)}MB. Total limit: {MAX_TOTAL_SIZE / (1024 * 1024)}MB.</p>
                 <div className="supported-formats">
                     <span className="supported-formats-link" onClick={toggleSupportedFormats}>
                         Supported formats <InfoIcon />

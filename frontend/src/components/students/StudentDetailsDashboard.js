@@ -1,11 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Box, Grid, Typography, Card, CardContent, Avatar, LinearProgress, Paper, Chip, List, ListItem, ListItemAvatar, ListItemText, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, Divider
+  Box, Grid, Typography, Card, CardContent, Avatar, LinearProgress, Paper, Chip, List, ListItem, ListItemAvatar, ListItemText, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tooltip, Divider, Alert, ListItemIcon
 } from '@mui/material';
 import {
-  School, Event, EmojiEvents, Phone, Email, HelpOutline, TrendingUp, TrendingDown, Star, BarChart as BarChartIcon
+  School, Event, EmojiEvents, Phone, Email, HelpOutline, TrendingUp, TrendingDown, Star, BarChart as BarChartIcon,
+  Class as ClassIcon,
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import { styled, useTheme, alpha } from '@mui/material/styles';
+import { reportApi, quizApi } from '../../services/api';
+import { useNavigate } from 'react-router-dom';
 
 const StatCard = styled(Card)(({ theme }) => ({
   height: '100%',
@@ -22,11 +26,11 @@ const StatCard = styled(Card)(({ theme }) => ({
 
 const BarChart = ({ data, highlight }) => {
   const theme = useTheme();
-  const maxScore = Math.max(...data.map(d => d.score), 100);
+  const maxScore = Math.max(...(data?.map(d => d.score) || [0]), 100);
 
   return (
     <Box sx={{ display: 'flex', height: 150, alignItems: 'flex-end', justifyContent: 'space-around', p: 2, border: `1px solid ${theme.palette.divider}`, borderRadius: '12px', mt: 2 }}>
-      {data.map((item) => (
+      {data?.map((item) => (
         <Tooltip key={item.month} title={`${item.month}: ${item.score}%`}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
             <Box sx={{
@@ -45,139 +49,356 @@ const BarChart = ({ data, highlight }) => {
   );
 };
 
-const StudentDetailsDashboard = ({ student, onClose }) => {
+const StudentDetailsDashboard = ({ student, onClose, dashboardData: initialData }) => {
   const theme = useTheme();
+  const navigate = useNavigate();
+  const [dashboardData, setDashboardData] = useState(initialData);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [quizAttempts, setQuizAttempts] = useState([]);
 
-  const mockData = {
-    averageScore: 82,
-    quizParticipation: 95,
-    rank: '12th',
-    percentile: '88th',
-    performanceOverTime: [
-      { month: 'Jan', score: 70 },
-      { month: 'Feb', score: 75 },
-      { month: 'Mar', score: 85 },
-      { month: 'Apr', score: 82 },
-      { month: 'May', score: 90 },
-    ],
-    strengths: ['General Knowledge', 'Technical Skills'],
-    weaknesses: ['Logical Reasoning'],
-    achievements: ['Top Scorer: GK Quiz #3', 'Perfect Score: Logic Puzzle', 'Quiz Streak: 5 Wins', 'Fastest Finisher'],
-    recentQuizScores: [
-      { quiz: 'General Knowledge #5', date: '2023-05-15', score: '9/10', percentile: 92 },
-      { quiz: 'Logic Puzzle #4', date: '2023-05-12', score: '8/10', percentile: 85 },
-      { quiz: 'Technical Skills #2', date: '2023-05-10', score: '17/20', percentile: 88 },
-      { quiz: 'History Trivia', date: '2023-05-05', score: '7/10', percentile: 75 },
-      { quiz: 'Science Quiz #3', date: '2023-04-28', score: '8/10', percentile: 81 },
-    ],
-    upcomingQuizzes: [
-      { title: 'Weekly Science Quiz', due: '2 days' },
-      { title: 'Pop Culture Trivia', due: '4 days' },
-    ],
-  };
+  useEffect(() => {
+    const fetchQuizAttempts = async () => {
+      if (!student || !student.id) return;
+      setIsLoading(true);
+      try {
+        const response = await quizApi.getResults(); // This fetches all attempts
+        const allAttempts = response.data.results || response.data.data || response.data || [];
+        const studentAttempts = allAttempts.filter(
+          (attempt) => (attempt.student?.id === student.id) || (attempt.student_id === student.id)
+        );
+        setQuizAttempts(studentAttempts);
+      } catch (err) {
+        setError('Failed to load quiz attempts.');
+        console.error('Error fetching quiz attempts:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchQuizAttempts();
+  }, [student]);
+
+  if (isLoading) {
+    return (
+      <Paper sx={{ p: { xs: 2, md: 3 }, m: { xs: 1, md: 2 }, borderRadius: '16px', bgcolor: 'background.default' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Avatar sx={{ width: 72, height: 72, mr: 2, bgcolor: theme.palette.primary.main, fontSize: '2.5rem' }}>
+              {(dashboardData?.name || student?.name)?.charAt(0)}
+            </Avatar>
+            <Box>
+              <Typography variant="h4" component="h1" fontWeight="bold">{dashboardData?.name || student?.name || 'Student Name'}</Typography>
+              <Typography variant="subtitle1" color="text.secondary">{dashboardData?.department_name || student?.department?.name || 'No Department'} | ID: {dashboardData?.student_id || student?.id || 'N/A'}</Typography>
+            </Box>
+          </Box>
+          <Button variant="outlined" onClick={onClose}>Close</Button>
+        </Box>
+
+        <Card sx={{ borderRadius: '16px', p: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ pl: 2 }}>
+            Student Information
+          </Typography>
+          <Grid container>
+            <Grid item xs={12} md={6}>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon><Email /></ListItemIcon>
+                  <ListItemText primary="Email Address" secondary={dashboardData?.email || 'N/A'} />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><Phone /></ListItemIcon>
+                  <ListItemText primary="Phone Number" secondary={dashboardData?.phone || 'N/A'} />
+                </ListItem>
+              </List>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <List dense>
+                  <ListItem>
+                    <ListItemIcon><ClassIcon /></ListItemIcon>
+                    <ListItemText primary="Class & Section" secondary={`${dashboardData?.class_name || 'N/A'} - ${dashboardData?.section || 'N/A'}`} />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><School /></ListItemIcon>
+                    <ListItemText primary="Register No." secondary={dashboardData?.register_number || 'N/A'} />
+                  </ListItem>
+              </List>
+            </Grid>
+          </Grid>
+        </Card>
+
+        <Grid container spacing={3}>
+          {/* Key Stats */}
+          <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{dashboardData?.rank || 'N/A'}</Typography><Typography>Overall Rank</Typography></StatCard></Grid>
+          <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{dashboardData?.percentile || 'N/A'}</Typography><Typography>Percentile</Typography></StatCard></Grid>
+          <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{dashboardData?.averageScore || 0}%</Typography><Typography>Avg. Score</Typography></StatCard></Grid>
+          <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{dashboardData?.quizParticipation || 0}%</Typography><Typography>Participation</Typography></StatCard></Grid>
+
+          {/* Performance Chart */}
+          <Grid item xs={12} md={8}>
+            <Card sx={{ borderRadius: '16px', p: 2, height: '100%' }}>
+              <Typography variant="h6">Performance Over Time</Typography>
+              <BarChart data={dashboardData?.performanceOverTime} highlight={theme.palette.primary.main} />
+            </Card>
+          </Grid>
+
+          {/* Strengths & Weaknesses */}
+          <Grid item xs={12} md={4}>
+            <Card sx={{ borderRadius: '16px', p: 2, height: '100%' }}>
+              <Box mb={2}>
+                <Typography variant="h6" gutterBottom>Strengths</Typography>
+                {dashboardData?.strengths?.map(item => <Chip key={item} icon={<TrendingUp />} label={item} color="success" variant="outlined" size="small" sx={{ mr: 1, mb: 1 }} />)}
+              </Box>
+              <Divider />
+              <Box mt={2}>
+                <Typography variant="h6" gutterBottom>Areas for Improvement</Typography>
+                {dashboardData?.weaknesses?.map(item => <Chip key={item} icon={<TrendingDown />} label={item} color="warning" variant="outlined" size="small" sx={{ mr: 1, mb: 1 }} />)}
+              </Box>
+            </Card>
+          </Grid>
+
+          {/* Recent Quiz Scores Table */}
+          <Grid item xs={12}>
+            <Card sx={{ borderRadius: '16px' }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>Recent Quiz History</Typography>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Quiz Title</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell align="right">Score</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="center">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {quizAttempts.length > 0 ? (
+                        quizAttempts.map(item => (
+                          <TableRow key={item.id} hover>
+                            <TableCell>{item.quiz?.title || 'N/A'}</TableCell>
+                            <TableCell>{new Date(item.attempted_at).toLocaleDateString()}</TableCell>
+                            <TableCell align="right">{item.score ?? 'N/A'}</TableCell>
+                            <TableCell>
+                              <Chip label={item.status || 'Completed'} color="success" size="small" />
+                            </TableCell>
+                            <TableCell align="center">
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={<VisibilityIcon />}
+                                onClick={() => navigate(`/quiz/result/${item.quiz.id}`)}
+                              >
+                                View
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} align="center">
+                            No quiz attempts found for this student.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          {/* Achievements & Upcoming */}
+          <Grid item xs={12} md={7}>
+            <Card sx={{ borderRadius: '16px', height: '100%', p: 2 }}>
+              <Typography variant="h6" gutterBottom>Achievements</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                {dashboardData?.achievements?.map(ach => (
+                  <Chip key={ach} icon={<Star />} label={ach} color="warning" variant="filled" size="small" />
+                ))}
+              </Box>
+            </Card>
+          </Grid>
+          <Grid item xs={12} md={5}>
+            <Card sx={{ borderRadius: '16px', height: '100%', p: 2 }}>
+              <Typography variant="h6" gutterBottom>Upcoming Quizzes</Typography>
+              <List dense>
+                {dashboardData?.upcomingQuizzes?.map(item => (
+                  <ListItem key={item.title} disableGutters>
+                    <ListItemAvatar><Avatar sx={{ bgcolor: 'info.light' }}><HelpOutline /></Avatar></ListItemAvatar>
+                    <ListItemText primary={item.title} secondary={`Due in ${item.due}`} />
+                  </ListItem>
+                ))}
+              </List>
+            </Card>
+          </Grid>
+
+        </Grid>
+      </Paper>
+    );
+  }
+
+  if (error) {
+    return <Alert severity="error">{error}</Alert>;
+  }
+
+  // Check if the necessary dashboard data is missing by looking for a performance-specific field
+  const isDataMissing = !dashboardData || typeof dashboardData.rank === 'undefined';
 
   return (
     <Paper sx={{ p: { xs: 2, md: 3 }, m: { xs: 1, md: 2 }, borderRadius: '16px', bgcolor: 'background.default' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Avatar sx={{ width: 72, height: 72, mr: 2, bgcolor: theme.palette.primary.main, fontSize: '2.5rem' }}>
-            {student?.name?.charAt(0)}
+            {(dashboardData?.name || student?.name)?.charAt(0)}
           </Avatar>
           <Box>
-            <Typography variant="h4" component="h1" fontWeight="bold">{student?.name || 'Student Name'}</Typography>
-            <Typography variant="subtitle1" color="text.secondary">{student?.department?.name || student?.department_name || 'No Department Assigned'} | ID: {student?.student_id || 'N/A'}</Typography>
+            <Typography variant="h4" component="h1" fontWeight="bold">{dashboardData?.name || student?.name || 'Student Name'}</Typography>
+            <Typography variant="subtitle1" color="text.secondary">{dashboardData?.department_name || student?.department?.name || 'No Department'} | ID: {dashboardData?.student_id || student?.id || 'N/A'}</Typography>
           </Box>
         </Box>
         <Button variant="outlined" onClick={onClose}>Close</Button>
       </Box>
-
-      <Grid container spacing={3}>
-        {/* Key Stats */}
-        <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{mockData.rank}</Typography><Typography>Overall Rank</Typography></StatCard></Grid>
-        <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{mockData.percentile}</Typography><Typography>Percentile</Typography></StatCard></Grid>
-        <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{mockData.averageScore}%</Typography><Typography>Avg. Score</Typography></StatCard></Grid>
-        <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{mockData.quizParticipation}%</Typography><Typography>Participation</Typography></StatCard></Grid>
-
-        {/* Performance Chart */}
-        <Grid item xs={12} md={8}>
-          <Card sx={{ borderRadius: '16px', p: 2, height: '100%' }}>
-            <Typography variant="h6">Performance Over Time</Typography>
-            <BarChart data={mockData.performanceOverTime} highlight={theme.palette.primary.main} />
-          </Card>
-        </Grid>
-
-        {/* Strengths & Weaknesses */}
-        <Grid item xs={12} md={4}>
-          <Card sx={{ borderRadius: '16px', p: 2, height: '100%' }}>
-            <Box mb={2}>
-              <Typography variant="h6" gutterBottom>Strengths</Typography>
-              {mockData.strengths.map(item => <Chip key={item} icon={<TrendingUp />} label={item} color="success" variant="outlined" size="small" sx={{ mr: 1, mb: 1 }} />)}
-            </Box>
-            <Divider />
-            <Box mt={2}>
-              <Typography variant="h6" gutterBottom>Areas for Improvement</Typography>
-              {mockData.weaknesses.map(item => <Chip key={item} icon={<TrendingDown />} label={item} color="warning" variant="outlined" size="small" sx={{ mr: 1, mb: 1 }} />)}
-            </Box>
-          </Card>
-        </Grid>
-
-        {/* Recent Quiz Scores Table */}
-        <Grid item xs={12}>
-          <Card sx={{ borderRadius: '16px' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>Recent Quiz History</Typography>
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Quiz Title</TableCell>
-                      <TableCell>Date</TableCell>
-                      <TableCell align="right">Score</TableCell>
-                      <TableCell align="right">Percentile</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {mockData.recentQuizScores.map(item => (
-                      <TableRow key={item.quiz} hover>
-                        <TableCell>{item.quiz}</TableCell>
-                        <TableCell>{item.date}</TableCell>
-                        <TableCell align="right">{item.score}</TableCell>
-                        <TableCell align="right"><Chip label={`${item.percentile}%`} color="primary" variant="outlined" size="small" /></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        {/* Achievements & Upcoming */}
-        <Grid item xs={12} md={7}>
-          <Card sx={{ borderRadius: '16px', height: '100%', p: 2 }}>
-            <Typography variant="h6" gutterBottom>Achievements</Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-              {mockData.achievements.map(ach => (
-                <Chip key={ach} icon={<Star />} label={ach} color="warning" variant="filled" size="small" />
-              ))}
-            </Box>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={5}>
-          <Card sx={{ borderRadius: '16px', height: '100%', p: 2 }}>
-            <Typography variant="h6" gutterBottom>Upcoming Quizzes</Typography>
-            <List dense>
-              {mockData.upcomingQuizzes.map(item => (
-                <ListItem key={item.title} disableGutters>
-                  <ListItemAvatar><Avatar sx={{ bgcolor: 'info.light' }}><HelpOutline /></Avatar></ListItemAvatar>
-                  <ListItemText primary={item.title} secondary={`Due in ${item.due}`} />
+      
+      <Card sx={{ borderRadius: '16px', p: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ pl: 2 }}>
+            Student Information
+          </Typography>
+          <Grid container>
+            <Grid item xs={12} md={6}>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon><Email /></ListItemIcon>
+                  <ListItemText primary="Email Address" secondary={dashboardData?.email || 'N/A'} />
                 </ListItem>
-              ))}
-            </List>
-          </Card>
-        </Grid>
+                <ListItem>
+                  <ListItemIcon><Phone /></ListItemIcon>
+                  <ListItemText primary="Phone Number" secondary={dashboardData?.phone || 'N/A'} />
+                </ListItem>
+              </List>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <List dense>
+                  <ListItem>
+                    <ListItemIcon><ClassIcon /></ListItemIcon>
+                    <ListItemText primary="Class & Section" secondary={`${dashboardData?.class_name || 'N/A'} - ${dashboardData?.section || 'N/A'}`} />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><School /></ListItemIcon>
+                    <ListItemText primary="Register No." secondary={dashboardData?.register_number || 'N/A'} />
+                  </ListItem>
+              </List>
+            </Grid>
+          </Grid>
+        </Card>
 
-      </Grid>
+      {quizAttempts.length === 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Detailed performance data is not available for this student yet. Basic details are shown above.
+        </Alert>
+      ) : (
+        <Grid container spacing={3}>
+          {/* Key Stats */}
+          <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{dashboardData?.rank || 'N/A'}</Typography><Typography>Overall Rank</Typography></StatCard></Grid>
+          <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{dashboardData?.percentile || 'N/A'}</Typography><Typography>Percentile</Typography></StatCard></Grid>
+          <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{dashboardData?.averageScore || 0}%</Typography><Typography>Avg. Score</Typography></StatCard></Grid>
+          <Grid item xs={6} sm={3}><StatCard><Typography variant="h4" color="primary">{dashboardData?.quizParticipation || 0}%</Typography><Typography>Participation</Typography></StatCard></Grid>
+
+          {/* Performance Chart */}
+          <Grid item xs={12} md={8}>
+            <Card sx={{ borderRadius: '16px', p: 2, height: '100%' }}>
+              <Typography variant="h6">Performance Over Time</Typography>
+              <BarChart data={dashboardData?.performanceOverTime} highlight={theme.palette.primary.main} />
+            </Card>
+          </Grid>
+
+          {/* Strengths & Weaknesses */}
+          <Grid item xs={12} md={4}>
+            <Card sx={{ borderRadius: '16px', p: 2, height: '100%' }}>
+              <Box mb={2}>
+                <Typography variant="h6" gutterBottom>Strengths</Typography>
+                {dashboardData?.strengths?.map(item => <Chip key={item} icon={<TrendingUp />} label={item} color="success" variant="outlined" size="small" sx={{ mr: 1, mb: 1 }} />)}
+              </Box>
+              <Divider />
+              <Box mt={2}>
+                <Typography variant="h6" gutterBottom>Areas for Improvement</Typography>
+                {dashboardData?.weaknesses?.map(item => <Chip key={item} icon={<TrendingDown />} label={item} color="warning" variant="outlined" size="small" sx={{ mr: 1, mb: 1 }} />)}
+              </Box>
+            </Card>
+          </Grid>
+
+          {/* Recent Quiz Scores Table */}
+          <Grid item xs={12}>
+            <Card sx={{ borderRadius: '16px' }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>Recent Quiz History</Typography>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Quiz Title</TableCell>
+                        <TableCell>Date</TableCell>
+                        <TableCell align="right">Score</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="center">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {quizAttempts.map(item => (
+                        <TableRow key={item.id} hover>
+                          <TableCell>{item.quiz?.title || 'N/A'}</TableCell>
+                          <TableCell>{new Date(item.attempted_at).toLocaleDateString()}</TableCell>
+                          <TableCell align="right">{item.score ?? 'N/A'}</TableCell>
+                          <TableCell>
+                            <Chip label={item.status || 'Completed'} color="success" size="small" />
+                          </TableCell>
+                          <TableCell align="center">
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<VisibilityIcon />}
+                              onClick={() => navigate(`/quiz/result/${item.quiz.id}`)}
+                            >
+                              View
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          {/* Achievements & Upcoming */}
+          <Grid item xs={12} md={7}>
+            <Card sx={{ borderRadius: '16px', height: '100%', p: 2 }}>
+              <Typography variant="h6" gutterBottom>Achievements</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                {dashboardData?.achievements?.map(ach => (
+                  <Chip key={ach} icon={<Star />} label={ach} color="warning" variant="filled" size="small" />
+                ))}
+              </Box>
+            </Card>
+          </Grid>
+          <Grid item xs={12} md={5}>
+            <Card sx={{ borderRadius: '16px', height: '100%', p: 2 }}>
+              <Typography variant="h6" gutterBottom>Upcoming Quizzes</Typography>
+              <List dense>
+                {dashboardData?.upcomingQuizzes?.map(item => (
+                  <ListItem key={item.title} disableGutters>
+                    <ListItemAvatar><Avatar sx={{ bgcolor: 'info.light' }}><HelpOutline /></Avatar></ListItemAvatar>
+                    <ListItemText primary={item.title} secondary={`Due in ${item.due}`} />
+                  </ListItem>
+                ))}
+              </List>
+            </Card>
+          </Grid>
+
+        </Grid>
+      )}
     </Paper>
   );
 };

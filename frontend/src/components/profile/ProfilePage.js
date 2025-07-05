@@ -746,8 +746,6 @@ const ProfilePage = ({ initialTab = 0 }) => {
     }
   };
 
-
-
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
     setPasswordData(prev => ({
@@ -783,9 +781,6 @@ const ProfilePage = ({ initialTab = 0 }) => {
   };
 
   // User management handlers and effects
-
-
-  // Duplicate useEffect for tab/URL sync removed; original is at lines 156-167
 
   // filteredUsers and paginatedUsers moved to '5. Memoized values' section
 
@@ -908,7 +903,6 @@ const ProfilePage = ({ initialTab = 0 }) => {
             scrollButtons="auto"
           >
             <Tab label="My Profile" {...a11yProps(0)} />
-            <Tab label="User Management" {...a11yProps(1)} />
           </Tabs>
         </Box>
 
@@ -1161,189 +1155,43 @@ const ProfilePage = ({ initialTab = 0 }) => {
           </motion.div>
         </TabPanel>
         
-        {/* User Management Tab */}
-        <TabPanel value={activeTab} index={1}>
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-              <TextField
-                label="Search users..."
-                variant="outlined"
-                size="small"
-                value={searchTerm}
-                onChange={handleSearch}
-                sx={{ flexGrow: 1, maxWidth: 400 }}
-              />
-              <FormControl size="small" sx={{ minWidth: 150 }}>
-                <InputLabel>Role</InputLabel>
-                <Select
-                  value={roleFilter}
-                  label="Role"
-                  onChange={handleRoleFilterChange}
-                >
-                  <MenuItem value="all">All Roles</MenuItem>
-                  <MenuItem value="Admin">Admin</MenuItem>
-                  <MenuItem value="Teacher">Teacher</MenuItem>
-                  <MenuItem value="Student">Student</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 150 }}>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={statusFilter}
-                  label="Status"
-                  onChange={handleStatusFilterChange}
-                >
-                  <MenuItem value="all">All Status</MenuItem>
-                  <MenuItem value="Active">Active</MenuItem>
-                  <MenuItem value="Inactive">Inactive</MenuItem>
-                </Select>
-              </FormControl>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenUserDialog()}
-                sx={{ ml: 'auto' }}
-              >
-                Add User
-              </Button>
-            </Box>
-            
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    {userTableHeaders.map((headCell) => (
-                      <TableCell
-                        key={headCell.id}
-                        sortDirection={orderBy === headCell.id ? order : false}
-                        sx={{ fontWeight: 'bold' }}
-                      >
-                        {headCell.sortable ? (
-                          <TableSortLabel
-                            active={orderBy === headCell.id}
-                            direction={orderBy === headCell.id ? order : 'asc'}
-                            onClick={() => handleRequestSort(headCell.id)}
-                          >
-                            {headCell.label}
-                            {orderBy === headCell.id ? (
-                              <Box component="span" sx={visuallyHidden}>
-                                {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
-                              </Box>
-                            ) : null}
-                          </TableSortLabel>
-                        ) : (
-                          headCell.label
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {isLoadingUsers ? (
-                    <TableRow>
-                      <TableCell colSpan={userTableHeaders.length} align="center" sx={{ py: 4 }}>
-                        <CircularProgress size={24} />
-                      </TableCell>
-                    </TableRow>
-                  ) : paginatedUsers.length > 0 ? (
-                    paginatedUsers.map((user) => (
-                      <TableRow key={user.id} hover>
-                        <TableCell>{user.name}</TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={user.role} 
-                            size="small"
-                            color={
-                              user.role === 'Admin' ? 'primary' : 
-                              user.role === 'Teacher' ? 'secondary' : 'default'
-                            }
-                            variant="outlined"
-                          />
-                        </TableCell>
-                        <TableCell>{formatDate(user.joinedDate)}</TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={user.status} 
-                            size="small"
-                            color={user.status === 'Active' ? 'success' : 'default'}
-                            variant="outlined"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', gap: 1 }}>
-                            <IconButton 
-                              size="small" 
-                              color="primary"
-                              onClick={() => handleOpenUserDialog(user)}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton 
-                              size="small" 
-                              color="error"
-                              onClick={() => {
-                                setUserToDeleteId(user.id);
-                                setOpenConfirmDeleteUserDialog(true);
-                              }}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={userTableHeaders.length} align="center" sx={{ py: 4 }}>
-                        <EmptyState 
-                          icon={<GroupIcon sx={{ fontSize: 60, color: 'text.disabled' }} />}
-                          title="No users found"
-                          description="Try adjusting your search or filter criteria"
-                        />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            
-            <TablePagination
-              rowsPerPageOptions={[5, 10, 25]}
-              component="div"
-              count={filteredUsers.length}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={handleChangePage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-              sx={{ mt: 2 }}
-            />
-          </Paper>
-        </TabPanel>
       </Container>
 
-      {user && (
-        <>
-          <EditProfileDialog
-            open={openEditProfileDialog}
-            onClose={handleCloseEditProfileDialog}
-            onSave={handleSaveProfile}
-            userData={{
-              name: user.name,
-              email: user.email,
-              bio: user.bio,
-              institution: user.institution
-            }}
-            isSaving={isSavingProfile}
-          />
-          <ChangePasswordDialog 
-            open={openChangePasswordDialog}
-            onClose={handleCloseChangePasswordDialog}
-            onSave={handleSavePassword}
-            isSaving={isChangingPassword}
-          />
-        </>
-      )}
+      <EditProfileDialog
+        open={isEditing}
+        onClose={handleCloseEditProfileDialog}
+        onSave={handleSaveProfile}
+        user={formData}
+        onChange={handleInputChange}
+        isSaving={isSavingProfile}
+        error={error}
+      />
+      
+      <ChangePasswordDialog
+        open={isChangingPassword}
+        onClose={handleCloseChangePasswordDialog}
+        onSave={handleSavePassword}
+        passwordData={passwordData}
+        onChange={handlePasswordChange}
+        error={passwordError}
+      />
+
+      <CreateUserDialog
+        open={openUserDialog}
+        onClose={handleCloseUserDialog}
+        onSave={handleSaveUser}
+        user={editingUser}
+      />
+      
+      <ConfirmationDialog
+        open={openConfirmDeleteUserDialog}
+        onClose={() => setOpenConfirmDeleteUserDialog(false)}
+        onConfirm={handleDeleteUser}
+        title="Confirm Delete"
+        message="Are you sure you want to delete this user? This action cannot be undone."
+        confirmText="Delete"
+        isDestructive
+      />
     </FullLayout>
   );
 };

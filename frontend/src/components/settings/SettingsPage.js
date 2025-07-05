@@ -498,2036 +498,530 @@ const SettingsPage = () => {
                 icon={<CreditCardIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />} 
                 label="Plan & Billing" 
               iconPosition="start"
-                sx={{ display: { xs: 'none', sm: 'flex' } }}
-              />
-              
-              <Tab 
-                icon={<LanguageIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />} 
+            />
+            <Tab 
+                icon={<PersonIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />} 
                 label="General" 
                 iconPosition="start"
-              />
-              <Tab 
+            />
+            <Tab 
                 icon={<NotificationsIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />} 
                 label="Notifications" 
                 iconPosition="start"
-              />
-              <Tab 
+            />
+            <Tab 
                 icon={<PaletteIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />} 
                 label="Appearance" 
                 iconPosition="start"
-              />
-              <Tab 
+            />
+            <Tab 
                 icon={<SecurityIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />} 
                 label="Security" 
                 iconPosition="start"
-              />
+            />
+            <Tab 
+                icon={<LanguageIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />} 
+                label="Region & Language" 
+                iconPosition="start"
+            />
         </Tabs>
           </Box>
 
           {/* Tab Content */}
-          <Box sx={{ 
-            ...getCardStyles(),
-            overflow: 'hidden',
-            minHeight: '500px'
-          }}>
-            {/* Error Alert */}
-            {error && (
-              <Alert 
-                severity="error" 
-                sx={{ 
-                  m: 2, 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  '& .MuiAlert-icon': {
-                    fontSize: '1.5rem'
-                  }
-                }}
-                onClose={() => setError(null)}
-              >
-                <Typography variant="body1">{error}</Typography>
-              </Alert>
-            )}
-            
-            {/* Plan & Billing Tab */}
-            {tabValue === 0 && (
-              <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-                <Typography variant="h5" sx={{ 
-                  mb: 3,
-                  color: theme.palette.text.primary,
-                  fontWeight: theme.custom?.appearance === 'royal' ? 400 : 600,
-                  fontFamily: theme.custom?.appearance === 'royal' ? '"Playfair Display", serif' : 'inherit',
-                  fontSize: { xs: '1.5rem', sm: '1.75rem' }
-                }}>
-                  Current Plan
-                </Typography>
-                
-                <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: 4 }}>
-                  {/* Beginner Plan */}
-                  <Grid item xs={12} sm={12} md={6}>
-                    <Card variant="outlined" sx={{
-                      ...getCardStyles(),
-                      height: { xs: 'auto', sm: '220px' },
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      borderColor: theme.palette.divider,
-                      '&:hover': {
-                        borderColor: theme.palette.primary.main,
-                        transform: 'translateY(-2px)',
-                        boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.15)}`,
-                      }
-                    }}>
-                      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                        <Typography variant="h6" sx={{ 
-                          color: theme.palette.text.primary,
-                          mb: 2,
-                          fontWeight: 600,
-                          fontSize: { xs: '1rem', sm: '1.25rem' }
-                        }}>
-                          Beginner
-                        </Typography>
-                        <Typography variant="h4" sx={{ 
-                          color: theme.palette.primary.main,
-                          fontWeight: 700,
-                          mb: 1,
-                          fontSize: { xs: '1.75rem', sm: '2rem' }
-                        }}>
-                          $10
-                          <Typography component="span" variant="body1" sx={{ color: theme.palette.text.secondary, ml: 0.5 }}>
-                            /month
-                          </Typography>
-                        </Typography>
-                        <Typography variant="body2" sx={{ 
-                          color: theme.palette.text.secondary,
-                          mb: { xs: 2, sm: 3 }
-                        }}>
-                          30 days remaining
-                        </Typography>
-                        <Button 
-                          variant="outlined" 
-                          size="small"
-                          fullWidth
-                          sx={{ 
-                            borderColor: theme.palette.primary.main,
-                            color: theme.palette.primary.main,
-                            textTransform: 'none',
-                            fontWeight: 500,
-                            py: { xs: 0.5, sm: 1 },
-                            '&:hover': {
-                              backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                            }
-                          }}
-                        >
-                          Downgrade
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-
-                  {/* Professional Plan */}
-                  <Grid item xs={12} sm={12} md={6}>
-                    <Card variant="outlined" sx={{
-                      ...getCardStyles(),
-                      height: { xs: 'auto', sm: '220px' },
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      border: `2px solid ${theme.palette.primary.main}`,
-                      background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.secondary.main, 0.04)} 100%)`,
-                      '&::before': theme.custom?.glassmorphism && !theme.custom?.highContrast ? {
-                        content: '""',
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, transparent 70%)`,
-                        pointerEvents: 'none',
-                      } : {},
-                    }}>
-                      <CardContent sx={{ p: { xs: 2, sm: 3 }, position: 'relative', zIndex: 1 }}>
-                        <Box display="flex" alignItems="center" gap={1} mb={2} flexWrap="wrap">
-                          <Typography variant="h6" sx={{ 
-                            color: theme.palette.text.primary,
-                            fontWeight: 600,
-                            fontSize: { xs: '1rem', sm: '1.25rem' }
-                          }}>
-                            Professional
-                          </Typography>
-                          <Chip 
-                            label="Current Plan" 
-                            size="small"
-                            sx={{ 
-                              backgroundColor: theme.palette.primary.main,
-                              color: theme.palette.primary.contrastText,
-                              fontSize: '0.7rem',
-                              fontWeight: 500
-                            }}
-                          />
-                        </Box>
-                        <Typography variant="h4" sx={{ 
-                          color: theme.palette.primary.main,
-                          fontWeight: 700,
-                          mb: 1,
-                          fontSize: { xs: '1.75rem', sm: '2rem' }
-                        }}>
-                          $48
-                          <Typography component="span" variant="body1" sx={{ color: theme.palette.text.secondary, ml: 0.5 }}>
-                            /month
-                          </Typography>
-                        </Typography>
-                        <Typography variant="body2" sx={{ 
-                          color: theme.palette.text.secondary
-                        }}>
-                          365 days remaining
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                </Grid>
-                <Divider sx={{ my: { xs: 2, sm: 3 }, borderColor: theme.palette.divider }} />
-                <FormControlLabel 
-                  control={<Switch checked={settings.autoRenew} onChange={handleChange} name="autoRenew" />} 
-                  label="Enable auto-renew" 
-                  sx={{ color: theme.palette.text.primary }}
-                />
-                <Divider sx={{ my: { xs: 2, sm: 3 }, borderColor: theme.palette.divider }} />
-                <Typography variant="h6" gutterBottom sx={{ 
-                  color: theme.palette.text.primary,
-                  fontWeight: 600,
-                  mb: 2,
-                  fontSize: { xs: '1rem', sm: '1.25rem' }
-                }}>
-                  Payment Method
-                </Typography>
-            <Grid container spacing={{ xs: 2, sm: 2 }}>
-              <Grid item xs={12} sm={6} md={4}>
-                    <Card variant="outlined" sx={{ 
-                      ...getCardStyles(),
-                      p: { xs: 1.5, sm: 2 }, 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 2 
-                    }}>
-                  <CreditCardIcon color="primary" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}/>
-                      <Box> 
-                        <Typography variant="body1" sx={{ color: theme.palette.text.primary, fontSize: { xs: '0.9rem', sm: '1rem' } }}>Credit Card</Typography> 
-                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>**** **** **** 3542</Typography> 
-                      </Box>
-                </Card>
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                    <Button 
-                      variant="outlined" 
-                      startIcon={<AddCircleOutlineIcon sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />} 
-                      sx={{ 
-                        height: '100%', 
-                        width: '100%',
-                        borderColor: theme.palette.primary.main,
-                        color: theme.palette.primary.main,
-                        py: { xs: 1, sm: 1.5 },
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.1),
-                        }
-                      }}
-                    >
-                      Add New Card
-                    </Button>
-              </Grid>
-            </Grid>
-                <Divider sx={{ my: { xs: 2, sm: 3 }, borderColor: theme.palette.divider }} />
-                <Typography variant="h6" gutterBottom sx={{ 
-                  color: theme.palette.text.primary,
-                  fontWeight: 600,
-                  mb: { xs: 1, sm: 2 },
-                  fontSize: { xs: '1rem', sm: '1.25rem' }
-                }}>
-                  Billing History
-                </Typography>
-                <Box sx={{ overflowX: 'auto' }}>
-                  <TableContainer component={Paper} variant="outlined" sx={{
-                    ...getCardStyles(),
-                    minWidth: { xs: '100%', md: 650 }
-                  }}>
-                    <Table size={isMobile ? "small" : "medium"}>
-                      <TableHead> 
-                        <TableRow> 
-                          <TableCell sx={{ color: theme.palette.text.primary, py: { xs: 1.5, sm: 2 }, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>Date</TableCell> 
-                          <TableCell sx={{ color: theme.palette.text.primary, py: { xs: 1.5, sm: 2 }, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>Details</TableCell> 
-                          <TableCell align="right" sx={{ color: theme.palette.text.primary, py: { xs: 1.5, sm: 2 }, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>Amount</TableCell> 
-                          <TableCell align="right" sx={{ color: theme.palette.text.primary, py: { xs: 1.5, sm: 2 }, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>Download</TableCell> 
-                        </TableRow> 
-                      </TableHead>
-                      <TableBody>
-                        {billingHistory.map((row) => (
-                          <TableRow key={row.id}>
-                            <TableCell sx={{ color: theme.palette.text.secondary, py: { xs: 1, sm: 1.5 }, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>{row.date}</TableCell>
-                            <TableCell sx={{ color: theme.palette.text.secondary, py: { xs: 1, sm: 1.5 }, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>{row.details}</TableCell>
-                            <TableCell align="right" sx={{ color: theme.palette.text.secondary, py: { xs: 1, sm: 1.5 }, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>{row.amount}</TableCell>
-                            <TableCell align="right" sx={{ py: { xs: 1, sm: 1.5 } }}>
-                              <Link href="#" underline="always" sx={{ color: theme.palette.primary.main, fontSize: { xs: '0.8rem', sm: '0.875rem' }, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-                                <DownloadIcon fontSize="small"/> {!isMobile && "Invoice"}
-                              </Link>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-              </Box>
-            )}
-
-            {/* General Tab */}
-            {tabValue === 1 && (
-              <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-                <Typography variant="h5" gutterBottom sx={{ 
-                  color: theme.palette.text.primary,
-                  fontWeight: theme.custom?.appearance === 'royal' ? 400 : 600,
-                  fontFamily: theme.custom?.appearance === 'royal' ? '"Playfair Display", serif' : 'inherit',
-                  mb: 3,
-                  fontSize: { xs: '1.5rem', sm: '1.75rem' }
-                }}>
-                  General Settings
-                </Typography>
-                
-          <Grid container spacing={3}>
-                  {/* Profile Section */}
-                  <Grid item xs={12}>
-                    <Card variant="outlined" sx={{
-                      ...getCardStyles(),
-                      p: { xs: 2, sm: 3 },
-                      mb: 3,
-                      position: 'relative',
-                      overflow: 'visible'
-                    }}>
-                      {isLoading && (
-                        <Box sx={{ 
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: alpha(theme.palette.background.paper, 0.7),
-                          zIndex: 10
-                        }}>
-                          <CircularProgress />
-                        </Box>
-                      )}
-                      {!isLoading && (
-                        <>
-                          <Box sx={{ 
-                            display: 'flex', 
-                            flexDirection: { xs: 'column', sm: 'row' },
-                            alignItems: { xs: 'center', sm: 'flex-start' },
-                            mb: 3,
-                            gap: 3
-                          }}>
-                            <Box sx={{ 
-                              position: { xs: 'relative', sm: 'absolute' },
-                              top: { sm: -30 },
-                              right: { sm: 24 },
-                              mb: { xs: 2, sm: 0 }
-                            }}>
-                              <Avatar 
-                                src={profileImage}
-                                alt={`${settings.firstName} ${settings.lastName}`}
-                                sx={{ 
-                                  width: { xs: 80, sm: 100 }, 
-                                  height: { xs: 80, sm: 100 },
-                                  border: `3px solid ${theme.palette.background.paper}`,
-                                  boxShadow: theme.shadows[3]
-                                }}
-                              >
-                                {settings.firstName?.[0]}{settings.lastName?.[0]}
-                              </Avatar>
-                              <IconButton 
-                                size="small" 
-                                sx={{ 
-                                  position: 'absolute',
-                                  bottom: 0,
-                                  right: 0,
-                                  backgroundColor: theme.palette.primary.main,
-                                  color: theme.palette.primary.contrastText,
-                                  '&:hover': {
-                                    backgroundColor: theme.palette.primary.dark,
-                                  },
-                                  width: 32,
-                                  height: 32
-                                }}
-                                component="label"
-                              >
-                                <input
-                                  type="file"
-                                  hidden
-                                  accept="image/*"
-                                  onChange={handleProfileImageChange}
-                                />
-                                <EditIcon fontSize="small" />
-                              </IconButton>
-                  </Box>
-                  
-                            <Box sx={{ flex: 1 }}>
-                              <Typography variant="h6" gutterBottom sx={{ 
-                                color: theme.palette.text.primary,
-                                fontWeight: 600,
-                                mb: 0.5,
-                                fontSize: { xs: '1.1rem', sm: '1.25rem' },
-                                textAlign: { xs: 'center', sm: 'left' }
-                              }}>
-                                Profile Information
-                              </Typography>
-                              <Typography variant="body2" sx={{ 
-                                color: theme.palette.text.secondary,
-                                mb: 2,
-                                textAlign: { xs: 'center', sm: 'left' }
-                              }}>
-                                Update your personal information and account settings
-                              </Typography>
-                              <Typography variant="caption" sx={{ 
-                                color: theme.palette.info.main,
-                                mb: 2,
-                                display: 'block',
-                                textAlign: { xs: 'center', sm: 'left' },
-                                fontStyle: 'italic'
-                              }}>
-                                Note: Only phone number, bio, and profile picture can be edited
-                              </Typography>
-                            </Box>
-                          </Box>
-
-                          <Grid container spacing={2}>
-                            {showBasicReadonlyFields && (
-                              <>
-                                {/* Read-only First Name */}
-                                <Grid item xs={12} sm={6}>
-                                  <TextField
-                                    fullWidth
-                                    label="First Name"
-                                    name="firstName"
-                                    value={settings.firstName}
-                                    variant="outlined"
-                                    margin="normal"
-                                    size={isMobile ? "small" : "medium"}
-                                    InputProps={{ readOnly: true }}
-                                    sx={{
-                                      '& .MuiOutlinedInput-root': {
-                                        '& fieldset': { borderColor: theme.palette.divider },
-                                        '&:hover fieldset': { borderColor: theme.palette.divider },
-                                        '&.Mui-focused fieldset': {
-                                          borderColor: theme.palette.divider,
-                                          borderWidth: 1,
-                                        },
-                                        backgroundColor: alpha(theme.palette.action.disabledBackground, 0.1),
-                                      },
-                                    }}
-                                  />
-                                </Grid>
-                                {/* Read-only Last Name */}
-                                <Grid item xs={12} sm={6}>
-                                  <TextField
-                                    fullWidth
-                                    label="Last Name"
-                                    name="lastName"
-                                    value={settings.lastName}
-                                    variant="outlined"
-                                    margin="normal"
-                                    size={isMobile ? "small" : "medium"}
-                                    InputProps={{ readOnly: true }}
-                                    sx={{
-                                      '& .MuiOutlinedInput-root': {
-                                        '& fieldset': { borderColor: theme.palette.divider },
-                                        '&:hover fieldset': { borderColor: theme.palette.divider },
-                                        '&.Mui-focused fieldset': {
-                                          borderColor: theme.palette.divider,
-                                          borderWidth: 1,
-                                        },
-                                        backgroundColor: alpha(theme.palette.action.disabledBackground, 0.1),
-                                      },
-                                    }}
-                                  />
-                                </Grid>
-                                {/* Read-only Email */}
-                                <Grid item xs={12} sm={6}>
-                                  <TextField
-                                    fullWidth
-                                    label="Email"
-                                    name="email"
-                                    value={settings.email}
-                                    variant="outlined"
-                                    margin="normal"
-                                    size={isMobile ? "small" : "medium"}
-                                    InputProps={{
-                                      readOnly: true,
-                                      startAdornment: (
-                                        <InputAdornment position="start">
-                                          <EmailIcon fontSize="small" color="action" />
-                                        </InputAdornment>
-                                      ),
-                                    }}
-                                    sx={{
-                                      '& .MuiOutlinedInput-root': {
-                                        '& fieldset': { borderColor: theme.palette.divider },
-                                        '&:hover fieldset': { borderColor: theme.palette.divider },
-                                        '&.Mui-focused fieldset': {
-                                          borderColor: theme.palette.divider,
-                                          borderWidth: 1,
-                                        },
-                                        backgroundColor: alpha(theme.palette.action.disabledBackground, 0.1),
-                                      },
-                                    }}
-                                  />
-                                </Grid>
-                              </>
-                            )}
-                            <Grid item xs={12} sm={6}>
-                              <TextField
-                                fullWidth
-                      label={
-                                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    Phone
-                                    <EditIcon fontSize="small" sx={{ ml: 1, fontSize: '0.8rem', color: theme.palette.primary.main }} />
-                        </Box>
-                      }
-                                name="phone"
-                                value={settings.phone}
-                                onChange={handleChange}
-                                variant="outlined"
-                                margin="normal"
-                                size={isMobile ? "small" : "medium"}
-                                InputProps={{
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <PhoneIcon fontSize="small" color="action" />
-                                    </InputAdornment>
-                                  ),
-                                }}
-                                helperText="This field is editable"
-                                sx={{
-                                  '& .MuiOutlinedInput-root': {
-                                    '& fieldset': {
-                                      borderColor: theme.palette.divider,
-                                    },
-                                    '&:hover fieldset': {
-                                      borderColor: theme.palette.primary.main,
-                                    },
-                                    '&.Mui-focused fieldset': {
-                                      borderColor: theme.palette.primary.main,
-                                      borderWidth: 2,
-                                    },
-                                  },
-                                  '& .MuiFormHelperText-root': {
-                                    color: theme.palette.primary.main,
-                                  }
-                                }}
-                              />
-                            </Grid>
-                            <Grid item xs={12}>
-                              <TextField
-                                fullWidth
-                      label={
-                                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    Bio
-                                    <EditIcon fontSize="small" sx={{ ml: 1, fontSize: '0.8rem', color: theme.palette.primary.main }} />
-                        </Box>
-                      }
-                                name="bio"
-                                value={settings.bio}
-                                onChange={handleChange}
-                                variant="outlined"
-                                margin="normal"
-                                multiline
-                                rows={3}
-                                size={isMobile ? "small" : "medium"}
-                                InputProps={{
-                                  startAdornment: (
-                                    <InputAdornment position="start" sx={{ alignSelf: 'flex-start', mt: 1.5, mr: 1 }}>
-                                      <PersonIcon fontSize="small" color="action" />
-                                    </InputAdornment>
-                                  ),
-                                }}
-                                helperText="This field is editable"
-                                sx={{
-                                  '& .MuiOutlinedInput-root': {
-                                    '& fieldset': {
-                                      borderColor: theme.palette.divider,
-                                    },
-                                    '&:hover fieldset': {
-                                      borderColor: theme.palette.primary.main,
-                                    },
-                                    '&.Mui-focused fieldset': {
-                                      borderColor: theme.palette.primary.main,
-                                      borderWidth: 2,
-                                    },
-                                  },
-                                  '& .MuiFormHelperText-root': {
-                                    color: theme.palette.primary.main,
-                                  }
-                                }}
-                              />
-                            </Grid>
-                          </Grid>
-                        </>
-                      )}
-              </Card>
-            </Grid>
-
-                  {/* Time & Timezone Section */}
-                  <Grid item xs={12}>
-                    <Card variant="outlined" sx={{
-                      ...getCardStyles(),
-                      p: 3,
-                      mb: 3
-                    }}>
-                      <Typography variant="h6" gutterBottom sx={{ 
-                        color: theme.palette.text.primary,
-                        fontWeight: 600,
-                        mb: 2
-                      }}>
-                        Time & Timezone Settings
-                      </Typography>
-                      
-                      <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={6}>
-                          <FormControl fullWidth>
-                            <InputLabel sx={{ color: theme.palette.text.secondary }}>Timezone</InputLabel>
-                            <Select
-                              name="timezone"
-                              value={settings.timezone}
-                              onChange={handleChange}
-                              label="Timezone"
-                              sx={{
-                                color: theme.palette.text.primary,
-                                '& .MuiOutlinedInput-notchedOutline': {
-                                  borderColor: theme.palette.divider,
-                                },
-                                '&:hover .MuiOutlinedInput-notchedOutline': {
-                                  borderColor: theme.palette.primary.main,
-                                },
-                              }}
-                            >
-                              {timezoneOptions.map((option) => (
-                                <MenuItem key={option.value} value={option.value} sx={{ color: theme.palette.text.primary }}>
-                                  {option.label}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        
-                        <Grid item xs={12} md={6}>
-                  <Box sx={{ 
-                    p: 2, 
-                            background: alpha(theme.palette.primary.main, 0.08),
-                            borderRadius: theme.custom?.appearance === 'royal' ? '12px' : theme.custom?.appearance === 'classic' ? '6px' : '8px',
-                            border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`
-                          }}>
-                            <Typography variant="subtitle2" sx={{ 
-                              color: theme.palette.primary.main,
-                              fontWeight: 600,
-                              mb: 1
-                            }}>
-                              Current Time
-                            </Typography>
-                            <Typography variant="body1" sx={{ 
-                              color: theme.palette.text.primary,
-                              fontWeight: 500,
-                              mb: 0.5
-                            }}>
-                              {currentTime.toLocaleString('en-US', { 
-                                timeZone: settings.timezone,
-                                weekday: 'short',
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit'
-                              })}
-                            </Typography>
-                            <Typography variant="caption" sx={{ 
-                              color: theme.palette.text.secondary,
-                              fontSize: '0.75rem'
-                            }}>
-                              UTC: {currentTime.toLocaleString('en-US', { 
-                                timeZone: 'UTC',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                                hour12: false
-                              })} | Selected: {settings.timezone}
-                    </Typography>
-                  </Box>
-                        </Grid>
-                      </Grid>
-              </Card>
-            </Grid>
-                  
-                  {/* Application Settings Section */}
-                  <Grid item xs={12}>
-                    <Card variant="outlined" sx={{
-                      ...getCardStyles(),
-                      p: 3
-                    }}>
-                      <Typography variant="h6" gutterBottom sx={{ 
-                        color: theme.palette.text.primary,
-                        fontWeight: 600,
-                        mb: 2
-                      }}>
-                        Application Settings
-                      </Typography>
-                      
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-                          <FormControl fullWidth>
-                            <InputLabel sx={{ color: theme.palette.text.secondary }}>Default Landing Page</InputLabel>
-                            <Select
-                              name="landingPage"
-                              value={settings.landingPage}
-                              onChange={handleChange}
-                              label="Default Landing Page"
-                              sx={{
-                                color: theme.palette.text.primary,
-                                '& .MuiOutlinedInput-notchedOutline': {
-                                  borderColor: theme.palette.divider,
-                                },
-                                '&:hover .MuiOutlinedInput-notchedOutline': {
-                                  borderColor: theme.palette.primary.main,
-                                },
-                              }}
-                            >
-                              <MenuItem value="/dashboard" sx={{ color: theme.palette.text.primary }}>Dashboard</MenuItem>
-                              <MenuItem value="/quiz" sx={{ color: theme.palette.text.primary }}>Quiz Management</MenuItem>
-                              <MenuItem value="/students" sx={{ color: theme.palette.text.primary }}>Students</MenuItem>
-                              <MenuItem value="/teachers" sx={{ color: theme.palette.text.primary }}>Teachers</MenuItem>
-                            </Select>
-                          </FormControl>
-                          <Typography variant="body2" sx={{ 
-                            mt: 1, 
-                            color: theme.palette.text.secondary,
-                            fontSize: '0.85rem'
-                          }}>
-                            Choose which page to display when you first log in
-                          </Typography>
-                        </Grid>
-                        
-                        <Grid item xs={12} md={6}>
-                          <Box sx={{ 
-                            p: 2, 
-                            background: alpha(theme.palette.info.main, 0.08),
-                            borderRadius: theme.custom?.appearance === 'royal' ? '12px' : theme.custom?.appearance === 'classic' ? '6px' : '8px',
-                            border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`
-                          }}>
-                            <Typography variant="subtitle2" sx={{ 
-                              color: theme.palette.info.main,
-                              fontWeight: 600,
-                              mb: 1
-                            }}>
-                              Quick Info
-                            </Typography>
-                            <Typography variant="body2" sx={{ 
-                              color: theme.palette.text.secondary,
-                              fontSize: '0.85rem',
-                              lineHeight: 1.4
-                            }}>
-                              Your settings are automatically saved and synchronized across all your devices. 
-                              Changes take effect immediately.
-                            </Typography>
-                  </Box>
-                        </Grid>
-                      </Grid>
-                    </Card>
-                  </Grid>
-                </Grid>
-
-                <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button
-                    variant="contained"
-                    startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-                    onClick={handleSaveSettings}
-                    disabled={isSaving}
-                    sx={{
-                      background: theme.custom?.glassmorphism
-                        ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`
-                        : theme.palette.primary.main,
-                      backdropFilter: theme.custom?.glassmorphism ? 'blur(10px)' : 'none',
-                      boxShadow: theme.custom?.highContrast 
-                        ? 'none'
-                        : `0 4px 20px ${alpha(theme.palette.primary.main, 0.3)}`,
-                      px: { xs: 2, sm: 3 },
-                      py: { xs: 1, sm: 1.5 },
-                      fontSize: { xs: '0.875rem', sm: '1rem' },
-                      '&:hover': {
-                        background: theme.custom?.glassmorphism
-                          ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.9)} 0%, ${alpha(theme.palette.secondary.main, 0.9)} 100%)`
-                          : theme.palette.primary.dark,
-                      }
-                    }}
-                  >
-                    {isSaving ? 'Saving...' : 'Save Profile Changes'}
-                  </Button>
-                </Box>
-              </Box>
-            )}
-
-            {/* Notifications Tab */}
-            {tabValue === 2 && (
-              <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-                <Typography variant="h5" gutterBottom sx={{ 
-                  color: theme.palette.text.primary,
-                  fontWeight: theme.custom?.appearance === 'royal' ? 400 : 600,
-                  fontFamily: theme.custom?.appearance === 'royal' ? '"Playfair Display", serif' : 'inherit',
-                  mb: 3,
-                  fontSize: { xs: '1.5rem', sm: '1.75rem' }
-                }}>
-                  Notification Preferences
-                </Typography>
-                
-                <Card variant="outlined" sx={{
-                  ...getCardStyles(),
-                  p: { xs: 2, sm: 3 },
-                  mb: 3,
-                  transition: 'all 0.3s ease',
-                }}>
-                  <Typography variant="h6" gutterBottom sx={{ 
-                    color: theme.palette.text.primary,
-                    fontWeight: 600,
-                    mb: 2,
-                    fontSize: { xs: '1rem', sm: '1.25rem' },
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1
-                  }}>
-                    <NotificationsActiveIcon color="primary" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />
-                    Communication Settings
-                  </Typography>
-                  
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} lg={6}>
-                      <Box sx={{ 
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 2,
-                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                        background: alpha(theme.palette.primary.main, 0.05),
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.08),
-                          transform: 'translateY(-2px)',
-                        }
-                      }}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={settings.emailNotifications}
-                          onChange={handleChange}
-                          name="emailNotifications"
-                              color="primary"
-                              sx={{
-                                '& .MuiSwitch-switchBase.Mui-checked': {
-                                  color: theme.palette.primary.main,
-                                },
-                                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                  backgroundColor: alpha(theme.palette.primary.main, 0.5),
-                                },
-                              }}
-                        />
-                      }
-                      label={
-                            <Box sx={{ ml: 1, minWidth: 0, flex: 1 }}>
-                              <Typography variant="subtitle1" sx={{ 
-                                color: theme.palette.text.primary,
-                                fontWeight: 500,
-                                mb: 0.5,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                                flexWrap: 'wrap'
-                              }}>
-                                <EmailIcon fontSize="small" color={settings.emailNotifications ? "primary" : "action"} />
-                                <span style={{ 
-                                  wordBreak: 'break-word',
-                                  fontSize: isMobile ? '0.9rem' : '1rem'
-                                }}>
-                          Email Notifications
-                                </span>
-                                {settings.emailNotifications && (
-                                  <Chip 
-                                    label="Active" 
-                                    size="small"
-                                    sx={{ 
-                                      backgroundColor: theme.palette.primary.main,
-                                      color: theme.palette.primary.contrastText,
-                                      fontSize: '0.7rem',
-                                      fontWeight: 500,
-                                      ml: { xs: 0, sm: 'auto' }
-                                    }}
-                                  />
-                                )}
-                              </Typography>
-                              <Typography variant="body2" sx={{ 
-                                color: theme.palette.text.secondary,
-                                fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                                lineHeight: 1.4
-                              }}>
-                                Receive important updates and notifications via email
-                              </Typography>
-                        </Box>
-                      }
-                          sx={{ 
-                            m: 0,
-                            width: '100%',
-                            alignItems: 'flex-start',
-                            display: 'flex',
-                            flexDirection: { xs: 'column', sm: 'row' },
-                            gap: { xs: 1, sm: 0 }
-                          }}
-                        />
-                      </Box>
-                    </Grid>
-                    
-                    <Grid item xs={12} lg={6}>
-                      <Box sx={{ 
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 2,
-                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                        background: alpha(theme.palette.primary.main, 0.05),
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.08),
-                          transform: 'translateY(-2px)',
-                        }
-                      }}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={settings.pushNotifications}
-                          onChange={handleChange}
-                          name="pushNotifications"
-                              color="primary"
-                              sx={{
-                                '& .MuiSwitch-switchBase.Mui-checked': {
-                                  color: theme.palette.primary.main,
-                                },
-                                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                  backgroundColor: alpha(theme.palette.primary.main, 0.5),
-                                },
-                              }}
-                        />
-                      }
-                      label={
-                            <Box sx={{ ml: 1, minWidth: 0, flex: 1 }}>
-                              <Typography variant="subtitle1" sx={{ 
-                                color: theme.palette.text.primary,
-                                fontWeight: 500,
-                                mb: 0.5,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                                flexWrap: 'wrap'
-                              }}>
-                                <NotificationsIcon fontSize="small" color={settings.pushNotifications ? "primary" : "action"} />
-                                <span style={{ 
-                                  wordBreak: 'break-word',
-                                  fontSize: isMobile ? '0.9rem' : '1rem'
-                                }}>
-                          Push Notifications
-                                </span>
-                                {settings.pushNotifications && (
-                                  <Chip 
-                                    label="Active" 
-                                    size="small"
-                                    sx={{ 
-                                      backgroundColor: theme.palette.primary.main,
-                                      color: theme.palette.primary.contrastText,
-                                      fontSize: '0.7rem',
-                                      fontWeight: 500,
-                                      ml: { xs: 0, sm: 'auto' }
-                                    }}
-                                  />
-                                )}
-                              </Typography>
-                              <Typography variant="body2" sx={{ 
-                                color: theme.palette.text.secondary,
-                                fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                                lineHeight: 1.4
-                              }}>
-                                Receive instant notifications in your browser
-                              </Typography>
-                        </Box>
-                      }
-                          sx={{ 
-                            m: 0,
-                            width: '100%',
-                            alignItems: 'flex-start',
-                            display: 'flex',
-                            flexDirection: { xs: 'column', sm: 'row' },
-                            gap: { xs: 1, sm: 0 }
-                          }}
-                        />
-                      </Box>
-                    </Grid>
-                  </Grid>
-                  
-                  <Divider sx={{ my: 3, borderColor: alpha(theme.palette.divider, 0.7) }} />
-                  
-                  <Typography variant="h6" gutterBottom sx={{ 
-                    color: theme.palette.text.primary,
-                    fontWeight: 600,
-                    mb: 2,
-                    fontSize: { xs: '1rem', sm: '1.25rem' },
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1
-                  }}>
-                    <EventNoteIcon color="primary" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />
-                    Activity Notifications
-                  </Typography>
-                  
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} lg={6}>
-                      <Box sx={{ 
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 2,
-                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                        background: alpha(theme.palette.primary.main, 0.05),
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.08),
-                          transform: 'translateY(-2px)',
-                        }
-                      }}>
-                        <FormControlLabel
-                          control={
-                            <Switch 
-                              checked={settings.quizReminders} 
-                              onChange={handleChange} 
-                              name="quizReminders"
-                              color="primary"
-                              sx={{
-                                '& .MuiSwitch-switchBase.Mui-checked': {
-                                  color: theme.palette.primary.main,
-                                },
-                                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                  backgroundColor: alpha(theme.palette.primary.main, 0.5),
-                                },
-                              }}
-                            />
-                          }
-                          label={
-                            <Box sx={{ ml: 1, minWidth: 0, flex: 1 }}>
-                              <Typography variant="subtitle1" sx={{ 
-                                color: theme.palette.text.primary,
-                                fontWeight: 500,
-                                mb: 0.5,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                                flexWrap: 'wrap'
-                              }}>
-                                <QuizIcon fontSize="small" color={settings.quizReminders ? "primary" : "action"} />
-                                <span style={{ 
-                                  wordBreak: 'break-word',
-                                  fontSize: isMobile ? '0.9rem' : '1rem'
-                                }}>
-                                  Quiz Reminders
-                                </span>
-                                {settings.quizReminders && (
-                                  <Chip 
-                                    label="Active" 
-                                    size="small"
-                                    sx={{ 
-                                      backgroundColor: theme.palette.primary.main,
-                                      color: theme.palette.primary.contrastText,
-                                      fontSize: '0.7rem',
-                                      fontWeight: 500,
-                                      ml: { xs: 0, sm: 'auto' }
-                                    }}
-                                  />
-                                )}
-                              </Typography>
-                              <Typography variant="body2" sx={{ 
-                                color: theme.palette.text.secondary,
-                                fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                                lineHeight: 1.4
-                              }}>
-                                Get notified about upcoming quizzes and deadlines
-                              </Typography>
-                            </Box>
-                          }
-                          sx={{ 
-                            m: 0,
-                            width: '100%',
-                            alignItems: 'flex-start',
-                            display: 'flex',
-                            flexDirection: { xs: 'column', sm: 'row' },
-                            gap: { xs: 1, sm: 0 }
-                          }}
-                        />
-                      </Box>
-                    </Grid>
-                    
-                    <Grid item xs={12} lg={6}>
-                      <Box sx={{ 
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 2,
-                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                        background: alpha(theme.palette.primary.main, 0.05),
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.08),
-                          transform: 'translateY(-2px)',
-                        }
-                      }}>
-                        <FormControlLabel
-                          control={
-                            <Switch 
-                              checked={settings.gradeNotifications} 
-                              onChange={handleChange} 
-                              name="gradeNotifications"
-                              color="primary"
-                              sx={{
-                                '& .MuiSwitch-switchBase.Mui-checked': {
-                                  color: theme.palette.primary.main,
-                                },
-                                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                                  backgroundColor: alpha(theme.palette.primary.main, 0.5),
-                                },
-                              }}
-                            />
-                          }
-                          label={
-                            <Box sx={{ ml: 1, minWidth: 0, flex: 1 }}>
-                              <Typography variant="subtitle1" sx={{ 
-                                color: theme.palette.text.primary,
-                                fontWeight: 500,
-                                mb: 0.5,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                                flexWrap: 'wrap'
-                              }}>
-                                <GradingIcon fontSize="small" color={settings.gradeNotifications ? "primary" : "action"} />
-                                <span style={{ 
-                                  wordBreak: 'break-word',
-                                  fontSize: isMobile ? '0.9rem' : '1rem'
-                                }}>
-                                  Grade Notifications
-                                </span>
-                                {settings.gradeNotifications && (
-                                  <Chip 
-                                    label="Active" 
-                                    size="small"
-                                    sx={{ 
-                                      backgroundColor: theme.palette.primary.main,
-                                      color: theme.palette.primary.contrastText,
-                                      fontSize: '0.7rem',
-                                      fontWeight: 500,
-                                      ml: { xs: 0, sm: 'auto' }
-                                    }}
-                                  />
-                                )}
-                              </Typography>
-                              <Typography variant="body2" sx={{ 
-                                color: theme.palette.text.secondary,
-                                fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                                lineHeight: 1.4
-                              }}>
-                                Get notified when grades are posted or updated
-                              </Typography>
-                            </Box>
-                          }
-                          sx={{ 
-                            m: 0,
-                            width: '100%',
-                            alignItems: 'flex-start',
-                            display: 'flex',
-                            flexDirection: { xs: 'column', sm: 'row' },
-                            gap: { xs: 1, sm: 0 }
-                          }}
-                        />
-                      </Box>
-                    </Grid>
-                  </Grid>
-                  
-                  <Divider sx={{ my: 3, borderColor: alpha(theme.palette.divider, 0.7) }} />
-                  
-                  <Box sx={{ mt: 3 }}>
-                    <Typography variant="subtitle1" gutterBottom sx={{ 
-                      color: theme.palette.text.primary,
-                      fontWeight: 600,
-                      mb: 2,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                      fontSize: { xs: '1rem', sm: '1.125rem' }
-                    }}>
-                      <AccessTimeIcon color="primary" fontSize="small" />
-                      Notification Frequency
-                    </Typography>
-                    
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} md={8} lg={6}>
-                        <FormControl 
-                          fullWidth 
-                          variant="outlined" 
-                          size={isMobile ? "small" : "medium"}
-                        >
-                          <InputLabel sx={{ color: theme.palette.text.secondary }}>Notification Frequency</InputLabel>
-                          <Select
-                            name="notificationFrequency"
-                            value={settings.notificationFrequency}
-                            onChange={handleChange}
-                            label="Notification Frequency"
-                            sx={{
-                              color: theme.palette.text.primary,
-                              '& .MuiOutlinedInput-notchedOutline': {
-                                borderColor: theme.palette.divider,
-                              },
-                              '&:hover .MuiOutlinedInput-notchedOutline': {
-                                borderColor: theme.palette.primary.main,
-                              },
-                              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                                borderColor: theme.palette.primary.main,
-                                borderWidth: 2,
-                              },
-                            }}
-                          >
-                            <MenuItem value="instant" sx={{ color: theme.palette.text.primary, py: 1.5 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                                <NotificationsActiveIcon fontSize="small" />
-                                <Box sx={{ flex: 1, minWidth: 0 }}>
-                                  <Typography variant="body1" sx={{ fontWeight: 500 }}>Instant</Typography>
-                                  <Typography variant="caption" sx={{ 
-                                    color: theme.palette.text.secondary,
-                                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                                    lineHeight: 1.2,
-                                    display: 'block'
-                                  }}>
-                                    Receive notifications immediately
-                                  </Typography>
-                                </Box>
-                                {settings.notificationFrequency === 'instant' && (
-                                  <Chip 
-                                    label="Active" 
-                                    size="small"
-                                    sx={{ 
-                                      backgroundColor: theme.palette.primary.main,
-                                      color: theme.palette.primary.contrastText,
-                                      fontSize: '0.6rem',
-                                      fontWeight: 500
-                                    }}
-                                  />
-                                )}
-                              </Box>
-                            </MenuItem>
-                            <MenuItem value="daily" sx={{ color: theme.palette.text.primary, py: 1.5 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                                <TodayIcon fontSize="small" />
-                                <Box sx={{ flex: 1, minWidth: 0 }}>
-                                  <Typography variant="body1" sx={{ fontWeight: 500 }}>Daily Digest</Typography>
-                                  <Typography variant="caption" sx={{ 
-                                    color: theme.palette.text.secondary,
-                                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                                    lineHeight: 1.2,
-                                    display: 'block'
-                                  }}>
-                                    Receive a summary once per day
-                                  </Typography>
-                                </Box>
-                                {settings.notificationFrequency === 'daily' && (
-                                  <Chip 
-                                    label="Active" 
-                                    size="small"
-                                    sx={{ 
-                                      backgroundColor: theme.palette.primary.main,
-                                      color: theme.palette.primary.contrastText,
-                                      fontSize: '0.6rem',
-                                      fontWeight: 500
-                                    }}
-                                  />
-                                )}
-                              </Box>
-                            </MenuItem>
-                            <MenuItem value="weekly" sx={{ color: theme.palette.text.primary, py: 1.5 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                                <DateRangeIcon fontSize="small" />
-                                <Box sx={{ flex: 1, minWidth: 0 }}>
-                                  <Typography variant="body1" sx={{ fontWeight: 500 }}>Weekly Summary</Typography>
-                                  <Typography variant="caption" sx={{ 
-                                    color: theme.palette.text.secondary,
-                                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                                    lineHeight: 1.2,
-                                    display: 'block'
-                                  }}>
-                                    Receive a summary once per week
-                                  </Typography>
-                                </Box>
-                                {settings.notificationFrequency === 'weekly' && (
-                                  <Chip 
-                                    label="Active" 
-                                    size="small"
-                                    sx={{ 
-                                      backgroundColor: theme.palette.primary.main,
-                                      color: theme.palette.primary.contrastText,
-                                      fontSize: '0.6rem',
-                                      fontWeight: 500
-                                    }}
-                                  />
-                                )}
-                              </Box>
-                            </MenuItem>
-                            <MenuItem value="none" sx={{ color: theme.palette.text.primary, py: 1.5 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                                <NotificationsOffIcon fontSize="small" />
-                                <Box sx={{ flex: 1, minWidth: 0 }}>
-                                  <Typography variant="body1" sx={{ fontWeight: 500 }}>None</Typography>
-                                  <Typography variant="caption" sx={{ 
-                                    color: theme.palette.text.secondary,
-                                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                                    lineHeight: 1.2,
-                                    display: 'block'
-                                  }}>
-                                    Don't send notifications
-                                  </Typography>
-                                </Box>
-                                {settings.notificationFrequency === 'none' && (
-                                  <Chip 
-                                    label="Active" 
-                                    size="small"
-                                    sx={{ 
-                                      backgroundColor: theme.palette.primary.main,
-                                      color: theme.palette.primary.contrastText,
-                                      fontSize: '0.6rem',
-                                      fontWeight: 500
-                                    }}
-                                  />
-                                )}
-                              </Box>
-                            </MenuItem>
-                          </Select>
-                        </FormControl>
-                      </Grid>
-                      <Grid item xs={12} md={4} lg={6}>
-                        <Box sx={{ 
-                          p: { xs: 1.5, sm: 2 }, 
-                          background: alpha(theme.palette.info.main, 0.05),
-                          borderRadius: 2,
-                          border: `1px solid ${alpha(theme.palette.info.main, 0.1)}`,
-                          height: 'fit-content',
-                          mt: { xs: 0, md: 0 }
-                        }}>
-                          <Typography variant="caption" sx={{ 
-                            color: theme.palette.info.main,
-                            fontWeight: 600,
-                            fontSize: { xs: '0.75rem', sm: '0.8rem' },
-                            display: 'block',
-                            mb: 0.5
-                          }}>
-                            Current Setting
-                          </Typography>
-                          <Typography variant="body2" sx={{ 
-                            color: theme.palette.text.secondary,
-                            fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                            lineHeight: 1.3
-                          }}>
-                            {settings.notificationFrequency === 'instant' && 'You will receive notifications immediately when events occur.'}
-                            {settings.notificationFrequency === 'daily' && 'You will receive a daily summary of all notifications.'}
-                            {settings.notificationFrequency === 'weekly' && 'You will receive a weekly summary of all notifications.'}
-                            {settings.notificationFrequency === 'none' && 'You will not receive any notifications.'}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                    </Grid>
-                  </Box>
-                </Card>
-
-                <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button
-                    variant="contained"
-                    startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-                    onClick={handleSaveSettings}
-                    disabled={isSaving}
-                    sx={{
-                      background: theme.custom?.glassmorphism
-                        ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`
-                        : theme.palette.primary.main,
-                      backdropFilter: theme.custom?.glassmorphism ? 'blur(10px)' : 'none',
-                      boxShadow: theme.custom?.highContrast 
-                        ? 'none'
-                        : `0 4px 20px ${alpha(theme.palette.primary.main, 0.3)}`,
-                      px: { xs: 2, sm: 3 },
-                      py: { xs: 1, sm: 1.5 },
-                      fontSize: { xs: '0.875rem', sm: '1rem' },
-                      '&:hover': {
-                        background: theme.custom?.glassmorphism
-                          ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.9)} 0%, ${alpha(theme.palette.secondary.main, 0.9)} 100%)`
-                          : theme.palette.primary.dark,
-                      }
-                    }}
-                  >
-                    {isSaving ? 'Saving...' : 'Save Notification Settings'}
-                  </Button>
-                </Box>
-              </Box>
-            )}
-            
-            {/* Appearance Tab */}
-            <TabPanel value={tabValue} index={3}>
-              <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-                <Typography variant="h5" sx={{ 
-                  mb: 3,
-                  color: theme.palette.text.primary,
-                  fontWeight: theme.custom?.appearance === 'royal' ? 400 : 600,
-                  fontFamily: theme.custom?.appearance === 'royal' ? '"Playfair Display", serif' : 'inherit',
-                  fontSize: { xs: '1.5rem', sm: '1.75rem' }
-                }}>
-                  Appearance Settings
-                </Typography>
-                
-                {/* Theme Mode Settings */}
-                <Card variant="outlined" sx={{
-                  ...getCardStyles(),
-                  p: { xs: 2, sm: 3 },
-                  mb: 3,
-                  transition: 'all 0.3s ease',
-                }}>
-                  <Typography variant="h6" gutterBottom sx={{ 
-                    color: theme.palette.text.primary,
-                    fontWeight: 600,
-                    mb: 2,
-                    fontSize: { xs: '1rem', sm: '1.25rem' },
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1
-                  }}>
-                    <StyleIcon color="primary" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />
-                    Theme Mode
-                  </Typography>
-                  
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
-                      <Box sx={{ 
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 2,
-                        border: `1px solid ${mode === 'light' ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.1)}`,
-                        background: mode === 'light' ? alpha(theme.palette.primary.main, 0.05) : alpha(theme.palette.primary.main, 0.02),
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer',
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.08),
-                          transform: 'translateY(-2px)',
-                        }
-                      }}
-                      onClick={mode === 'light' ? undefined : toggleMode}
-                      >
-                        <Box sx={{ 
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          width: '100%'
-                        }}>
-                          <LightModeIcon sx={{ 
-                            color: mode === 'light' ? theme.palette.primary.main : theme.palette.text.secondary,
-                            fontSize: '2rem'
-                          }} />
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="subtitle1" sx={{ 
-                              color: theme.palette.text.primary,
-                              fontWeight: 500,
-                              mb: 0.5,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1
-                            }}>
-                              Light Mode
-                              {mode === 'light' && (
-                                <Chip 
-                                  label="Active" 
-                                  size="small"
-                                  sx={{ 
-                                    backgroundColor: theme.palette.primary.main,
-                                    color: theme.palette.primary.contrastText,
-                                    fontSize: '0.7rem',
-                                    fontWeight: 500
-                                  }}
-                                />
-                              )}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                              Clean and bright interface for daytime use
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Grid>
-                    
-                    <Grid item xs={12} md={6}>
-                      <Box sx={{ 
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 2,
-                        border: `1px solid ${mode === 'dark' ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.1)}`,
-                        background: mode === 'dark' ? alpha(theme.palette.primary.main, 0.05) : alpha(theme.palette.primary.main, 0.02),
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer',
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.08),
-                          transform: 'translateY(-2px)',
-                        }
-                      }}
-                      onClick={mode === 'dark' ? undefined : toggleMode}
-                      >
-                        <Box sx={{ 
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          width: '100%'
-                        }}>
-                          <DarkModeIcon sx={{ 
-                            color: mode === 'dark' ? theme.palette.primary.main : theme.palette.text.secondary,
-                            fontSize: '2rem'
-                          }} />
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="subtitle1" sx={{ 
-                              color: theme.palette.text.primary,
-                              fontWeight: 500,
-                              mb: 0.5,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1
-                            }}>
-                              Dark Mode
-                              {mode === 'dark' && (
-                                <Chip 
-                                  label="Active" 
-                                  size="small"
-                                  sx={{ 
-                                    backgroundColor: theme.palette.primary.main,
-                                    color: theme.palette.primary.contrastText,
-                                    fontSize: '0.7rem',
-                                    fontWeight: 500
-                                  }}
-                                />
-                              )}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                              Easy on the eyes for nighttime or low-light use
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Grid>
-                  </Grid>
-
-                  <Divider sx={{ my: 3, borderColor: alpha(theme.palette.divider, 0.7) }} />
-
-                  <Box sx={{ 
-                    p: 2,
-                    borderRadius: 2,
-                    border: `1px solid ${highContrast ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.1)}`,
-                    background: highContrast ? alpha(theme.palette.primary.main, 0.05) : alpha(theme.palette.primary.main, 0.02),
-                    transition: 'all 0.2s ease',
-                    '&:hover': {
-                      background: alpha(theme.palette.primary.main, 0.08),
-                      transform: 'translateY(-2px)',
-                    }
-                  }}>
-                    <FormControlLabel
-                      control={
-                        <Switch 
-                          checked={highContrast} 
-                          onChange={toggleHighContrast}
-                          color="primary"
-                          sx={{
-                            '& .MuiSwitch-switchBase.Mui-checked': {
-                              color: theme.palette.primary.main,
-                            },
-                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                              backgroundColor: alpha(theme.palette.primary.main, 0.5),
-                            },
-                          }}
-                        />
-                      }
-                      label={
-                        <Box sx={{ ml: 1 }}>
-                          <Typography variant="subtitle1" sx={{ 
-                            color: theme.palette.text.primary,
-                            fontWeight: 500,
-                            mb: 0.5,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1
-                          }}>
-                            <ContrastIcon fontSize="small" color={highContrast ? "primary" : "action"} />
-                            High Contrast Mode
-                            {highContrast && (
-                              <Chip 
-                                label="Active" 
-                                size="small"
-                                sx={{ 
-                                  backgroundColor: theme.palette.primary.main,
-                                  color: theme.palette.primary.contrastText,
-                                  fontSize: '0.7rem',
-                                  fontWeight: 500
-                                }}
-                              />
-                            )}
-                          </Typography>
-                          <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                            Enhanced contrast for better accessibility and readability
-                          </Typography>
-                        </Box>
-                      }
-                      sx={{ 
-                        m: 0,
-                        width: '100%',
-                        alignItems: 'flex-start',
-                      }}
-                    />
-                  </Box>
-                </Card>
-
-                {/* Visual Style Settings */}
-                <Card variant="outlined" sx={{
-                  ...getCardStyles(),
-                  p: { xs: 2, sm: 3 },
-                  mb: 3,
-                  transition: 'all 0.3s ease',
-                }}>
-                  <Typography variant="h6" gutterBottom sx={{ 
-                    color: theme.palette.text.primary,
-                    fontWeight: 600,
-                    mb: 2,
-                    fontSize: { xs: '1rem', sm: '1.25rem' },
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1
-                  }}>
-                    <PaletteIcon color="primary" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />
-                    Visual Style
-                  </Typography>
-                  
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={4}>
-                      <Box sx={{ 
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 2,
-                        border: `1px solid ${appearance === 'modern' ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.1)}`,
-                        background: appearance === 'modern' ? alpha(theme.palette.primary.main, 0.05) : alpha(theme.palette.primary.main, 0.02),
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer',
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.08),
-                          transform: 'translateY(-2px)',
-                        }
-                      }}
-                      onClick={() => appearance !== 'modern' && changeAppearance('modern')}
-                      >
-                        <Box sx={{ 
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          width: '100%'
-                        }}>
-                          <Box 
-                            sx={{ 
-                              width: 50, 
-                              height: 40, 
-                              borderRadius: 2,
-                              background: 'linear-gradient(135deg, #4ecdc4 0%, #7877c6 100%)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }} 
-                          >
-                            <StyleIcon sx={{ color: 'white', fontSize: '1.2rem' }} />
-                          </Box>
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="subtitle1" sx={{ 
-                              color: theme.palette.text.primary,
-                              fontWeight: 500,
-                              mb: 0.5,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1
-                            }}>
-                              Modern Style
-                              {appearance === 'modern' && (
-                                <Chip 
-                                  label="Active" 
-                                  size="small"
-                                  sx={{ 
-                                    backgroundColor: theme.palette.primary.main,
-                                    color: theme.palette.primary.contrastText,
-                                    fontSize: '0.7rem',
-                                    fontWeight: 500
-                                  }}
-                                />
-                              )}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                              Contemporary design with glassmorphism effects
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Grid>
-                    
-                    <Grid item xs={12} md={4}>
-                      <Box sx={{ 
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 2,
-                        border: `1px solid ${appearance === 'classic' ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.1)}`,
-                        background: appearance === 'classic' ? alpha(theme.palette.primary.main, 0.05) : alpha(theme.palette.primary.main, 0.02),
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer',
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.08),
-                          transform: 'translateY(-2px)',
-                        }
-                      }}
-                      onClick={() => appearance !== 'classic' && changeAppearance('classic')}
-                      >
-                        <Box sx={{ 
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          width: '100%'
-                        }}>
-                          <Box 
-                            sx={{ 
-                              width: 50, 
-                              height: 40, 
-                              borderRadius: 1,
-                              background: 'linear-gradient(135deg, #1976d2 0%, #dc004e 100%)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }} 
-                          >
-                            <StyleIcon sx={{ color: 'white', fontSize: '1.2rem' }} />
-                          </Box>
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="subtitle1" sx={{ 
-                              color: theme.palette.text.primary,
-                              fontWeight: 500,
-                              mb: 0.5,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1
-                            }}>
-                              Classic Style
-                              {appearance === 'classic' && (
-                                <Chip 
-                                  label="Active" 
-                                  size="small"
-                                  sx={{ 
-                                    backgroundColor: theme.palette.primary.main,
-                                    color: theme.palette.primary.contrastText,
-                                    fontSize: '0.7rem',
-                                    fontWeight: 500
-                                  }}
-                                />
-                              )}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                              Traditional design with clean lines and familiar patterns
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Grid>
-                    
-                    <Grid item xs={12} md={4}>
-                      <Box sx={{ 
-                        mb: 2,
-                        p: 2,
-                        borderRadius: 2,
-                        border: `1px solid ${appearance === 'royal' ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.1)}`,
-                        background: appearance === 'royal' ? alpha(theme.palette.primary.main, 0.05) : alpha(theme.palette.primary.main, 0.02),
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer',
-                        '&:hover': {
-                          background: alpha(theme.palette.primary.main, 0.08),
-                          transform: 'translateY(-2px)',
-                        }
-                      }}
-                      onClick={() => appearance !== 'royal' && changeAppearance('royal')}
-                      >
-                        <Box sx={{ 
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          width: '100%'
-                        }}>
-                          <Box 
-                            sx={{ 
-                              width: 50, 
-                              height: 40, 
-                              borderRadius: 3,
-                              background: 'linear-gradient(135deg, #673ab7 0%, #ff9800 100%)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }} 
-                          >
-                            <StyleIcon sx={{ color: 'white', fontSize: '1.2rem' }} />
-                          </Box>
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="subtitle1" sx={{ 
-                              color: theme.palette.text.primary,
-                              fontWeight: 500,
-                              mb: 0.5,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1
-                            }}>
-                              Royal Style
-                              {appearance === 'royal' && (
-                                <Chip 
-                                  label="Active" 
-                                  size="small"
-                                  sx={{ 
-                                    backgroundColor: theme.palette.primary.main,
-                                    color: theme.palette.primary.contrastText,
-                                    fontSize: '0.7rem',
-                                    fontWeight: 500
-                                  }}
-                                />
-                              )}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
-                              Elegant and sophisticated design with premium typography
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Card>
-
-                <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button
-                    variant="contained"
-                    startIcon={<SaveIcon />}
-                    onClick={handleSaveSettings}
-                    sx={{
-                      background: theme.custom?.glassmorphism
-                        ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`
-                        : theme.palette.primary.main,
-                      backdropFilter: theme.custom?.glassmorphism ? 'blur(10px)' : 'none',
-                      boxShadow: theme.custom?.highContrast 
-                        ? 'none'
-                        : `0 4px 20px ${alpha(theme.palette.primary.main, 0.3)}`,
-                      px: { xs: 2, sm: 3 },
-                      py: { xs: 1, sm: 1.5 },
-                      fontSize: { xs: '0.875rem', sm: '1rem' },
-                      '&:hover': {
-                        background: theme.custom?.glassmorphism
-                          ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.9)} 0%, ${alpha(theme.palette.secondary.main, 0.9)} 100%)`
-                          : theme.palette.primary.dark,
-                      }
-                    }}
-                  >
-                    Save Appearance Settings
-                  </Button>
-                </Box>
-              </Box>
+          <Box>
+            <TabPanel value={tabValue} index={0}>
+              <BillingSettings 
+                  currentPlan={currentPlan}
+                  onPlanChange={setCurrentPlan}
+                  billingHistory={billingHistory}
+                  cardStyles={getCardStyles()}
+                  isMobile={isMobile}
+                  settings={settings}
+                  handleChange={handleChange}
+              />
             </TabPanel>
-            
-            {/* Security Tab */}
+            <TabPanel value={tabValue} index={1}>
+              <GeneralSettings 
+                settings={settings} 
+                handleChange={handleChange} 
+                profileImage={profileImage}
+                handleProfileImageChange={handleProfileImageChange}
+                cardStyles={getCardStyles()}
+                isLoading={isLoading}
+                showBasicReadonlyFields={showBasicReadonlyFields}
+              />
+            </TabPanel>
+            <TabPanel value={tabValue} index={2}>
+              <NotificationSettings 
+                settings={settings}
+                handleChange={handleChange}
+                cardStyles={getCardStyles()}
+              />
+            </TabPanel>
+            <TabPanel value={tabValue} index={3}>
+              <AppearanceSettings 
+                mode={mode}
+                toggleMode={toggleMode}
+                appearance={appearance}
+                changeAppearance={changeAppearance}
+                highContrast={highContrast}
+                toggleHighContrast={toggleHighContrast}
+                cardStyles={getCardStyles()}
+              />
+            </TabPanel>
             <TabPanel value={tabValue} index={4}>
-              <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-                <Typography variant="h5" sx={{ 
-                  mb: 3,
-                  color: theme.palette.text.primary,
-                  fontWeight: theme.custom?.appearance === 'royal' ? 400 : 600,
-                  fontFamily: theme.custom?.appearance === 'royal' ? '"Playfair Display", serif' : 'inherit',
-                  fontSize: { xs: '1.5rem', sm: '1.75rem' }
-                }}>
-                  Security Settings
-                </Typography>
-                
-                <Grid container spacing={3}>
-                  <Grid item xs={12} md={6}>
-                    <Card variant="outlined" sx={{ 
-                      ...getCardStyles(),
-                      p: { xs: 2, sm: 3 },
-                      mb: { xs: 2, sm: 0 },
-                    }}>
-                      <Typography variant="h6" gutterBottom sx={{ 
-                        color: theme.palette.text.primary,
-                        fontWeight: 600,
-                        mb: 2,
-                        fontSize: { xs: '1rem', sm: '1.25rem' },
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1
-                      }}>
-                        <VpnKeyIcon color="primary" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />
-                        Password Management
-                      </Typography>
-                      
-                      <Button 
-                        variant="outlined" 
-                        fullWidth
-                        sx={{ 
-                          mb: 2,
-                          p: 1.5,
-                          justifyContent: 'flex-start',
-                          color: theme.palette.text.primary,
-                          borderColor: theme.palette.divider,
-                          '&:hover': {
-                            borderColor: theme.palette.primary.main,
-                            background: alpha(theme.palette.primary.main, 0.05),
-                          }
-                        }}
-                      >
-                        Change Password
-                      </Button>
-                      
-                      <Button 
-                        variant="outlined" 
-                        fullWidth
-                        sx={{ 
-                          mb: 2,
-                          p: 1.5,
-                          justifyContent: 'flex-start',
-                          color: theme.palette.text.primary,
-                          borderColor: theme.palette.divider,
-                          '&:hover': {
-                            borderColor: theme.palette.primary.main,
-                            background: alpha(theme.palette.primary.main, 0.05),
-                          }
-                        }}
-                      >
-                        Set Up Two-Factor Authentication
-                      </Button>
-                      
-                      <Button 
-                        variant="outlined" 
-                        fullWidth
-                        sx={{ 
-                          p: 1.5,
-                          justifyContent: 'flex-start',
-                          color: theme.palette.text.primary,
-                          borderColor: theme.palette.divider,
-                          '&:hover': {
-                            borderColor: theme.palette.primary.main,
-                            background: alpha(theme.palette.primary.main, 0.05),
-                          }
-                        }}
-                      >
-                        Manage Device Sessions
-                      </Button>
-                    </Card>
-                  </Grid>
-                  
-                  <Grid item xs={12} md={6}>
-                    <Card variant="outlined" sx={{ 
-                      ...getCardStyles(),
-                      p: { xs: 2, sm: 3 },
-                    }}>
-                      <Typography variant="h6" gutterBottom sx={{ 
-                        color: theme.palette.text.primary,
-                        fontWeight: 600,
-                        mb: 2,
-                        fontSize: { xs: '1rem', sm: '1.25rem' },
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1
-                      }}>
-                        <ShieldOutlinedIcon color="primary" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }} />
-                        Account Protection
-                      </Typography>
-                      
-                      <Alert severity="info" sx={{ mb: 2 }}>
-                        Regular password changes help keep your account secure.
-                      </Alert>
-                      
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="body2" paragraph sx={{ color: theme.palette.text.secondary }}>
-                          Your data is protected with industry-standard encryption and secure practices.
-                        </Typography>
-                      </Box>
-                      
-                      <Divider sx={{ my: 2 }} />
-                      
-                      <Typography variant="subtitle2" sx={{ 
-                        color: '#ff5252', 
-                        fontWeight: 500,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        mb: 1
-                      }}>
-                        <DeleteForeverIcon sx={{ fontSize: '1rem' }} />
-                        Danger Zone
-                      </Typography>
-                      
-                      <Button
-                        color="error"
-                        variant="outlined"
-                        fullWidth
-                        onClick={() => setConfirmOpen(true)}
-                        sx={{
-                          borderColor: alpha('#ff5252', 0.5),
-                          '&:hover': {
-                            borderColor: '#ff5252',
-                            background: alpha('#ff5252', 0.05),
-                          }
-                        }}
-                      >
-                        Delete Account
-                      </Button>
-                    </Card>
-                  </Grid>
-                </Grid>
-                
-                {/* Confirmation Dialog */}
-                <Dialog
-                  open={isConfirmOpen}
-                  onClose={() => setConfirmOpen(false)}
-                  aria-labelledby="alert-dialog-title"
-                  aria-describedby="alert-dialog-description"
-                >
-                  <DialogTitle id="alert-dialog-title">
-                    {"Are you sure you want to delete your account?"}
-                  </DialogTitle>
-                  <DialogContent>
-                    <DialogContentText id="alert-dialog-description">
-                      This will permanently delete your account and all associated data. 
-                      This action cannot be undone.
-                    </DialogContentText>
-                  </DialogContent>
-                  <DialogActions>
-                    <Button onClick={() => setConfirmOpen(false)} autoFocus>Cancel</Button>
-                    <Button onClick={handleDeleteAccount} color="error">
-                      Delete Permanently
-                    </Button>
-                  </DialogActions>
-                </Dialog>
-              </Box>
+              <SecuritySettings 
+                settings={settings}
+                handleChange={handleChange}
+                onOpenConfirm={() => setConfirmOpen(true)}
+                cardStyles={getCardStyles()}
+              />
+            </TabPanel>
+            <TabPanel value={tabValue} index={5}>
+              <RegionSettings 
+                settings={settings}
+                handleChange={handleChange}
+                timezoneOptions={timezoneOptions}
+                currentTime={currentTime}
+                cardStyles={getCardStyles()}
+              />
             </TabPanel>
           </Box>
         </Container>
       </Box>
+      
+      {/* Error Alert */}
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ 
+            m: 2, 
+            display: 'flex', 
+            alignItems: 'center',
+            '& .MuiAlert-icon': {
+              fontSize: '1.5rem'
+            }
+          }}
+          onClose={() => setError(null)}
+        >
+          <Typography variant="body1">{error}</Typography>
+        </Alert>
+      )}
+      
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={isConfirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">
+          {"Are you sure you want to delete your account?"}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description">
+            This will permanently delete your account and all associated data. 
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)} color="primary">Cancel</Button>
+          <Button onClick={handleDeleteAccount} color="error">Delete My Account</Button>
+        </DialogActions>
+      </Dialog>
     </FullLayout>
   );
 };
+
+
+// Sub-components for each settings tab
+// ... existing code ...
+const GeneralSettings = ({ settings, handleChange, profileImage, handleProfileImageChange, cardStyles, isLoading, showBasicReadonlyFields }) => {
+  const theme = useTheme();
+
+  return (
+    <Card sx={cardStyles}>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>Profile Information</Typography>
+        
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, flexWrap: 'wrap' }}>
+          <Avatar 
+            src={profileImage} 
+            alt="Profile"
+            sx={{ 
+              width: 80, 
+              height: 80, 
+              mr: 3,
+              border: `2px solid ${theme.palette.primary.main}`
+            }} 
+          >
+            {settings?.firstName?.charAt(0)}
+          </Avatar>
+          <Box>
+            <Button
+              variant="outlined"
+              component="label"
+              disabled={isLoading}
+            >
+              Change Picture
+              <input
+                type="file"
+                hidden
+                accept="image/*"
+                onChange={handleProfileImageChange}
+              />
+            </Button>
+            <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+              JPG, PNG, GIF. Max 2MB.
+            </Typography>
+          </Box>
+        </Box>
+        
+        <Grid container spacing={3}>
+          {showBasicReadonlyFields && (
+            <>
+              <Grid item xs={12} sm={6}>
+                <TextField 
+                  label="First Name" 
+                  name="firstName"
+                  value={settings.firstName} 
+                  fullWidth 
+                  InputProps={{ readOnly: true }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField 
+                  label="Last Name" 
+                  name="lastName"
+                  value={settings.lastName} 
+                  fullWidth 
+                  InputProps={{ readOnly: true }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField 
+                  label="Email Address" 
+                  name="email"
+                  value={settings.email} 
+                  fullWidth 
+                  InputProps={{ readOnly: true }}
+                  helperText="Email cannot be changed."
+                />
+              </Grid>
+            </>
+          )}
+
+          <Grid item xs={12} sm={6}>
+            <TextField 
+              label="Phone Number" 
+              name="phone"
+              value={settings.phone} 
+              onChange={handleChange}
+              fullWidth 
+            />
+          </Grid>
+          
+          <Grid item xs={12}>
+            <TextField
+              label="Short Bio"
+              name="bio"
+              value={settings.bio}
+              onChange={handleChange}
+              multiline
+              rows={4}
+              fullWidth
+              placeholder="Tell us a little about yourself"
+            />
+          </Grid>
+        </Grid>
+      </CardContent>
+    </Card>
+  );
+};
+
+const NotificationSettings = ({ settings, handleChange, cardStyles }) => (
+    <Card sx={cardStyles}>
+        <CardContent>
+            <Typography variant="h6" gutterBottom>Email Notifications</Typography>
+            <FormGroup>
+                <FormControlLabel
+                    control={<Switch checked={settings.emailNotifications} onChange={(e) => handleChange({ target: { name: 'emailNotifications', checked: e.target.checked, type: 'checkbox' }})} />}
+                    label="General updates and announcements"
+                />
+                <FormControlLabel
+                    control={<Switch checked={settings.quizReminders} onChange={(e) => handleChange({ target: { name: 'quizReminders', checked: e.target.checked, type: 'checkbox' }})} />}
+                    label="Reminders for upcoming quizzes"
+                />
+                <FormControlLabel
+                    control={<Switch checked={settings.gradeNotifications} onChange={(e) => handleChange({ target: { name: 'gradeNotifications', checked: e.target.checked, type: 'checkbox' }})} />}
+                    label="Notifications when new grades are posted"
+                />
+            </FormGroup>
+            
+            <Divider sx={{ my: 3 }} />
+            
+            <Typography variant="h6" gutterBottom>Push Notifications</Typography>
+            <FormGroup>
+                <FormControlLabel
+                    control={<Switch checked={settings.pushNotifications} onChange={(e) => handleChange({ target: { name: 'pushNotifications', checked: e.target.checked, type: 'checkbox' }})} />}
+                    label="Enable browser push notifications"
+                />
+            </FormGroup>
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" gutterBottom>Notification Frequency</Typography>
+            <FormControl component="fieldset">
+                <RadioGroup row name="notificationFrequency" value={settings.notificationFrequency} onChange={handleChange}>
+                    <FormControlLabel value="instant" control={<Radio />} label="Instant" />
+                    <FormControlLabel value="daily" control={<Radio />} label="Daily Digest" />
+                    <FormControlLabel value="weekly" control={<Radio />} label="Weekly Digest" />
+                </RadioGroup>
+            </FormControl>
+        </CardContent>
+    </Card>
+);
+
+const AppearanceSettings = ({ mode, toggleMode, appearance, changeAppearance, highContrast, toggleHighContrast, cardStyles }) => {
+  const theme = useTheme();
+
+  return (
+    <Grid container spacing={3}>
+      {/* Theme Mode */}
+      <Grid item xs={12} md={6}>
+        <Card sx={cardStyles}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>Theme Mode</Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-around', mt: 2 }}>
+              <Button 
+                variant={mode === 'light' ? 'contained' : 'outlined'} 
+                onClick={() => toggleMode('light')}
+                startIcon={<LightModeIcon />}
+                sx={{ p: 2, flexDirection: 'column', height: 100, width: '45%' }}
+              >
+                Light
+              </Button>
+              <Button 
+                variant={mode === 'dark' ? 'contained' : 'outlined'} 
+                onClick={() => toggleMode('dark')}
+                startIcon={<DarkModeIcon />}
+                sx={{ p: 2, flexDirection: 'column', height: 100, width: '45%' }}
+              >
+                Dark
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      </Grid>
+      
+      {/* High Contrast Mode */}
+      <Grid item xs={12} md={6}>
+        <Card sx={cardStyles}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>Accessibility</Typography>
+            <FormGroup>
+              <FormControlLabel
+                control={<Switch checked={highContrast} onChange={toggleHighContrast} />}
+                label="High Contrast Mode"
+              />
+            </FormGroup>
+            <Typography variant="body2" color="text.secondary">
+              Increases text and background contrast for better readability.
+            </Typography>
+          </CardContent>
+        </Card>
+      </Grid>
+      
+      {/* Appearance Style */}
+      <Grid item xs={12}>
+        <Card sx={cardStyles}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>UI Appearance</Typography>
+            <FormControl component="fieldset" fullWidth>
+                <RadioGroup row name="appearance" value={appearance} onChange={(e) => changeAppearance(e.target.value)}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={4}>
+                        <FormControlLabel value="default" control={<Radio />} label={
+                          <Box>
+                            <Typography>Default</Typography>
+                            <Typography variant="caption" color="textSecondary">Modern and clean</Typography>
+                          </Box>
+                        } />
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <FormControlLabel value="royal" control={<Radio />} label={
+                          <Box>
+                            <Typography>Royal</Typography>
+                            <Typography variant="caption" color="textSecondary">Elegant and formal</Typography>
+                          </Box>
+                        } />
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <FormControlLabel value="classic" control={<Radio />} label={
+                          <Box>
+                            <Typography>Classic</Typography>
+                            <Typography variant="caption" color="textSecondary">Sharp and simple</Typography>
+                          </Box>
+                        } />
+                      </Grid>
+                    </Grid>
+                </RadioGroup>
+            </FormControl>
+          </CardContent>
+        </Card>
+      </Grid>
+    </Grid>
+  );
+};
+
+
+const SecuritySettings = ({ settings, handleChange, onOpenConfirm, cardStyles }) => (
+    <Grid container spacing={3}>
+        <Grid item xs={12}>
+            <Card sx={cardStyles}>
+                <CardContent>
+                    <Typography variant="h6" gutterBottom>Password</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        It's a good idea to use a strong password that you're not using elsewhere.
+                    </Typography>
+                    <Button variant="outlined" startIcon={<VpnKeyIcon />}>Change Password</Button>
+                </CardContent>
+            </Card>
+        </Grid>
+        <Grid item xs={12}>
+            <Card sx={cardStyles}>
+                <CardContent>
+                    <Typography variant="h6" gutterBottom>Two-Factor Authentication</Typography>
+                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Add an additional layer of security to your account by requiring more than just a password to log in.
+                    </Typography>
+                    <Button variant="outlined" startIcon={<ShieldOutlinedIcon />}>Enable Two-Factor Auth</Button>
+                </CardContent>
+            </Card>
+        </Grid>
+         <Grid item xs={12}>
+            <Card sx={{ ...cardStyles, borderColor: 'error.main' }}>
+                <CardContent>
+                    <Typography variant="h6" color="error" gutterBottom>Delete Account</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Permanently delete your account and all of your content. This action is not reversible.
+                    </Typography>
+                    <Button variant="contained" color="error" startIcon={<DeleteForeverIcon />} onClick={onOpenConfirm}>
+                        Delete My Account
+                    </Button>
+                </CardContent>
+            </Card>
+        </Grid>
+    </Grid>
+);
+
+const RegionSettings = ({ settings, handleChange, timezoneOptions, currentTime, cardStyles }) => (
+  <Card sx={cardStyles}>
+    <CardContent>
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6}>
+          <Typography variant="h6" gutterBottom>Timezone</Typography>
+          <FormControl fullWidth>
+            <InputLabel>Select Timezone</InputLabel>
+            <Select
+              name="timezone"
+              value={settings.timezone}
+              onChange={handleChange}
+              label="Select Timezone"
+            >
+              {timezoneOptions.map(tz => (
+                <MenuItem key={tz.value} value={tz.value}>{tz.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            Current time: {currentTime.toLocaleTimeString('en-US', { timeZone: settings.timezone })}
+          </Typography>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Typography variant="h6" gutterBottom>Landing Page</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Choose the first page you see after logging in.
+          </Typography>
+          <FormControl component="fieldset">
+            <RadioGroup row name="landingPage" value={settings.landingPage} onChange={handleChange}>
+              <FormControlLabel value="/dashboard" control={<Radio />} label="Dashboard" />
+              <FormControlLabel value="/quizzes" control={<Radio />} label="Quizzes" />
+              <FormControlLabel value="/students" control={<Radio />} label="Students" />
+            </RadioGroup>
+          </FormControl>
+        </Grid>
+      </Grid>
+    </CardContent>
+  </Card>
+);
+
+
+const BillingSettings = ({ currentPlan, onPlanChange, billingHistory, cardStyles, isMobile, settings, handleChange }) => {
+  const theme = useTheme();
+
+  return (
+    <Grid container spacing={4}>
+      <Grid item xs={12} lg={4}>
+        <Typography variant="h6" sx={{ mb: 2 }}>Current Plan</Typography>
+        <Card sx={{ ...cardStyles, textAlign: 'center' }}>
+          <CardContent>
+            <Chip 
+              label={currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} 
+              color={currentPlan === 'professional' ? 'success' : 'primary'}
+              sx={{ mb: 2, fontWeight: 'bold' }}
+            />
+            <Typography variant="h3" sx={{ mb: 1 }}>
+              {currentPlan === 'professional' ? '$48' : '$10'}
+              <Typography variant="h6" component="span" color="text.secondary">/mo</Typography>
+            </Typography>
+            <Typography variant="body1" sx={{ mb: 3 }}>
+              {currentPlan === 'professional' ? 'Unlimited quizzes & advanced analytics.' : 'Basic features for getting started.'}
+            </Typography>
+            <Button variant="contained" fullWidth>Upgrade Plan</Button>
+            <FormControlLabel
+              control={<Switch checked={settings.autoRenew} onChange={(e) => handleChange({ target: { name: 'autoRenew', checked: e.target.checked, type: 'checkbox' }})} />}
+              label="Auto-renew subscription"
+              sx={{ mt: 2 }}
+            />
+          </CardContent>
+        </Card>
+      </Grid>
+      <Grid item xs={12} lg={8}>
+        <Typography variant="h6" sx={{ mb: 2 }}>Billing History</Typography>
+        <Card sx={cardStyles}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Details</TableCell>
+                  <TableCell>Amount</TableCell>
+                  <TableCell>Invoice</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {billingHistory.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell>{item.date}</TableCell>
+                    <TableCell>{item.details}</TableCell>
+                    <TableCell>{item.amount}</TableCell>
+                    <TableCell>
+                      <Link href="#" sx={{ display: 'flex', alignItems: 'center' }}>
+                        <DownloadIcon sx={{ mr: 0.5, fontSize: '1rem' }} />
+                        PDF
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Card>
+      </Grid>
+    </Grid>
+  );
+};
+
 
 export default SettingsPage;

@@ -25,7 +25,7 @@ import {
   People as PeopleIcon,
   Upload as UploadIcon
 } from '@mui/icons-material';
-import { studentApi, departmentApi, teacherApi } from '../../services/api';
+import { studentApi, departmentApi, teacherApi, reportApi } from '../../services/api';
 import { format, parseISO } from 'date-fns';
 import StudentForm from './StudentForm';
 import SummaryCard from '../common/SummaryCard';
@@ -65,6 +65,8 @@ const StudentSection = ({ initialOpenDialog = false }) => {
   const [filteredStudents, setFilteredStudents] = useState([]);
   const [editingStudent, setEditingStudent] = useState(null);
   const [viewingStudent, setViewingStudent] = useState(null);
+  const [studentReportData, setStudentReportData] = useState(null);
+  const [isViewLoading, setIsViewLoading] = useState(false);
   
   const [isLoading, setIsLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(initialOpenDialog);
@@ -181,14 +183,28 @@ const StudentSection = ({ initialOpenDialog = false }) => {
     setEditingStudent(null);
   };
 
-  const handleView = (student) => {
+  const handleView = async (student) => {
     setViewingStudent(student);
     setOpenViewDialog(true);
+    setIsViewLoading(true);
+    setStudentReportData(null); 
+    try {
+      // Use the actual working endpoint for student details
+      const response = await studentApi.getById(student.id);
+      setStudentReportData(response.data);
+    } catch (error) {
+      console.error('Failed to fetch student details:', error);
+      showMessage('Failed to load student details. Please try again.', 'error');
+      setStudentReportData({ error: 'Failed to load details.' });
+    } finally {
+      setIsViewLoading(false);
+    }
   };
   
   const handleCloseViewDialog = () => {
     setOpenViewDialog(false);
     setViewingStudent(null);
+    setStudentReportData(null);
   };
 
   const handleDeleteClick = (student) => {
@@ -443,9 +459,23 @@ const StudentSection = ({ initialOpenDialog = false }) => {
       </Dialog>
 
       <Dialog open={openViewDialog} onClose={handleCloseViewDialog} maxWidth="lg" fullWidth>
-        {viewingStudent && 
-          <StudentDetailsDashboard student={viewingStudent} onClose={handleCloseViewDialog} />
-        }
+        {isViewLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh', p: 3 }}>
+            <CircularProgress />
+            <Typography sx={{ ml: 2 }}>Loading Student Details...</Typography>
+          </Box>
+        ) : viewingStudent && studentReportData ? (
+          <StudentDetailsDashboard 
+            student={viewingStudent} 
+            dashboardData={studentReportData}
+            onClose={handleCloseViewDialog} 
+          />
+        ) : (
+          <Box sx={{ p: 3 }}>
+            <Typography>Could not load student details.</Typography>
+            <Button onClick={handleCloseViewDialog}>Close</Button>
+          </Box>
+        )}
       </Dialog>
 
       <BulkUploadDialog
