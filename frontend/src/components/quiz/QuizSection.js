@@ -629,8 +629,8 @@ const QuizSection = () => {
                 {!selectedQuiz.is_published && (
                   <Box sx={{ p: 2, mb: 2, backgroundColor: 'info.50', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
                     <Typography variant="body2" sx={{ color: 'info.dark', fontWeight: 'medium' }}>
-                      Note: You can regenerate up to {balanceQuestions} questions for this quiz. This will use a question from the additional questions pool. 
-                      You have {balanceQuestions - regenerationsUsed} regenerations remaining.
+                      Note: You can regenerate up to 5 questions for this quiz. This will use a question from the additional questions pool. 
+                      You have {balanceQuestions} regenerations remaining.
                     </Typography>
                   </Box>
                 )}

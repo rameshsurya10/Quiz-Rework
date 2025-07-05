@@ -199,11 +199,11 @@ const SimpleStudentDashboard = () => {
     
     try {
       // Load attempts first to ensure the list is up-to-date
-      await loadQuizAttempts();
+      const attempts = await loadQuizAttempts();
       // Then load student details and available quizzes in parallel
       await Promise.all([
         loadStudentDetails(),
-        loadAvailableQuizzes()
+        loadAvailableQuizzes(attempts)
       ]);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -250,7 +250,7 @@ const SimpleStudentDashboard = () => {
     }
   };
 
-  const loadAvailableQuizzes = async () => {
+  const loadAvailableQuizzes = async (attempts) => {
     try {
       // Fetch all quizzes using the general endpoint
       const response = await quizApi.getAll();
@@ -261,10 +261,7 @@ const SimpleStudentDashboard = () => {
       const allQuizzes = data.current_quizzes || data.results || (Array.isArray(data) ? data : []);
       
       // Filter for published quizzes that haven't been attempted
-      // Re-fetch attempts here to be absolutely sure we have the latest.
-      const attemptsResponse = await quizApi.getResults();
-      const attemptsData = attemptsResponse.data.results || attemptsResponse.data.data || attemptsResponse.data || [];
-      const attemptedQuizIds = new Set(attemptsData.map(a => a.quiz?.id || a.quiz?.quiz_id || a.quiz_id));
+      const attemptedQuizIds = new Set(attempts.map(a => a.quiz?.id || a.quiz?.quiz_id || a.quiz_id));
 
       const filteredQuizzes = allQuizzes
         .filter(q => q.is_published)
@@ -295,13 +292,16 @@ const SimpleStudentDashboard = () => {
           new Date(b.attempted_at || b.created_at) - new Date(a.attempted_at || a.created_at)
         );
         setQuizAttempts(sortedAttempts);
+        return sortedAttempts;
       } else {
         console.warn('Quiz attempts data is not an array:', attempts);
         setQuizAttempts([]);
+        return [];
       }
     } catch (error) {
       console.error('Error loading quiz attempts:', error);
       setQuizAttempts([]);
+      return [];
     }
   };
 
@@ -404,30 +404,28 @@ const SimpleStudentDashboard = () => {
   };
 
   const handleViewResult = (attempt) => {
-    // Check if results should be available (10 minutes after quiz end time)
-    const quizEndTime = new Date(attempt.attempted_at);
-    const resultAvailableTime = new Date(quizEndTime.getTime() + (10 * 60 * 1000)); // 10 minutes later
-    const now = new Date();
-    
-    if (now >= resultAvailableTime) {
-      // Use the quiz ID from the attempt to navigate to results
+    if (isResultAvailable(attempt)) {
       const quizId = attempt.quiz_id || attempt.quiz?.quiz_id || attempt.quiz?.id;
       navigate(`/quiz/result/${quizId}`);
     } else {
-      const remainingTime = Math.ceil((resultAvailableTime - now) / (60 * 1000));
-      setError(`Results will be available in ${remainingTime} minutes after quiz completion.`);
+      const remainingTime = getTimeUntilResult(attempt);
+      setError(`Results will be available in approximately ${remainingTime}.`);
     }
   };
 
   const isResultAvailable = (attempt) => {
-    const quizEndTime = new Date(attempt.attempted_at);
-    const resultAvailableTime = new Date(quizEndTime.getTime() + (10 * 60 * 1000));
+    const quizStartTime = new Date(attempt.attempted_at);
+    // Use quiz duration from the attempt, providing a fallback
+    const quizDurationMinutes = attempt.quiz?.time_limit_minutes || attempt.quiz?.duration || 0;
+    // Result is available 10 minutes after the quiz's official end time
+    const resultAvailableTime = new Date(quizStartTime.getTime() + (quizDurationMinutes * 60 * 1000) + (10 * 60 * 1000));
     return new Date() >= resultAvailableTime;
   };
 
   const getTimeUntilResult = (attempt) => {
-    const quizEndTime = new Date(attempt.attempted_at);
-    const resultAvailableTime = new Date(quizEndTime.getTime() + (10 * 60 * 1000));
+    const quizStartTime = new Date(attempt.attempted_at);
+    const quizDurationMinutes = attempt.quiz?.time_limit_minutes || attempt.quiz?.duration || 0;
+    const resultAvailableTime = new Date(quizStartTime.getTime() + (quizDurationMinutes * 60 * 1000) + (10 * 60 * 1000));
     const now = new Date();
     const remainingMs = resultAvailableTime - now;
     
@@ -738,7 +736,7 @@ const SimpleStudentDashboard = () => {
                                 />
                                 <Chip
                                   icon={<QuizIcon />}
-                                  label={`${quiz.actual_question_count || quiz.total_questions || quiz.question_count || quiz.questions?.length || 'Unknown'} questions`}
+                                  label={`${quiz.question_count || quiz.actual_question_count || quiz.total_questions || quiz.questions?.length || 'Unknown'} questions`}
                                   size="small"
                                   color="secondary"
                                   variant="outlined"
