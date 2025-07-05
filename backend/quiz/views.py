@@ -1155,74 +1155,118 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 """
         },
         "match-the-following": {
-        "easy": """
-            Generate ONE easy match-the-following question.
+            "easy": """
+                Generate ONE match-the-following question.
 
-            Return format:
-            {
-            "question": "Match the following scientists with their discoveries.
-            "J. J. Thomson - Electrons",
-            "Ernest Rutherford - Protons",
-            "James Chadwick - Neutrons",
-            "Democritus - Atoms",
-            "type": "match-the-following",
-            "correct_answer": {
-                "A": "J. J. Thomson - Electrons",
-                "B": "Ernest Rutherford - Protons",
-                "C": "James Chadwick - Neutrons",
-                "D": "Democritus - Atoms"
-            },
-            "explanation": "Each scientist is credited with discovering one of the components of the atom.",
-            "source_page": "<optional>"
-            }
-            """,
-                    "medium": """
-            Generate ONE medium-level match-the-following question.
+                Requirements:
+                - Choose a clear topic (e.g., programming languages and their use cases).
+                - Use 4 items to match (A to D).
+                - Use \\n to separate items on the left side inside the question field.
 
-            Return format:
-            {
-            "question": "Match the following elements with their atomic numbers.
-            "Hydrogen - 1",
-            "Carbon - 6",
-            "Oxygen - 8",
-            "Calcium - 20",
-            "type": "match-the-following",
-            "correct_answer": {
-                "A": "Hydrogen - 1",
-                "B": "Carbon - 6",
-                "C": "Oxygen - 8",
-                "D": "Calcium - 20"
-            },
-            "explanation": "Each element is matched with its atomic number.",
-            "source_page": "<optional>"
-            }
-            """,
-                    "hard": """
-            Generate ONE hard match-the-following question.
+                Return the result in **strict JSON format** like this:
 
-            Return format:
-            {
-            "question": "Match the following processes with their corresponding scientific principles.
-            "Beta Decay - Neutron to proton conversion",
-            "Alpha Emission - Helium nucleus release",
-            "Gamma Emission - Energy release",
-            "Positron Emission - Proton to neutron conversion",
-            "type": "match-the-following",
-            "correct_answer": {
-                "A": "Beta Decay - Neutron to proton conversion",
-                "B": "Alpha Emission - Helium nucleus release",
-                "C": "Gamma Emission - Energy release",
-                "D": "Positron Emission - Proton to neutron conversion"
-            },
-            "explanation": "Each nuclear process is paired with its correct description.",
-            "source_page": "<optional>"
-            }
-            """
+                {
+                "question": "Match the following programming languages with their common use cases.\\nPython -\\nJavaScript -\\nC -\\nSQL -",
+                "type": "match-the-following",
+                "options": {
+                    "A": "Web development and front-end scripting",
+                    "B": "System programming and embedded systems",
+                    "C": "Data querying and relational databases",
+                    "D": "AI, data science, scripting"
                 },
+                "correct_answer": {
+                    "Python": "AI, data science, scripting",
+                    "JavaScript": "Web development and front-end scripting",
+                    "C": "System programming and embedded systems",
+                    "SQL": "Data querying and relational databases"
+                },
+                "explanation": "Each language is matched with its most common area of usage.",
+                "question_number": 1,
+                "source_page": "7"
+                }
+
+                Instructions:
+                - Do not include extra text before or after the JSON.
+                - All keys must match the format shown.
+                - The question field must use `\\n` to separate the items.
+                """,
+
+                        "medium": """
+                Generate ONE match-the-following question.
+
+                Requirements:
+                - Choose a clear topic (e.g., programming languages and their use cases).
+                - Use 4 items to match (A to D).
+                - Use \\n to separate items on the left side inside the question field.
+
+                Return the result in **strict JSON format** like this:
+
+                {
+                "question": "Match the following programming languages with their common use cases.\\nPython -\\nJavaScript -\\nC -\\nSQL -",
+                "type": "match-the-following",
+                "options": {
+                    "A": "Web development and front-end scripting",
+                    "B": "System programming and embedded systems",
+                    "C": "Data querying and relational databases",
+                    "D": "AI, data science, scripting"
+                },
+                "correct_answer": {
+                    "Python": "AI, data science, scripting",
+                    "JavaScript": "Web development and front-end scripting",
+                    "C": "System programming and embedded systems",
+                    "SQL": "Data querying and relational databases"
+                },
+                "explanation": "Each language is matched with its most common area of usage.",
+                "question_number": 1,
+                "source_page": "7"
+                }
+
+                Instructions:
+                - Do not include extra text before or after the JSON.
+                - All keys must match the format shown.
+                - The question field must use `\\n` to separate the items.
+                """,
+
+                        "hard": """
+                Generate ONE match-the-following question.
+
+                Requirements:
+                - Choose a clear topic (e.g., programming languages and their use cases).
+                - Use 4 items to match (A to D).
+                - Use \\n to separate items on the left side inside the question field.
+
+                Return the result in **strict JSON format** like this:
+
+                {
+                "question": "Match the following programming languages with their common use cases.\\nPython -\\nJavaScript -\\nC -\\nSQL -",
+                "type": "match-the-following",
+                "options": {
+                    "A": "Web development and front-end scripting",
+                    "B": "System programming and embedded systems",
+                    "C": "Data querying and relational databases",
+                    "D": "AI, data science, scripting"
+                },
+                "correct_answer": {
+                    "Python": "AI, data science, scripting",
+                    "JavaScript": "Web development and front-end scripting",
+                    "C": "System programming and embedded systems",
+                    "SQL": "Data querying and relational databases"
+                },
+                "explanation": "Each language is matched with its most common area of usage.",
+                "question_number": 1,
+                "source_page": "7"
+                }
+
+                Instructions:
+                - Do not include extra text before or after the JSON.
+                - All keys must match the format shown.
+                - The question field must use `\\n` to separate the items.
+                """
+                    },
         'mixed': {
             'easy': """
                 Generate a mix of easy questions about code that:
-                1. Include multiple choice, fill-in-the-blank, true/false, and one-line questions
+                1. Include multiple choice, fill-in-the-blank, true/false, and one-line questions and match-the-following questions
                 2. Test basic understanding of concepts
                 3. Have clear and unambiguous answers
                 4. Are suitable for beginners
@@ -1230,7 +1274,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 """,
             'medium': """
                 Generate a mix of medium difficulty questions about code that:
-                1. Include multiple choice, fill-in-the-blank, true/false, and one-line questions
+                1. Include multiple choice, fill-in-the-blank, true/false, and one-line questions and match-the-following questions
                 2. Test intermediate understanding of concepts
                 3. May include some complex scenarios
                 4. Require some analytical thinking
@@ -1238,7 +1282,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 """,
             'hard': """
                 Generate a mix of hard questions about code that:
-                1. Include multiple choice, fill-in-the-blank, true/false, and one-line questions
+                1. Include multiple choice, fill-in-the-blank, true/false, and one-line questions and match-the-following questions
                 2. Test advanced understanding of concepts
                 3. Include complex scenarios and edge cases
                 4. Require deep analytical thinking
@@ -1324,10 +1368,22 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 },
                 'match-the-following': {
                     "question_id": 1,
-                    "question": "What is the main purpose of Django REST Framework's serializers?",
-                    "correct_answer": "To convert complex data types to Python data types that can be easily rendered into JSON",
-                    "explanation": "Serializers in DRF are used to convert complex data types (like Django models) into Python data types that can be easily converted to JSON, and vice versa."
-                }
+                    "question": "Match the following Django REST Framework terms with their purpose.\\nSerializer -\\nViewSet -\\nRouter -\\nPermission -",
+                    "type": "match-the-following",
+                    "options": {
+                        "A": "To convert complex data types to Python types that can be easily rendered into JSON",
+                        "B": "To control access to views based on user roles or rules",
+                        "C": "To map URLs automatically to ViewSets",
+                        "D": "To define the logic of how data should be displayed or processed"
+                    },
+                    "correct_answer": {
+                        "Serializer": "To convert complex data types to Python types that can be easily rendered into JSON",
+                        "ViewSet": "To define the logic of how data should be displayed or processed",
+                        "Router": "To map URLs automatically to ViewSets",
+                        "Permission": "To control access to views based on user roles or rules"
+                    },
+                    "explanation": "Each DRF concept is matched with its primary purpose in API development.",
+                    }
             }
             
             # Define all possible question types and difficulties
@@ -1486,12 +1542,31 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                         continue
 
                 elif actual_question_type == 'match-the-following':
-                    if 'answer' not in question:
+                    if 'options' not in question or 'correct_answer' not in question:
                         continue
-                    answer = str(question['answer']).strip().capitalize()
-                    if answer not in ['A', 'B', 'C', 'D']:
+
+                    options = question['options']
+                    correct_answer = question['correct_answer']
+
+                    if not isinstance(options, dict) or not isinstance(correct_answer, dict):
                         continue
-                    question['answer'] = answer
+
+                    # Ensure options are labeled A–D
+                    if set(options.keys()) != {'A', 'B', 'C', 'D'}:
+                        continue
+
+                    # Ensure each correct_answer value is present in options values
+                    option_values = set(options.values())
+                    for match_value in correct_answer.values():
+                        if match_value not in option_values:
+                            break
+                    else:
+                        # All values in correct_answer are valid
+                        pass
+                        # You may normalize here if needed
+                        # e.g., question['correct_answer'] = {...}
+                        continue  # remove this `continue` to actually include this question
+                    continue  # if loop breaks, meaning an invalid match was found
 
                 elif actual_question_type == 'true_false':
                     if 'answer' not in question:
@@ -1560,12 +1635,22 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                             if 'correct_answer' not in question:
                                 continue
                         elif actual_question_type == 'match-the-following':
-                            if 'answer' not in question:
+                            if 'options' not in question or 'correct_answer' not in question:
                                 continue
-                            answer = str(question['answer']).strip().capitalize()
-                            if answer not in ['A', 'B', 'C', 'D']:
+                            options = question['options']
+                            correct_answer = question['correct_answer']
+
+                            if not isinstance(options, dict) or not isinstance(correct_answer, dict):
                                 continue
-                            question['answer'] = answer
+
+                            # Ensure options are labeled A, B, C, D
+                            if set(options.keys()) != {'A', 'B', 'C', 'D'}:
+                                continue
+
+                            # Ensure all correct_answer values are among the options
+                            option_values = set(options.values())
+                            if not all(value in option_values for value in correct_answer.values()):
+                                continue
                         elif actual_question_type == 'true_false':
                             if 'answer' not in question:
                                 continue
@@ -1894,8 +1979,24 @@ class QuizQuestionsView(APIView):
                                     q['question'] = q.get('question', '') + " [BLANK]"
                                 
                                 # Ensure match-the-following questions have correct answer
-                                if q.get('type') == 'match-the-following' and 'answer' not in q:
-                                    q['answer'] = "Unknown"
+                                if q.get('type') == 'match-the-following':
+                                    # Set default options if missing or invalid
+                                    if 'options' not in q or not isinstance(q['options'], dict) or set(q['options'].keys()) != {'A', 'B', 'C', 'D'}:
+                                        q['options'] = {
+                                            "A": "Option A",
+                                            "B": "Option B",
+                                            "C": "Option C",
+                                            "D": "Option D"
+                                        }
+                                    
+                                    # Set default correct_answer if missing or invalid
+                                    if 'correct_answer' not in q or not isinstance(q['correct_answer'], dict):
+                                        q['correct_answer'] = {
+                                            "Item 1": q['options'].get("A", "Option A"),
+                                            "Item 2": q['options'].get("B", "Option B"),
+                                            "Item 3": q['options'].get("C", "Option C"),
+                                            "Item 4": q['options'].get("D", "Option D")
+        }
                         
                         # Return the parsed and validated JSON
                         return Response({
