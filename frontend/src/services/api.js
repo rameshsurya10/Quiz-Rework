@@ -191,7 +191,7 @@ export const quizApi = {
   
   // Endpoints for student quiz results
   getResults: () => api.get('/api/students/quiz_attempts/'),
-  getResultById: (id) => api.get(`/api/students/quiz_result/${id}/`),
+  getResultById: (attemptId) => api.get(`/api/students/quiz_attempt/${attemptId}/`),
 };
 
 export const userApi = {

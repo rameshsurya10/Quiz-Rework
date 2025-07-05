@@ -38,6 +38,7 @@ const QuizResultView = () => {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [resultNotAvailableMessage, setResultNotAvailableMessage] = useState('');
 
   useEffect(() => {
     loadQuizResult();
@@ -47,7 +48,11 @@ const QuizResultView = () => {
     try {
       setLoading(true);
       const response = await quizApi.getResultById(quizId);
-      setResult(response.data);
+      if (response.data.message) {
+        setResultNotAvailableMessage(response.data.message);
+      } else {
+        setResult(response.data);
+      }
     } catch (error) {
       console.error('Error loading quiz result:', error);
       setError('Failed to load quiz result. Please try again.');
@@ -123,6 +128,23 @@ const QuizResultView = () => {
     );
   }
 
+  if (resultNotAvailableMessage) {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Alert severity="info" sx={{ borderRadius: 3, mb: 3 }}>
+          {resultNotAvailableMessage}
+        </Alert>
+        <Button 
+          startIcon={<BackIcon />}
+          onClick={() => navigate('/student-dashboard')}
+          variant="contained"
+        >
+          Back to Dashboard
+        </Button>
+      </Container>
+    );
+  }
+
   if (error) {
     return (
       <Container maxWidth="md" sx={{ py: 4 }}>
@@ -167,7 +189,7 @@ const QuizResultView = () => {
         py: 3,
       }}
     >
-      <Container maxWidth="lg">
+      <Container maxWidth="md">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -338,7 +360,7 @@ const QuizResultView = () => {
                                 Your Answer:
                               </Typography>
                               <Chip
-                                label={question.answer || question.student_answer || 'No answer provided'}
+                                label={typeof question.student_answer === 'object' && question.student_answer !== null ? JSON.stringify(question.student_answer) : (question.answer || question.student_answer || 'No answer provided')}
                                 color={question.is_correct ? 'success' : 'error'}
                                 variant="outlined"
                                 size="small"
@@ -351,7 +373,7 @@ const QuizResultView = () => {
                                   Correct Answer:
                                 </Typography>
                                 <Chip
-                                  label={question.correct_answer}
+                                  label={typeof question.correct_answer === 'object' && question.correct_answer !== null ? JSON.stringify(question.correct_answer) : question.correct_answer}
                                   color="success"
                                   variant="filled"
                                   size="small"

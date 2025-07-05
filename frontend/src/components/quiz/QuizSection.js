@@ -48,6 +48,8 @@ const QuizSection = () => {
   const [quizToDeleteId, setQuizToDeleteId] = useState(null);
   const [isConfirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [departments, setDepartments] = useState([]);
+  const [quizPublishableState, setQuizPublishableState] = useState({});
+  const [isCheckingPublishable, setIsCheckingPublishable] = useState({});
 
   // State for question view modal
   const [selectedQuiz, setSelectedQuiz] = useState(null);
@@ -89,6 +91,21 @@ const QuizSection = () => {
     }
   }, [showSnackbar]);
 
+  const checkQuizPublishable = useCallback(async (quizId) => {
+    setIsCheckingPublishable(prev => ({ ...prev, [quizId]: true }));
+    try {
+      const quizDetails = await quizService.getQuizDetails(quizId);
+      const questions = quizDetails.current_questions || quizDetails.questions || [];
+      const isValid = areAllQuestionsValid(questions);
+      setQuizPublishableState(prev => ({ ...prev, [quizId]: isValid }));
+    } catch (error) {
+      console.error(`Failed to check publishable status for quiz ${quizId}`, error);
+      setQuizPublishableState(prev => ({ ...prev, [quizId]: false }));
+    } finally {
+      setIsCheckingPublishable(prev => ({ ...prev, [quizId]: false }));
+    }
+  }, []);
+
   useEffect(() => {
     const loadData = async () => {
       if (!isCreating) {
@@ -107,6 +124,15 @@ const QuizSection = () => {
     loadData();
     // Only re-run when isCreating changes, not on function reference changes
   }, [isCreating]);
+
+  useEffect(() => {
+    const draftQuizzes = quizzes.filter(q => !q.is_published);
+    draftQuizzes.forEach(quiz => {
+      if (quizPublishableState[quiz.quiz_id] === undefined) {
+        checkQuizPublishable(quiz.quiz_id);
+      }
+    });
+  }, [quizzes, checkQuizPublishable, quizPublishableState]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -188,6 +214,14 @@ const QuizSection = () => {
   // Publish quiz and refresh list
   const handlePublishClick = async (quizId) => {
     try {
+      // Re-validate before publishing as a safeguard
+      const quizDetails = await quizService.getQuizDetails(quizId);
+      const questions = quizDetails.current_questions || quizDetails.questions || [];
+      if (!areAllQuestionsValid(questions)) {
+        showSnackbar('Cannot publish: Quiz has incomplete or invalid questions.', 'error');
+        return;
+      }
+
       await quizApi.publish(quizId);
       await fetchQuizzes();
       showSnackbar('Quiz published successfully and notifications sent!', 'success');
@@ -369,6 +403,11 @@ const QuizSection = () => {
       return 'Not set';
     };
 
+    const hasQuestions = quiz.no_of_questions > 0;
+
+    const isPublishable = quizPublishableState[quiz.quiz_id];
+    const isChecking = isCheckingPublishable[quiz.quiz_id];
+
     return (
       <Grid item xs={12} sm={6} md={4} key={quiz.quiz_id}>
         <motion.div
@@ -430,13 +469,19 @@ const QuizSection = () => {
                 <IconButton size="small" onClick={() => handleDelete(quiz.quiz_id)}><DeleteIcon /></IconButton>
               </Box>
               {!quiz.is_published ? (
-                <Button 
-                  variant="contained" 
-                  startIcon={<AssignmentIcon />} 
-                  size="small" 
-                  onClick={() => handlePublishClick(quiz.quiz_id)}>
-                  PUBLISH
-                </Button>
+                <Tooltip title={!isPublishable && !isChecking ? "This quiz cannot be published because it has missing or invalid questions." : ""}>
+                  <span>
+                    <Button 
+                      variant="contained" 
+                      startIcon={isChecking ? <CircularProgress size={20} color="inherit" /> : <AssignmentIcon />} 
+                      size="small" 
+                      onClick={() => handlePublishClick(quiz.quiz_id)}
+                      disabled={!isPublishable || isChecking}
+                    >
+                      {isChecking ? 'Checking...' : 'PUBLISH'}
+                    </Button>
+                  </span>
+                </Tooltip>
               ) : (
                 <Button 
                   variant="outlined" 
@@ -660,6 +705,47 @@ const QuizSection = () => {
       </Container>
     </FullLayout>
   );
+};
+
+// Helper function to validate questions before publishing
+const areAllQuestionsValid = (questions) => {
+  if (!questions || questions.length === 0) {
+    return false;
+  }
+
+  return questions.every(q => {
+    if (!q) return false;
+    // Default to 'mcq' if type is missing, consistent with rendering logic
+    const type = q.type || 'mcq';
+
+    switch (type) {
+      case 'mcq':
+        if (!q.options) return false;
+        if (Array.isArray(q.options)) {
+          // At least one option must be marked as correct
+          return q.options.some(opt => opt && opt.is_correct);
+        } else if (typeof q.options === 'object' && q.options !== null) {
+          // A correct_answer must exist and correspond to a key in the options object
+          if (!q.correct_answer) return false;
+          const correctKey = String(q.correct_answer).split(':')[0].trim();
+          return Object.prototype.hasOwnProperty.call(q.options, correctKey);
+        }
+        return false; // Return false if options are not in a supported format
+      
+      case 'fill':
+      case 'oneline':
+        // The correct_answer must be a non-empty string
+        return typeof q.correct_answer === 'string' && q.correct_answer.trim() !== '';
+        
+      case 'truefalse':
+        // The correct_answer must be either "True" or "False"
+        return q.correct_answer === 'True' || q.correct_answer === 'False';
+        
+      default:
+        // Any other question type is considered invalid for now
+        return false;
+    }
+  });
 };
 
 export default QuizSection;

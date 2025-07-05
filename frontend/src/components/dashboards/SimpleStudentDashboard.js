@@ -42,6 +42,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { quizApi } from '../../services/api';
+import ConfirmationDialog from '../../common/ConfirmationDialog';
 
 const SimpleStudentDashboard = () => {
   const navigate = useNavigate();
@@ -158,6 +159,11 @@ const SimpleStudentDashboard = () => {
   const [quizAttempts, setQuizAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // State for the confirmation dialog
+  const [isConfirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [quizToConfirm, setQuizToConfirm] = useState(null);
+  const [isConfirmLoading, setConfirmLoading] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -192,11 +198,12 @@ const SimpleStudentDashboard = () => {
     setError('');
     
     try {
-      // Load student details, available quizzes and attempts in parallel
+      // Load attempts first to ensure the list is up-to-date
+      await loadQuizAttempts();
+      // Then load student details and available quizzes in parallel
       await Promise.all([
         loadStudentDetails(),
-        loadAvailableQuizzes(),
-        loadQuizAttempts()
+        loadAvailableQuizzes()
       ]);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -254,7 +261,11 @@ const SimpleStudentDashboard = () => {
       const allQuizzes = data.current_quizzes || data.results || (Array.isArray(data) ? data : []);
       
       // Filter for published quizzes that haven't been attempted
-      const attemptedQuizIds = new Set(quizAttempts.map(a => a.quiz?.id || a.quiz?.quiz_id || a.quiz_id));
+      // Re-fetch attempts here to be absolutely sure we have the latest.
+      const attemptsResponse = await quizApi.getResults();
+      const attemptsData = attemptsResponse.data.results || attemptsResponse.data.data || attemptsResponse.data || [];
+      const attemptedQuizIds = new Set(attemptsData.map(a => a.quiz?.id || a.quiz?.quiz_id || a.quiz_id));
+
       const filteredQuizzes = allQuizzes
         .filter(q => q.is_published)
         .filter(q => !attemptedQuizIds.has(q.id || q.quiz_id));
@@ -335,31 +346,61 @@ const SimpleStudentDashboard = () => {
     handleTakeQuiz(quizId);
   };
 
-  const handleTakeQuiz = (quizId) => {
-    // Check if quiz has already been attempted (double-check on frontend)
-    const hasAttempted = quizAttempts.some(attempt => 
+  const handleTakeQuiz = async (quizId) => {
+    const attemptedQuiz = quizAttempts.find(attempt =>
       (attempt.quiz_id || attempt.quiz?.quiz_id || attempt.quiz?.id) === parseInt(quizId)
     );
-    
-    if (hasAttempted) {
-      setError('You have already attempted this quiz. Each quiz can only be taken once.');
+
+    if (attemptedQuiz) {
+      setQuizToConfirm({
+        id: quizId,
+        hasAttempted: true,
+        isAvailable: false,
+        details: attemptedQuiz.quiz,
+      });
+      setConfirmDialogOpen(true);
       return;
     }
 
-    // Check if quiz is in available list (additional safety check)
-    const isAvailable = availableQuizzes.some(quiz => 
+    const availableQuiz = availableQuizzes.find(quiz =>
       (quiz.id || quiz.quiz_id) === parseInt(quizId)
     );
-    
-    if (!isAvailable) {
-      setError('This quiz is no longer available or you have already attempted it.');
+
+    if (availableQuiz) {
+      setQuizToConfirm({
+        id: quizId,
+        hasAttempted: false,
+        isAvailable: true,
+        details: availableQuiz,
+      });
+      setConfirmDialogOpen(true);
       return;
     }
 
-    // Directly navigate to the quiz view. 
-    // The StudentQuizView component will handle loading, validation, and errors.
-    console.log(`Navigating to quiz ID: ${quizId}`);
-    navigate(`/quiz/take/${quizId}`);
+    // If not found, fetch from API
+    setConfirmLoading(true);
+    setConfirmDialogOpen(true);
+    try {
+      const response = await quizApi.getById(quizId);
+      const quizDetails = response.data;
+
+      if (quizDetails && quizDetails.is_published) {
+        setQuizToConfirm({
+          id: quizId,
+          hasAttempted: false,
+          isAvailable: true,
+          details: quizDetails,
+        });
+      } else {
+        // Quiz is not published or invalid
+        setQuizToConfirm({ id: quizId, hasAttempted: false, isAvailable: false, details: null });
+      }
+    } catch (err) {
+      console.error('Failed to fetch quiz details by ID:', err);
+      setQuizToConfirm({ id: quizId, hasAttempted: false, isAvailable: false, details: null });
+    } finally {
+      setConfirmLoading(false);
+    }
   };
 
   const handleViewResult = (attempt) => {
@@ -437,7 +478,42 @@ const SimpleStudentDashboard = () => {
           </Alert>
         )}
 
-      {/* Header */}
+        <ConfirmationDialog
+          open={isConfirmDialogOpen}
+          onClose={() => setConfirmDialogOpen(false)}
+          onConfirm={() => {
+            if (quizToConfirm && quizToConfirm.isAvailable && !quizToConfirm.hasAttempted) {
+              navigate(`/quiz/take/${quizToConfirm.id}`);
+            }
+            setConfirmDialogOpen(false);
+          }}
+          title={
+            isConfirmLoading
+            ? "Loading Quiz..."
+            : quizToConfirm?.hasAttempted 
+              ? "Quiz Already Attempted" 
+              : !quizToConfirm?.isAvailable
+              ? "Quiz Not Found"
+              : "Confirm Quiz Start"
+          }
+          content={
+            isConfirmLoading
+            ? "Please wait while we fetch the quiz details."
+            : quizToConfirm?.hasAttempted
+              ? "You have already completed this quiz. Each quiz can only be taken once."
+              : !quizToConfirm?.isAvailable
+              ? "The quiz link seems to be invalid or the quiz is not available to you. Please check the link."
+              : `You are about to start the quiz: "${quizToConfirm?.details?.title || 'Unknown Quiz'}". Are you sure you want to proceed?`
+          }
+          confirmText={isConfirmLoading || quizToConfirm?.hasAttempted || !quizToConfirm?.isAvailable ? "OK" : "Start Quiz"}
+          cancelText={isConfirmLoading || quizToConfirm?.hasAttempted || !quizToConfirm?.isAvailable ? "" : "Cancel"}
+          isLoading={isConfirmLoading}
+          confirmButtonProps={{
+            disabled: isConfirmLoading
+          }}
+        />
+
+        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}

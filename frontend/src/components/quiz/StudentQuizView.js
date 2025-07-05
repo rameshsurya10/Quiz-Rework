@@ -1407,7 +1407,7 @@ const StudentQuizView = () => {
               Previous
             </Button>
 
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'center' }}>
               {questions.map((_, index) => (
                 <motion.div
                   key={index}

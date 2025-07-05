@@ -172,7 +172,7 @@ const StudentLogin = () => {
         }
       }}
     >
-      <Container maxWidth="sm">
+      <Container maxWidth="xs">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -187,6 +187,7 @@ const StudentLogin = () => {
               backdropFilter: 'blur(20px)',
               border: `1px solid ${alpha('#6b73ff', 0.2)}`,
               animation: `${gentleFloat} 6s ease-in-out infinite`,
+              transform: 'scale(0.9)',
             }}
           >
             {/* Header */}
