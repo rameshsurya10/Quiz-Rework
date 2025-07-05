@@ -1153,72 +1153,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 3. Require deep analytical thinking
                 4. Focus on nuanced technical details
                 """
-        },
-        "match-the-following": {
-        "easy": """
-            Generate ONE easy match-the-following question.
-
-            Return format:
-            {
-            "question": "Match the following scientists with their discoveries.
-            "J. J. Thomson - Electrons",
-            "Ernest Rutherford - Protons",
-            "James Chadwick - Neutrons",
-            "Democritus - Atoms",
-            "type": "match-the-following",
-            "correct_answer": {
-                "A": "J. J. Thomson - Electrons",
-                "B": "Ernest Rutherford - Protons",
-                "C": "James Chadwick - Neutrons",
-                "D": "Democritus - Atoms"
-            },
-            "explanation": "Each scientist is credited with discovering one of the components of the atom.",
-            "source_page": "<optional>"
-            }
-            """,
-                    "medium": """
-            Generate ONE medium-level match-the-following question.
-
-            Return format:
-            {
-            "question": "Match the following elements with their atomic numbers.
-            "Hydrogen - 1",
-            "Carbon - 6",
-            "Oxygen - 8",
-            "Calcium - 20",
-            "type": "match-the-following",
-            "correct_answer": {
-                "A": "Hydrogen - 1",
-                "B": "Carbon - 6",
-                "C": "Oxygen - 8",
-                "D": "Calcium - 20"
-            },
-            "explanation": "Each element is matched with its atomic number.",
-            "source_page": "<optional>"
-            }
-            """,
-                    "hard": """
-            Generate ONE hard match-the-following question.
-
-            Return format:
-            {
-            "question": "Match the following processes with their corresponding scientific principles.
-            "Beta Decay - Neutron to proton conversion",
-            "Alpha Emission - Helium nucleus release",
-            "Gamma Emission - Energy release",
-            "Positron Emission - Proton to neutron conversion",
-            "type": "match-the-following",
-            "correct_answer": {
-                "A": "Beta Decay - Neutron to proton conversion",
-                "B": "Alpha Emission - Helium nucleus release",
-                "C": "Gamma Emission - Energy release",
-                "D": "Positron Emission - Proton to neutron conversion"
-            },
-            "explanation": "Each nuclear process is paired with its correct description.",
-            "source_page": "<optional>"
-            }
-            """
-                },
+        },      
         'mixed': {
             'easy': """
                 Generate a mix of easy questions about code that:
@@ -1296,7 +1231,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
             format_examples = {
                 'multiple_choice': {
                     "question_id": 1,
-                    "question": "What is the purpose of the CustomPagination class?",
+                    "question": "What is the purpose of the CustomPagination class.",
                     "A": "To define the structure of API responses",
                     "B": "To customize the pagination behavior for quizzes",
                     "C": "To handle user authentication in API requests",
@@ -1321,17 +1256,11 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                     "question": "What is the main purpose of Django REST Framework's serializers?",
                     "correct_answer": "To convert complex data types to Python data types that can be easily rendered into JSON",
                     "explanation": "Serializers in DRF are used to convert complex data types (like Django models) into Python data types that can be easily converted to JSON, and vice versa."
-                },
-                'match-the-following': {
-                    "question_id": 1,
-                    "question": "What is the main purpose of Django REST Framework's serializers?",
-                    "correct_answer": "To convert complex data types to Python data types that can be easily rendered into JSON",
-                    "explanation": "Serializers in DRF are used to convert complex data types (like Django models) into Python data types that can be easily converted to JSON, and vice versa."
                 }
             }
             
             # Define all possible question types and difficulties
-            all_question_types = ['multiple_choice', 'fill_in_blank', 'true_false', 'one_line', 'match-the-following']
+            all_question_types = ['multiple_choice', 'fill_in_blank', 'true_false', 'one_line']
             all_difficulties = ['easy', 'medium', 'hard']
             
             # Initialize list to store all questions
@@ -1485,14 +1414,6 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                     if 'correct_answer' not in question:
                         continue
 
-                elif actual_question_type == 'match-the-following':
-                    if 'answer' not in question:
-                        continue
-                    answer = str(question['answer']).strip().capitalize()
-                    if answer not in ['A', 'B', 'C', 'D']:
-                        continue
-                    question['answer'] = answer
-
                 elif actual_question_type == 'true_false':
                     if 'answer' not in question:
                         continue
@@ -1559,13 +1480,6 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                                 continue
                             if 'correct_answer' not in question:
                                 continue
-                        elif actual_question_type == 'match-the-following':
-                            if 'answer' not in question:
-                                continue
-                            answer = str(question['answer']).strip().capitalize()
-                            if answer not in ['A', 'B', 'C', 'D']:
-                                continue
-                            question['answer'] = answer
                         elif actual_question_type == 'true_false':
                             if 'answer' not in question:
                                 continue
@@ -1755,7 +1669,6 @@ class QuizQuestionGenerateByTypeView(APIView):
         'fill_in_blank': "Generate a fill in the blank question with the correct answer.",
         'short_answer': "Generate a short answer question with a detailed answer.",
         'essay': "Generate an essay question that requires detailed explanation.",
-        'match-the-following': "Generate a match-the-following question with the correct answer."
     }
 
     def get_quiz(self, quiz_id):
@@ -1891,11 +1804,7 @@ class QuizQuestionsView(APIView):
                                     
                                 # Ensure fill questions have [BLANK] in the question
                                 if q.get('type') == 'fill' and '[BLANK]' not in q.get('question', ''):
-                                    q['question'] = q.get('question', '') + " [BLANK]"
-                                
-                                # Ensure match-the-following questions have correct answer
-                                if q.get('type') == 'match-the-following' and 'answer' not in q:
-                                    q['answer'] = "Unknown"
+                                    q['question'] = q.get('question', '') + " [BLANK]" 
                         
                         # Return the parsed and validated JSON
                         return Response({

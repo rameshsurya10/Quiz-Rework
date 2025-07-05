@@ -5,7 +5,7 @@ User = get_user_model()
 
 class Student(models.Model):
     student_id = models.AutoField(primary_key=True)
-    register_number = models.CharField(max_length=255, unique=True)
+    register_number = models.CharField(max_length=255)
     class_name = models.CharField(max_length=255)
     section = models.CharField(max_length=255,null=True, blank=True)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
