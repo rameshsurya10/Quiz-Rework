@@ -7,7 +7,8 @@ import {
   Input, InputGroup, InputRightElement, Divider,
   SimpleGrid, Tag, useToast, Alert, AlertIcon,
   Modal, ModalOverlay, ModalContent, ModalHeader,
-  ModalFooter, ModalBody, ModalCloseButton, useDisclosure
+  ModalFooter, ModalBody, ModalCloseButton, useDisclosure,
+  IconButton, Tooltip
 } from '@chakra-ui/react';
 import { SearchIcon, EditIcon, RepeatIcon } from '@chakra-ui/icons';
 import quizService from '../../services/quizService';
@@ -39,6 +40,12 @@ const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
     page_start: '',
     page_end: '',
   });
+
+  // Add state for regeneration loading
+  const [regeneratingQuestions, setRegeneratingQuestions] = useState([]);
+
+  // Add state for regeneration count
+  const [regenerationsRemaining, setRegenerationsRemaining] = useState(5);
 
   // Fetch quiz details
   useEffect(() => {
@@ -245,6 +252,62 @@ const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
     }
   };
 
+  // Handle single question regeneration
+  const handleRegenerateSingleQuestion = async (questionNumber) => {
+    // Check if we have regenerations remaining
+    if (regenerationsRemaining <= 0) {
+      toast({
+        title: 'No regenerations remaining',
+        description: 'You have used all available regenerations for this quiz.',
+        status: 'warning',
+        duration: 5000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    try {
+      setRegeneratingQuestions(prev => [...prev, questionNumber]);
+      
+      // Call the backend to regenerate the question
+      const response = await quizService.regenerateQuizQuestion(resolvedQuizId, questionNumber);
+      
+      // Refresh the questions
+      const questionData = await quizService.getQuizQuestions(resolvedQuizId);
+      let updatedQuestions = questionData.questions || [];
+      
+      // Process questions to normalize the data structure
+      updatedQuestions = processQuestions(updatedQuestions);
+      
+      // Update questions while preserving question numbers
+      setQuestions(updatedQuestions.map(q => ({
+        ...q,
+        question_number: q.question_number || questions.find(oldQ => oldQ.id === q.id)?.question_number
+      })));
+
+      // Decrease regenerations remaining
+      setRegenerationsRemaining(prev => prev - 1);
+      
+      toast({
+        title: 'Question regenerated',
+        description: `Question ${questionNumber} has been regenerated successfully. ${regenerationsRemaining - 1} regenerations remaining.`,
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error regenerating question',
+        description: error.message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setRegeneratingQuestions(prev => prev.filter(num => num !== questionNumber));
+    }
+  };
+
   // Pagination controls (for student view)
   const questionsPerPage = 5;
   const totalPages = Math.ceil(questions.length / questionsPerPage);
@@ -255,14 +318,34 @@ const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
 
   // Update the rendering part to handle the question types correctly
   const renderQuestion = (question, index) => {
+    const questionNumber = question.question_number || (index + 1);
+    const isRegenerating = regeneratingQuestions.includes(questionNumber);
+    
     return (
-      <Card key={question.question_number || index} variant="outline">
+      <Card key={questionNumber} variant="outline">
         <CardHeader bg="blue.50" py={3}>
           <Flex justify="space-between" align="center">
-            <Heading size="sm">Question {question.question_number || (index + 1)}</Heading>
-            <Badge colorScheme="blue" variant="outline">
-              {(question.type || 'mcq').toUpperCase()}
-            </Badge>
+            <Heading size="sm">Question {questionNumber}</Heading>
+            <HStack spacing={2}>
+              <Badge colorScheme="blue" variant="outline">
+                {(question.type || 'mcq').toUpperCase()}
+              </Badge>
+              {(isAdmin || isTeacher) && (
+                <Tooltip label={quiz.is_published ? "Cannot regenerate questions after publishing" : "Regenerate this question"}>
+                  <IconButton
+                    icon={<RepeatIcon />}
+                    size="sm"
+                    variant="ghost"
+                    isLoading={isRegenerating}
+                    onClick={() => !quiz.is_published && handleRegenerateSingleQuestion(questionNumber)}
+                    isDisabled={quiz.is_published}
+                    opacity={quiz.is_published ? 0.5 : 1}
+                    cursor={quiz.is_published ? 'not-allowed' : 'pointer'}
+                    aria-label="Regenerate question"
+                  />
+                </Tooltip>
+              )}
+            </HStack>
           </Flex>
         </CardHeader>
         <CardBody>
@@ -441,6 +524,15 @@ const QuizQuestionsView = ({ quizId, isAdmin = false, isTeacher = false }) => {
           )}
         </HStack>
       </HStack>
+
+      {!quiz.is_published && (
+        <Alert status="info" mb={4}>
+          <AlertIcon />
+          <Text>
+            Note: You can regenerate up to 5 questions for this quiz. This will use a question from the additional questions pool. You have {regenerationsRemaining} regenerations remaining.
+          </Text>
+        </Alert>
+      )}
 
       <Card mb={6} variant="outline" className="glass-effect">
         <CardHeader bg="gray.50">

@@ -48,15 +48,35 @@ const QuizSection = () => {
   const [quizToDeleteId, setQuizToDeleteId] = useState(null);
   const [isConfirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [departments, setDepartments] = useState([]);
-  const [quizPublishableState, setQuizPublishableState] = useState({});
-  const [isCheckingPublishable, setIsCheckingPublishable] = useState({});
 
   // State for question view modal
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [isViewModalOpen, setViewModalOpen] = useState(false);
   const [isQuestionsLoading, setQuestionsLoading] = useState(false);
   const [regenerationsUsed, setRegenerationsUsed] = useState(0);
+  const [balanceQuestions, setBalanceQuestions] = useState(0);
   const [additionalQuestionsPool, setAdditionalQuestionsPool] = useState([]);
+
+  const processQuestionList = (list) => 
+    list.filter(Boolean).map((q, index) => {
+      const processed = { ...q };
+      processed.question_text = q.question || q.question_text || 'No question text';
+      processed.type = q.question_type || q.type || 'mcq';
+      processed.question_number = q.question_number || (index + 1);
+      if (processed.type === 'mcq' && q.options) {
+        if (Array.isArray(q.options)) {
+          processed.options = q.options.map((opt, optIndex) => (typeof opt === 'object' && opt.option_text) ? opt : { option_text: String(opt), is_correct: false, id: String.fromCharCode(65 + optIndex) });
+        } else if (typeof q.options === 'object' && q.options !== null) {
+          const correctKey = q.correct_answer?.toString().split(':')[0].trim();
+          processed.options = Object.entries(q.options).map(([key, value]) => ({ option_text: (value && typeof value === 'object') ? JSON.stringify(value) : String(value), is_correct: key === correctKey, id: key }));
+        } else {
+          processed.options = [];
+        }
+      } else {
+        processed.options = [];
+      }
+      return processed;
+    });
 
   const fetchQuizzes = useCallback(async () => {
     setIsLoading(true);
@@ -91,21 +111,6 @@ const QuizSection = () => {
     }
   }, [showSnackbar]);
 
-  const checkQuizPublishable = useCallback(async (quizId) => {
-    setIsCheckingPublishable(prev => ({ ...prev, [quizId]: true }));
-    try {
-      const quizDetails = await quizService.getQuizDetails(quizId);
-      const questions = quizDetails.current_questions || quizDetails.questions || [];
-      const isValid = areAllQuestionsValid(questions);
-      setQuizPublishableState(prev => ({ ...prev, [quizId]: isValid }));
-    } catch (error) {
-      console.error(`Failed to check publishable status for quiz ${quizId}`, error);
-      setQuizPublishableState(prev => ({ ...prev, [quizId]: false }));
-    } finally {
-      setIsCheckingPublishable(prev => ({ ...prev, [quizId]: false }));
-    }
-  }, []);
-
   useEffect(() => {
     const loadData = async () => {
       if (!isCreating) {
@@ -124,15 +129,6 @@ const QuizSection = () => {
     loadData();
     // Only re-run when isCreating changes, not on function reference changes
   }, [isCreating]);
-
-  useEffect(() => {
-    const draftQuizzes = quizzes.filter(q => !q.is_published);
-    draftQuizzes.forEach(quiz => {
-      if (quizPublishableState[quiz.quiz_id] === undefined) {
-        checkQuizPublishable(quiz.quiz_id);
-      }
-    });
-  }, [quizzes, checkQuizPublishable, quizPublishableState]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -253,8 +249,8 @@ const QuizSection = () => {
         questionsToDisplay = quizData.questions;
       }
       
-      if (quizData.additional_questions) {
-        additionalQuestions = quizData.additional_questions;
+      if (quizData.additional_question_list) {
+        additionalQuestions = quizData.additional_question_list;
       }
 
       // Handle case where questions might be a JSON string
@@ -278,28 +274,10 @@ const QuizSection = () => {
       console.log('Processed questions to display:', questionsToDisplay);
       
       // Process questions for display, ensuring all keys are preserved correctly.
-      const processQuestionList = (list) => 
-        list.filter(Boolean).map((q, index) => {
-          const processed = { ...q };
-          processed.question_text = q.question || q.question_text || 'No question text';
-          processed.type = q.question_type || q.type || 'mcq';
-          processed.question_number = q.question_number || (index + 1);
-          if (processed.type === 'mcq' && q.options) {
-            if (Array.isArray(q.options)) {
-              processed.options = q.options.map((opt, optIndex) => (typeof opt === 'object' && opt.option_text) ? opt : { option_text: String(opt), is_correct: false, id: String.fromCharCode(65 + optIndex) });
-            } else if (typeof q.options === 'object' && q.options !== null) {
-              const correctKey = q.correct_answer?.toString().split(':')[0].trim();
-              processed.options = Object.entries(q.options).map(([key, value]) => ({ option_text: (value && typeof value === 'object') ? JSON.stringify(value) : String(value), is_correct: key === correctKey, id: key }));
-            } else {
-              processed.options = [];
-            }
-          } else {
-            processed.options = [];
-          }
-          return processed;
-        });
-
-      const processedQuestions = processQuestionList(questionsToDisplay);
+      const processedQuestions = processQuestionList(questionsToDisplay).map((question, index) => ({
+        ...question,
+        question_number: index + 1
+      }));
       const processedAdditionalQuestions = processQuestionList(additionalQuestions);
 
       console.log('Final processed questions:', processedQuestions);
@@ -310,6 +288,7 @@ const QuizSection = () => {
         questions: processedQuestions
       });
       setAdditionalQuestionsPool(processedAdditionalQuestions);
+      setBalanceQuestions(quizData.balance_questions || 0);
 
     } catch (error) {
       console.error('Failed to fetch quiz details:', error);
@@ -320,34 +299,82 @@ const QuizSection = () => {
     }
   };
 
-  const handleRegenerateQuestion = (questionIndex) => {
-    if (regenerationsUsed >= 5) {
+  const handleRegenerateQuestion = async (questionIndex) => {
+    if (!selectedQuiz) return;
+
+    if (!selectedQuiz.is_published && regenerationsUsed >= balanceQuestions) {
       showSnackbar('You have used all your regenerations for this quiz.', 'warning');
       return;
     }
-    if (additionalQuestionsPool.length === 0) {
-      showSnackbar('No additional questions are available to swap.', 'warning');
+
+    const questionToReplace = selectedQuiz.questions[questionIndex];
+    if (!questionToReplace) {
+      showSnackbar('Could not find the question to regenerate.', 'error');
       return;
     }
+    const originalQuestionNumber = questionToReplace.question_number;
 
-    // Take the first question from the pool
-    const newQuestion = additionalQuestionsPool[0];
-    
-    // Get the current question to preserve its number
-    const oldQuestion = selectedQuiz.questions[questionIndex];
-    newQuestion.question_number = oldQuestion.question_number;
+    try {
+      await quizService.replaceQuestion(selectedQuiz.quiz_id, originalQuestionNumber);
 
-    // Update the questions in the selected quiz
-    const updatedQuestions = [...selectedQuiz.questions];
-    updatedQuestions[questionIndex] = newQuestion;
-    
-    setSelectedQuiz(prev => ({ ...prev, questions: updatedQuestions }));
-    
-    // Update the pool and the used count
-    setAdditionalQuestionsPool(prev => prev.slice(1));
-    setRegenerationsUsed(prev => prev + 1);
+      // Refresh the quiz data from backend after regeneration
+      const refreshedQuizData = await quizService.getQuizDetails(selectedQuiz.quiz_id);
+      
+      // Handle different question data formats from backend
+      let questionsToDisplay = [];
+      let additionalQuestions = [];
+      
+      if (refreshedQuizData.current_questions) {
+        questionsToDisplay = refreshedQuizData.current_questions;
+      } else if (refreshedQuizData.questions) {
+        questionsToDisplay = refreshedQuizData.questions;
+      }
+      
+      if (refreshedQuizData.additional_question_list) {
+        additionalQuestions = refreshedQuizData.additional_question_list;
+      }
 
-    showSnackbar(`Question ${oldQuestion.question_number} replaced. ${4 - regenerationsUsed} regenerations left.`, 'success');
+      // Handle case where questions might be a JSON string
+      if (typeof questionsToDisplay === 'string') {
+        try {
+          questionsToDisplay = JSON.parse(questionsToDisplay);
+        } catch (parseError) {
+          console.error('Failed to parse questions JSON:', parseError);
+          questionsToDisplay = [];
+        }
+      }
+      
+      // Ensure we have an array
+      if (!Array.isArray(questionsToDisplay)) {
+        questionsToDisplay = [];
+      }
+      if (!Array.isArray(additionalQuestions)) {
+        additionalQuestions = [];
+      }
+      
+      // Process questions and assign sequential question numbers (1, 2, 3, etc.)
+      const processedQuestions = processQuestionList(questionsToDisplay).map((question, index) => ({
+        ...question,
+        question_number: index + 1
+      }));
+      const processedAdditionalQuestions = processQuestionList(additionalQuestions);
+
+      setSelectedQuiz(prev => ({
+        ...refreshedQuizData,
+        questions: processedQuestions
+      }));
+      setAdditionalQuestionsPool(processedAdditionalQuestions);
+      setBalanceQuestions(refreshedQuizData.balance_questions || 0);
+
+      showSnackbar('Question regenerated successfully!', 'success');
+
+      if (!selectedQuiz.is_published) {
+        setRegenerationsUsed(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Failed to regenerate question:', error);
+      showSnackbar(error.message || 'Failed to regenerate question', 'error');
+    }
   };
 
   const closeViewModal = () => {
@@ -355,6 +382,7 @@ const QuizSection = () => {
     setSelectedQuiz(null);
     setRegenerationsUsed(0);
     setAdditionalQuestionsPool([]);
+    setBalanceQuestions(0);
   };
 
   const getStatusChip = (isPublished) => {
@@ -392,8 +420,6 @@ const QuizSection = () => {
     
     // Get passing score from backend data only
     const getPassingScore = (quiz) => {
-    
-      
       // Use only the backend passing_score field - no fallbacks to mock data
       if (quiz.passing_score !== undefined && quiz.passing_score !== null) {
         return `${quiz.passing_score}%`;
@@ -404,9 +430,6 @@ const QuizSection = () => {
     };
 
     const hasQuestions = quiz.no_of_questions > 0;
-
-    const isPublishable = quizPublishableState[quiz.quiz_id];
-    const isChecking = isCheckingPublishable[quiz.quiz_id];
 
     return (
       <Grid item xs={12} sm={6} md={4} key={quiz.quiz_id}>
@@ -468,21 +491,16 @@ const QuizSection = () => {
                 <IconButton size="small" onClick={() => handleViewQuiz(quiz.quiz_id)}><VisibilityIcon /></IconButton>
                 <IconButton size="small" onClick={() => handleDelete(quiz.quiz_id)}><DeleteIcon /></IconButton>
               </Box>
-              {!quiz.is_published ? (
-                <Tooltip title={!isPublishable && !isChecking ? "This quiz cannot be published because it has missing or invalid questions." : ""}>
-                  <span>
-                    <Button 
-                      variant="contained" 
-                      startIcon={isChecking ? <CircularProgress size={20} color="inherit" /> : <AssignmentIcon />} 
-                      size="small" 
-                      onClick={() => handlePublishClick(quiz.quiz_id)}
-                      disabled={!isPublishable || isChecking}
-                    >
-                      {isChecking ? 'Checking...' : 'PUBLISH'}
-                    </Button>
-                  </span>
-                </Tooltip>
-              ) : (
+              {!quiz.is_published && hasQuestions ? (
+                <Button 
+                  variant="contained" 
+                  startIcon={<AssignmentIcon />} 
+                  size="small" 
+                  onClick={() => handlePublishClick(quiz.quiz_id)}
+                >
+                  PUBLISH
+                </Button>
+              ) : quiz.is_published ? (
                 <Button 
                   variant="outlined" 
                   color="success"
@@ -498,7 +516,7 @@ const QuizSection = () => {
                   }}>
                   Copy Link
                 </Button>
-              )}
+              ) : null}
             </CardActions>
           </QuizStyledCard>
         </motion.div>
@@ -608,15 +626,22 @@ const QuizSection = () => {
               </Box>
             ) : selectedQuiz ? (
               <>
-                <Box sx={{ p: 2, mb: 2, backgroundColor: 'info.50', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
-                  <Typography variant="body2" sx={{ color: 'info.dark', fontWeight: 'medium' }}>
-                    Note: You can regenerate up to 5 questions for this quiz. This will use a question from the additional questions pool. 
-                    You have {5 - regenerationsUsed} regenerations remaining.
-                  </Typography>
-                </Box>
+                {!selectedQuiz.is_published && (
+                  <Box sx={{ p: 2, mb: 2, backgroundColor: 'info.50', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
+                    <Typography variant="body2" sx={{ color: 'info.dark', fontWeight: 'medium' }}>
+                      Note: You can regenerate up to {balanceQuestions} questions for this quiz. This will use a question from the additional questions pool. 
+                      You have {balanceQuestions - regenerationsUsed} regenerations remaining.
+                    </Typography>
+                  </Box>
+                )}
                 <List>
                   {selectedQuiz.questions?.map((question, index) => {
-                    const canRegenerate = regenerationsUsed < 5 && additionalQuestionsPool.length > 0;
+                    const canRegenerate = regenerationsUsed < balanceQuestions && additionalQuestionsPool.length > 0;
+                    const tooltipTitle = canRegenerate
+                      ? 'Regenerate this question'
+                      : regenerationsUsed >= balanceQuestions
+                        ? 'No more regenerations available.'
+                        : 'No additional questions in the pool.';
 
                     return (
                       <Paper key={index} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'divider' }}>
@@ -626,17 +651,19 @@ const QuizSection = () => {
                           </Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Chip label={question.type?.toUpperCase()} size="small" />
-                            <Tooltip title={canRegenerate ? 'Regenerate this question' : 'No more regenerations available'}>
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => handleRegenerateQuestion(index)}
-                                  disabled={!canRegenerate}
-                                >
-                                  <ReplayIcon />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
+                            {!selectedQuiz.is_published && (
+                              <Tooltip title={tooltipTitle}>
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleRegenerateQuestion(index)}
+                                    disabled={!canRegenerate}
+                                  >
+                                    <ReplayIcon />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            )}
                           </Box>
                         </Box>
                         <Typography variant="body1" sx={{ mt: 1 }}>{question.question_text}</Typography>

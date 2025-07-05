@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CircularProgress, Box } from '@mui/material';
 import { CustomThemeProvider } from './contexts/ThemeContext';
+import { TeacherThemeProvider } from './contexts/TeacherThemeProvider';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import TeacherSection from './components/teachers/TeacherSection';
@@ -110,7 +111,9 @@ function App() {
           {/* Role-specific dashboards */}
           <Route path="/teacher-dashboard" element={
             <ProtectedRoute>
-              <TeacherDashboard />
+              <TeacherThemeProvider>
+                <TeacherDashboard />
+              </TeacherThemeProvider>
             </ProtectedRoute>
           } />
           <Route path="/student-dashboard" element={
@@ -144,30 +147,38 @@ function App() {
           {/* Teacher-specific routes with TeacherLayout */}
           <Route path="/teacher/quiz" element={
             <ProtectedRoute>
-              <TeacherLayout>
-                <TeacherQuizSection />
-              </TeacherLayout>
+              <TeacherThemeProvider>
+                <TeacherLayout>
+                  <TeacherQuizSection />
+                </TeacherLayout>
+              </TeacherThemeProvider>
             </ProtectedRoute>
           } />
           <Route path="/teacher/students" element={
             <ProtectedRoute>
-              <TeacherLayout>
-                <TeacherStudentSection />
-              </TeacherLayout>
+              <TeacherThemeProvider>
+                <TeacherLayout>
+                  <TeacherStudentSection />
+                </TeacherLayout>
+              </TeacherThemeProvider>
             </ProtectedRoute>
           } />
           <Route path="/teacher/departments" element={
             <ProtectedRoute>
-              <TeacherLayout>
-                <DepartmentSection />
-              </TeacherLayout>
+              <TeacherThemeProvider>
+                <TeacherLayout>
+                  <DepartmentSection />
+                </TeacherLayout>
+              </TeacherThemeProvider>
             </ProtectedRoute>
           } />
           <Route path="/teacher/settings" element={
             <ProtectedRoute>
-              <TeacherLayout>
-                <TeacherSettingsPage />
-              </TeacherLayout>
+              <TeacherThemeProvider>
+                <TeacherLayout>
+                  <TeacherSettingsPage />
+                </TeacherLayout>
+              </TeacherThemeProvider>
             </ProtectedRoute>
           } />
           

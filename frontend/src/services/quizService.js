@@ -155,7 +155,7 @@ export const quizService = {
       console.error('Error creating quiz:', error);
       if (error.response?.data?.detail) {
         throw new Error(error.response.data.detail);
-      } else if (error.response?.data?.message) {
+      } else if (error.response.data?.message) {
         throw new Error(error.response.data.message);
       } else if (error.message) {
         throw new Error(error.message);
@@ -418,17 +418,49 @@ export const quizService = {
   // Helper function to format questions for display in modals/dialogs
   formatQuestionsForDisplay: formatQuestionsForDisplay,
 
+  // Replace a question in a quiz
   replaceQuestion: async (quizId, questionNumber) => {
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/quiz/${quizId}/replace-question/`, 
+        `${API_BASE_URL}/api/quiz/${quizId}/replace-question/`,
         { question_number: questionNumber },
         getAuthHeaders()
       );
       return response.data;
     } catch (error) {
       console.error('Error replacing question:', error);
-      throw error;
+      if (error.response?.data?.detail) {
+        throw new Error(error.response.data.detail);
+      } else if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      } else if (error.message) {
+        throw new Error(error.message);
+      } else {
+        throw new Error('Failed to replace question');
+      }
+    }
+  },
+
+  // Regenerate a single question in a quiz
+  regenerateQuizQuestion: async (quizId, questionNumber) => {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/quiz/${quizId}/regenerate-question/${questionNumber}/`,
+        {},
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error regenerating quiz question:', error);
+      if (error.response?.data?.detail) {
+        throw new Error(error.response.data.detail);
+      } else if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      } else if (error.message) {
+        throw new Error(error.message);
+      } else {
+        throw new Error('Failed to regenerate quiz question');
+      }
     }
   },
 };

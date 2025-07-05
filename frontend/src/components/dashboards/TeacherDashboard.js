@@ -36,7 +36,9 @@ import {
   Schedule as ScheduleIcon,
   Assignment as AssignmentIcon,
   CheckCircle as CheckCircleIcon,
-  Menu as MenuIcon
+  Menu as MenuIcon,
+  WbSunny as SunIcon,
+  Brightness4 as MoonIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import apiService from '../../api';
@@ -70,9 +72,9 @@ const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) 
         width: DRAWER_WIDTH,
         '& .MuiDrawer-paper': {
           width: DRAWER_WIDTH,
-          background: 'linear-gradient(180deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
-          borderRight: 'none',
-          color: 'white',
+          background: theme.palette.background.paper,
+          borderRight: `1px solid ${theme.palette.divider}`,
+          color: theme.palette.text.primary,
         },
       }}
     >
@@ -82,9 +84,9 @@ const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) 
           <IconButton 
             onClick={() => onNavigate('/teacher-dashboard')}
             sx={{ 
-              color: 'white', 
-              backgroundColor: 'rgba(255,255,255,0.1)',
-              '&:hover': { backgroundColor: 'rgba(255,255,255,0.2)' }
+              color: theme.palette.primary.main, 
+              backgroundColor: alpha(theme.palette.primary.main, 0.1),
+              '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.2) }
             }}
           >
             <DashboardIcon />
@@ -101,19 +103,19 @@ const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) 
                   sx={{
                     borderRadius: 2,
                     py: 1.5, px: 2,
-                    backgroundColor: currentPath === item.path ? 'rgba(255,255,255,0.15)' : 'transparent',
-                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
+                    backgroundColor: currentPath === item.path ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+                    '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.05) },
                     transition: 'all 0.2s ease',
                   }}
                 >
-                  <ListItemIcon sx={{ color: 'white', minWidth: 40 }}>
+                  <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
                     {item.icon}
                   </ListItemIcon>
                   <ListItemText 
                     primary={item.label}
                     primaryTypographyProps={{
                       fontWeight: currentPath === item.path ? 600 : 400,
-                      color: 'white',
+                      color: theme.palette.text.primary,
                       fontSize: '0.95rem'
                     }}
                   />
@@ -124,16 +126,16 @@ const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) 
         </Box>
 
         {/* User Section */}
-        <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.1)', pt: 2 }}>
+        <Box sx={{ borderTop: `1px solid ${theme.palette.divider}`, pt: 2 }}>
           <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}>
+            <Avatar sx={{ bgcolor: theme.palette.primary.main, color: 'white' }}>
               {teacherName.charAt(0).toUpperCase()}
             </Avatar>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography 
                 variant="body2" 
                 sx={{ 
-                  color: 'white', 
+                  color: theme.palette.text.primary, 
                   fontWeight: 600,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -145,7 +147,7 @@ const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) 
               <Typography 
                 variant="caption" 
                 sx={{ 
-                  color: 'rgba(255,255,255,0.7)',
+                  color: theme.palette.text.secondary,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
@@ -169,7 +171,7 @@ const ActivityItem = ({ icon, title, subtitle, amount, isPositive, time }) => (
     justifyContent: 'space-between',
     py: { xs: 1.5, sm: 2 },
     px: { xs: 1, sm: 0 },
-    borderBottom: '1px solid #f1f5f9',
+    borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
     flexDirection: { xs: 'column', sm: 'row' },
     gap: { xs: 1, sm: 0 }
   }}>
@@ -183,7 +185,7 @@ const ActivityItem = ({ icon, title, subtitle, amount, isPositive, time }) => (
         width: 40,
         height: 40,
         borderRadius: 2,
-        backgroundColor: '#f8fafc',
+        backgroundColor: (theme) => theme.palette.action.hover,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -196,7 +198,7 @@ const ActivityItem = ({ icon, title, subtitle, amount, isPositive, time }) => (
           variant="body2" 
           sx={{ 
             fontWeight: 600, 
-            color: '#1e293b',
+            color: (theme) => theme.palette.text.primary,
             fontSize: { xs: '0.875rem', sm: '0.875rem' }
           }}
         >
@@ -205,7 +207,7 @@ const ActivityItem = ({ icon, title, subtitle, amount, isPositive, time }) => (
         <Typography 
           variant="caption" 
           sx={{ 
-            color: '#64748b',
+            color: (theme) => theme.palette.text.secondary,
             fontSize: { xs: '0.75rem', sm: '0.75rem' }
           }}
         >
@@ -223,7 +225,7 @@ const ActivityItem = ({ icon, title, subtitle, amount, isPositive, time }) => (
     }}>
       <Typography variant="body2" sx={{ 
         fontWeight: 600, 
-        color: isPositive ? '#10b981' : '#ef4444',
+        color: isPositive ? 'success.main' : 'error.main',
         fontSize: { xs: '0.875rem', sm: '0.875rem' }
       }}>
         {isPositive ? '+' : ''}{amount}
@@ -231,7 +233,7 @@ const ActivityItem = ({ icon, title, subtitle, amount, isPositive, time }) => (
       <Typography 
         variant="caption" 
         sx={{ 
-          color: '#64748b',
+          color: (theme) => theme.palette.text.secondary,
           fontSize: { xs: '0.75rem', sm: '0.75rem' }
         }}
       >
@@ -245,7 +247,7 @@ const ActivityItem = ({ icon, title, subtitle, amount, isPositive, time }) => (
 const ContactItem = ({ name, location, avatar }) => (
   <Box sx={{ 
     py: 2, 
-    borderBottom: '1px solid #f1f5f9',
+    borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
     '&:last-child': { borderBottom: 'none' }
   }}>
     <Stack direction="row" alignItems="center" spacing={2}>
@@ -263,7 +265,7 @@ const ContactItem = ({ name, location, avatar }) => (
           variant="body2" 
           sx={{ 
             fontWeight: 600, 
-            color: '#1e293b',
+            color: (theme) => theme.palette.text.primary,
             fontSize: '0.875rem',
             lineHeight: 1.4,
             mb: 0.5
@@ -274,7 +276,7 @@ const ContactItem = ({ name, location, avatar }) => (
         <Typography 
           variant="caption" 
           sx={{ 
-            color: '#64748b',
+            color: (theme) => theme.palette.text.secondary,
             fontSize: '0.75rem',
             lineHeight: 1.2
           }}
@@ -290,15 +292,15 @@ const ContactItem = ({ name, location, avatar }) => (
 const SummaryCard = ({ title, value, trend, color }) => (
   <Box>
     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-      <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
+      <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
         {title}
       </Typography>
-      <TrendingUpIcon sx={{ fontSize: 16, color: '#10b981' }} />
+      <TrendingUpIcon sx={{ fontSize: 16, color: 'success.main' }} />
     </Stack>
-    <Typography variant="h4" sx={{ fontWeight: 700, color: '#1e293b', mb: 2 }}>
+    <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', mb: 2 }}>
       {value}
     </Typography>
-    <Typography variant="caption" sx={{ color: '#64748b' }}>
+    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
       {trend}
     </Typography>
     <Box sx={{ mt: 2, height: 60 }}>
@@ -306,7 +308,7 @@ const SummaryCard = ({ title, value, trend, color }) => (
       <Box sx={{
         width: '100%',
         height: '100%',
-        background: `linear-gradient(135deg, ${alpha(color, 0.1)} 0%, ${alpha(color, 0.3)} 100%)`,
+        background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.primary.main, 0.3)} 100%)`,
         borderRadius: 2,
         position: 'relative',
         overflow: 'hidden'
@@ -317,7 +319,7 @@ const SummaryCard = ({ title, value, trend, color }) => (
           left: 0,
           width: '100%',
           height: '60%',
-          background: color,
+          background: (theme) => theme.palette.primary.main,
           borderRadius: '2px 2px 0 0',
           opacity: 0.7
         }} />
@@ -395,7 +397,7 @@ const TeacherDashboard = () => {
           
           activities.push({
             id: `quiz-${quiz.uuid || quiz.id}`,
-            icon: <QuizIcon sx={{ color: '#8b5cf6', fontSize: 20 }} />,
+            icon: <QuizIcon sx={{ color: (theme) => theme.palette.primary.main, fontSize: 20 }} />,
             title: "Quiz Created",
             subtitle: `${quiz.title} - ${departmentName}`,
             amount: `${quiz.num_questions || 0} questions`,
@@ -418,7 +420,7 @@ const TeacherDashboard = () => {
           
           activities.push({
             id: `student-${student.student_id || student.id}`,
-            icon: <PeopleIcon sx={{ color: '#10b981', fontSize: 20 }} />,
+            icon: <PeopleIcon sx={{ color: 'success.main', fontSize: 20 }} />,
             title: "New Student Registration",
             subtitle: `${student.name} enrolled in ${departmentName}`,
             amount: "1 student",
@@ -448,7 +450,7 @@ const TeacherDashboard = () => {
       setRecentActivities([
         {
           id: 'fallback-1',
-          icon: <QuizIcon sx={{ color: '#8b5cf6', fontSize: 20 }} />,
+          icon: <QuizIcon sx={{ color: (theme) => theme.palette.primary.main, fontSize: 20 }} />,
           title: "Welcome to Dashboard",
           subtitle: "Start by creating your first quiz",
           amount: "Get started",
@@ -539,7 +541,7 @@ const TeacherDashboard = () => {
   const displayName = teacherData?.name || localStorage.getItem('userFirstName') || 'Teacher';
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f8fafc' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* Sidebar */}
       <ModernSidebar 
         open={drawerOpen}
@@ -558,20 +560,20 @@ const TeacherDashboard = () => {
         {/* Top Header */}
         <Box sx={{ 
           p: { xs: 2, sm: 3, md: 4 }, 
-          bgcolor: 'white',
-          borderBottom: '1px solid #e2e8f0'
+          bgcolor: 'background.paper',
+          borderBottom: (theme) => `1px solid ${theme.palette.divider}`
         }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             <Box>
               {isMobile && (
                 <IconButton
                   onClick={() => setDrawerOpen(true)}
-                  sx={{ mb: 1, color: '#64748b' }}
+                  sx={{ mb: 1, color: 'text.secondary' }}
                 >
                   <MenuIcon />
                 </IconButton>
               )}
-              <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, color: '#1e293b', mb: 1 }}>
+              <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
                 {getCurrentHour()} {displayName}!
               </Typography>
             </Box>
@@ -579,8 +581,8 @@ const TeacherDashboard = () => {
               <Button
                 variant="outlined"
                 sx={{ 
-                  borderColor: '#e2e8f0',
-                  color: '#64748b',
+                  borderColor: 'divider',
+                  color: 'text.primary',
                   textTransform: 'none',
                   borderRadius: 2,
                   display: { xs: 'none', sm: 'flex' }
@@ -590,14 +592,14 @@ const TeacherDashboard = () => {
               </Button>
               <Badge badgeContent={3} color="error">
                 <IconButton sx={{ 
-                  bgcolor: '#6366f1', 
+                  bgcolor: 'primary.main', 
                   color: 'white',
-                  '&:hover': { bgcolor: '#5856eb' }
+                  '&:hover': { bgcolor: 'primary.dark' }
                 }}>
                   <NotificationsIcon />
                 </IconButton>
               </Badge>
-              <Avatar sx={{ bgcolor: '#f97316' }}>
+              <Avatar sx={{ bgcolor: 'secondary.main' }}>
                 {displayName.charAt(0).toUpperCase()}
               </Avatar>
             </Stack>
@@ -613,18 +615,18 @@ const TeacherDashboard = () => {
                 borderRadius: 4, 
                 p: { xs: 2, sm: 3, md: 4 }, 
                 mb: { xs: 2, sm: 3, md: 4 },
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                border: (theme) => `1px solid ${theme.palette.divider}`,
+                boxShadow: 'none'
               }}>
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
                     All Activities
                   </Typography>
                   <Stack direction="row" spacing={1}>
-                    <IconButton size="small" sx={{ border: '1px solid #e2e8f0' }}>
+                    <IconButton size="small" sx={{ border: (theme) => `1px solid ${theme.palette.divider}` }}>
                       <ArrowBackIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" sx={{ border: '1px solid #e2e8f0' }}>
+                    <IconButton size="small" sx={{ border: (theme) => `1px solid ${theme.palette.divider}` }}>
                       <ArrowForwardIcon fontSize="small" />
                     </IconButton>
                   </Stack>
@@ -632,13 +634,13 @@ const TeacherDashboard = () => {
 
                 {/* This Week Summary */}
                 <Box sx={{ 
-                  bgcolor: '#f8fafc', 
+                  bgcolor: 'action.hover', 
                   borderRadius: 3, 
                   p: { xs: 2, sm: 3 }, 
                   mb: { xs: 2, sm: 3, md: 4 },
-                  border: '1px solid #e2e8f0'
+                  border: (theme) => `1px solid ${theme.palette.divider}`
                 }}>
-                  <Typography variant="body2" sx={{ color: '#64748b', mb: 2 }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
                     Account Overview
                   </Typography>
                   <Stack 
@@ -647,11 +649,11 @@ const TeacherDashboard = () => {
                     spacing={3}
                   >
                     <Stack direction="row" alignItems="center" spacing={1}>
-                      <CheckCircleIcon sx={{ color: '#10b981', fontSize: 20 }} />
-                      <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                      <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                      <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
                         {stats.totalQuizzes}
                       </Typography>
-                      <Typography variant="body2" sx={{ color: '#64748b' }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                         {stats.totalQuizzes === 1 ? 'Quiz' : 'Quizzes'}
                       </Typography>
                     </Stack>
@@ -660,13 +662,13 @@ const TeacherDashboard = () => {
                         label={`${Math.min(100, Math.round((stats.totalQuizzes / 10) * 100))}% active`} 
                         size="small" 
                         sx={{ 
-                          bgcolor: '#dcfce7', 
-                          color: '#16a34a',
+                          bgcolor: (theme) => alpha(theme.palette.success.main, 0.1), 
+                          color: 'success.dark',
                           border: 'none'
                         }} 
                       />
                     )}
-                    <Typography variant="body2" sx={{ color: '#64748b' }}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       {stats.totalStudents} {stats.totalStudents === 1 ? 'student' : 'students'} in {stats.totalDepartments} {stats.totalDepartments === 1 ? 'subject' : 'subjects'}
                     </Typography>
                   </Stack>
@@ -691,7 +693,7 @@ const TeacherDashboard = () => {
                       />
                     ))
                   ) : (
-                    <Box sx={{ textAlign: 'center', py: 4, color: '#64748b' }}>
+                    <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
                       <Typography variant="body2" sx={{ mb: 2 }}>
                         No recent activities found
                       </Typography>
@@ -707,16 +709,16 @@ const TeacherDashboard = () => {
               <Paper sx={{ 
                 borderRadius: 4, 
                 p: { xs: 2, sm: 3, md: 4 },
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                border: (theme) => `1px solid ${theme.palette.divider}`,
+                boxShadow: 'none'
               }}>
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 4 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
                     Quick Summary On Your Account
                   </Typography>
                   <Button 
                     variant="text" 
-                    sx={{ color: '#6366f1', textTransform: 'none' }}
+                    sx={{ color: 'primary.main', textTransform: 'none' }}
                     onClick={() => handleNavigation('/teacher/quiz')}
                   >
                     View All
@@ -733,7 +735,7 @@ const TeacherDashboard = () => {
                         title="Active Quizzes"
                         value={`${stats.totalQuizzes}`}
                         trend="Total"
-                        color="#6366f1"
+                        color={(theme) => theme.palette.primary.main}
                       />
                     </Box>
                   </Grid>
@@ -746,7 +748,7 @@ const TeacherDashboard = () => {
                         title="Total Students"
                         value={`${stats.totalStudents}`}
                         trend="Enrolled"
-                        color="#10b981"
+                        color={'success.main'}
                       />
                     </Box>
                   </Grid>
@@ -759,20 +761,20 @@ const TeacherDashboard = () => {
                         title="Subjects"
                         value={`${stats.totalDepartments}`}
                         trend="Active"
-                        color="#8b5cf6"
+                        color={'secondary.main'}
                       />
                     </Box>
                   </Grid>
                   <Grid item xs={12} sm={6} md={3}>
                     <Box>
-                      <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, mb: 1 }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, mb: 1 }}>
                         Performance
                       </Typography>
                       <Box sx={{ 
                         width: 80, 
                         height: 80, 
                         borderRadius: '50%',
-                        background: 'conic-gradient(#6366f1 0deg 252deg, #e2e8f0 252deg 360deg)',
+                        background: (theme) => `conic-gradient(${theme.palette.primary.main} 0deg 252deg, ${theme.palette.divider} 252deg 360deg)`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -783,17 +785,17 @@ const TeacherDashboard = () => {
                           width: 60,
                           height: 60,
                           borderRadius: '50%',
-                          bgcolor: 'white',
+                          bgcolor: 'background.paper',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary' }}>
                             85%
                           </Typography>
                         </Box>
                       </Box>
-                      <Typography variant="caption" sx={{ color: '#64748b' }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                         Overall
                       </Typography>
                     </Box>
@@ -807,30 +809,30 @@ const TeacherDashboard = () => {
               <Paper sx={{ 
                 borderRadius: 4, 
                 p: { xs: 2, sm: 3 },
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                border: (theme) => `1px solid ${theme.palette.divider}`,
+                boxShadow: 'none',
                 height: 'fit-content',
                 position: 'sticky',
                 top: { xs: 20, lg: 24 }
               }}>
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '1.125rem' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary', fontSize: '1.125rem' }}>
                     Recent Students
                   </Typography>
                   <IconButton
                     size="small"
                     onClick={() => handleNavigation('/teacher/students')}
                     sx={{ 
-                      color: '#6366f1',
-                      bgcolor: '#f8fafc',
-                      '&:hover': { bgcolor: '#e2e8f0' }
+                      color: 'primary.main',
+                      bgcolor: 'action.hover',
+                      '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1) }
                     }}
                   >
                     🔍
                   </IconButton>
                 </Stack>
 
-                <Typography variant="body2" sx={{ color: '#64748b', mb: 3, fontSize: '0.875rem' }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3, fontSize: '0.875rem' }}>
                   Last quiz submitted 2 days ago
                 </Typography>
 
@@ -841,15 +843,15 @@ const TeacherDashboard = () => {
                     width: '4px',
                   },
                   '&::-webkit-scrollbar-track': {
-                    background: '#f1f1f1',
+                    background: (theme) => theme.palette.background.default,
                     borderRadius: '2px',
                   },
                   '&::-webkit-scrollbar-thumb': {
-                    background: '#c1c1c1',
+                    background: (theme) => theme.palette.divider,
                     borderRadius: '2px',
                   },
                   '&::-webkit-scrollbar-thumb:hover': {
-                    background: '#a8a8a8',
+                    background: (theme) => theme.palette.action.selected,
                   },
                 }}>
                   {loading ? (
@@ -872,8 +874,8 @@ const TeacherDashboard = () => {
                       />
                     ))
                   ) : (
-                    <Box sx={{ textAlign: 'center', py: 4, color: '#64748b' }}>
-                      <PersonIcon sx={{ fontSize: 48, color: '#e2e8f0', mb: 2 }} />
+                    <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
+                      <PersonIcon sx={{ fontSize: 48, color: 'divider', mb: 2 }} />
                       <Typography variant="body2" sx={{ mb: 1 }}>
                         No students yet
                       </Typography>
@@ -891,7 +893,7 @@ const TeacherDashboard = () => {
                       size="small"
                       onClick={() => handleNavigation('/teacher/students')}
                       sx={{ 
-                        color: '#6366f1',
+                        color: 'primary.main',
                         textTransform: 'none',
                         fontSize: '0.875rem'
                       }}
@@ -948,7 +950,7 @@ export const TeacherLayout = ({ children }) => {
   const displayName = teacherData?.name || localStorage.getItem('userFirstName') || 'Teacher';
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f8fafc' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
       <ModernSidebar 
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
@@ -963,22 +965,22 @@ export const TeacherLayout = ({ children }) => {
       }}>
         <Box sx={{ 
           p: { xs: 2, sm: 3 }, 
-          bgcolor: 'white', 
-          borderBottom: '1px solid #e2e8f0',
+          bgcolor: 'background.paper', 
+          borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between'
         }}>
           <IconButton
             onClick={() => setDrawerOpen(!drawerOpen)}
-            sx={{ color: '#64748b' }}
+            sx={{ color: 'text.secondary' }}
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" sx={{ color: '#1e293b', fontWeight: 600 }}>
+          <Typography variant="h6" sx={{ color: 'text.primary', fontWeight: 600 }}>
             Teacher Portal
           </Typography>
-          <Avatar sx={{ width: 36, height: 36, bgcolor: '#6366f1' }}>
+          <Avatar sx={{ width: 36, height: 36, bgcolor: 'primary.main' }}>
             {displayName.charAt(0).toUpperCase()}
           </Avatar>
         </Box>

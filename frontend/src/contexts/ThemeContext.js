@@ -1,13 +1,13 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { CssBaseline } from '@mui/material';
 
 const ThemeContext = createContext();
 
-export const useTheme = () => {
+export const useThemeContext = () => {
   const context = useContext(ThemeContext);
   if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider');
+    throw new Error('useThemeContext must be used within a CustomThemeProvider');
   }
   return context;
 };
@@ -42,7 +42,7 @@ export const CustomThemeProvider = ({ children }) => {
     localStorage.setItem('highContrast', highContrast.toString());
   }, [highContrast]);
 
-  const getThemeConfig = () => {
+  const theme = useMemo(() => {
     const isDark = mode === 'dark';
     
     // Base colors for different appearances
@@ -77,7 +77,7 @@ export const CustomThemeProvider = ({ children }) => {
         primary: highContrast ? '#6600cc' : '#673ab7',
         secondary: highContrast ? '#cc9900' : '#ff9800',
         accent: highContrast ? '#cc0066' : '#e91e63',
-    background: {
+        background: {
           default: isDark 
             ? (highContrast ? '#000000' : 'linear-gradient(135deg, #2d1b69 0%, #11998e 100%)')
             : (highContrast ? '#ffffff' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'),
@@ -91,35 +91,35 @@ export const CustomThemeProvider = ({ children }) => {
     const currentAppearance = appearances[appearance] || appearances.modern;
 
     return createTheme({
-  palette: {
+      palette: {
         mode: mode,
-    primary: {
+        primary: {
           main: currentAppearance.primary,
           contrastText: isDark ? '#ffffff' : '#000000',
-    },
-    secondary: {
+        },
+        secondary: {
           main: currentAppearance.secondary,
           contrastText: isDark ? '#ffffff' : '#000000',
         },
         accent: {
           main: currentAppearance.accent,
-    },
-    background: {
+        },
+        background: {
           default: isDark 
             ? (highContrast ? '#000000' : '#1a1a2e')
             : (highContrast ? '#ffffff' : '#f5f7fa'),
           paper: isDark 
             ? (highContrast ? '#111111' : '#16213e')
             : (highContrast ? '#f5f5f5' : '#ffffff'),
-    },
-    text: {
+        },
+        text: {
           primary: isDark 
             ? (highContrast ? '#ffffff' : 'rgba(255, 255, 255, 0.95)')
             : (highContrast ? '#000000' : 'rgba(0, 0, 0, 0.87)'),
           secondary: isDark 
             ? (highContrast ? '#cccccc' : 'rgba(255, 255, 255, 0.7)')
             : (highContrast ? '#333333' : 'rgba(0, 0, 0, 0.6)'),
-    },
+        },
         divider: isDark 
           ? (highContrast ? '#ffffff' : 'rgba(255, 255, 255, 0.12)')
           : (highContrast ? '#000000' : 'rgba(0, 0, 0, 0.12)'),
@@ -233,9 +233,7 @@ export const CustomThemeProvider = ({ children }) => {
         colors: currentAppearance,
       }
     });
-  };
-
-  const theme = getThemeConfig();
+  }, [mode, appearance, highContrast]);
 
   const toggleMode = () => {
     setMode(prevMode => prevMode === 'light' ? 'dark' : 'light');
@@ -249,16 +247,18 @@ export const CustomThemeProvider = ({ children }) => {
     setHighContrast(prev => !prev);
   };
 
+  const contextValue = {
+    mode,
+    appearance,
+    highContrast,
+    toggleMode,
+    changeAppearance,
+    toggleHighContrast,
+    theme,
+  };
+
   return (
-    <ThemeContext.Provider value={{
-      mode,
-      appearance,
-      highContrast,
-      toggleMode,
-      changeAppearance,
-      toggleHighContrast,
-      theme,
-    }}>
+    <ThemeContext.Provider value={contextValue}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
         {children}

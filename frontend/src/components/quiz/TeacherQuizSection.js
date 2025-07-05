@@ -3,7 +3,7 @@ import {
   Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, 
   IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, 
-  ListItemText, ListItemIcon, Checkbox, Divider, Stack, Avatar
+  ListItemText, ListItemIcon, Checkbox, Divider, Stack, Avatar, Tooltip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -61,6 +61,36 @@ const TeacherQuizSection = () => {
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [isViewModalOpen, setViewModalOpen] = useState(false);
   const [isQuestionsLoading, setQuestionsLoading] = useState(false);
+  const [regenerationsUsed, setRegenerationsUsed] = useState(0);
+  const [balanceQuestions, setBalanceQuestions] = useState(0);
+  const [additionalQuestionsPool, setAdditionalQuestionsPool] = useState([]);
+
+  const processQuestionList = (list) =>
+    list.filter(Boolean).map((q, index) => {
+      const processed = { ...q };
+      processed.question_text = q.question || q.question_text || 'No question text';
+      processed.type = q.question_type || q.type || 'mcq';
+      processed.question_number = q.question_number || (index + 1);
+      if (processed.type === 'mcq' && q.options) {
+        if (Array.isArray(q.options)) {
+          processed.options = q.options.map((opt, optIndex) =>
+            (typeof opt === 'object' && opt.option_text) ? opt : { option_text: String(opt), is_correct: false, id: String.fromCharCode(65 + optIndex) }
+          );
+        } else if (typeof q.options === 'object' && q.options !== null) {
+          const correctKey = q.correct_answer?.toString().split(':')[0].trim();
+          processed.options = Object.entries(q.options).map(([key, value]) => ({
+            option_text: String(value),
+            is_correct: key === correctKey,
+            id: key
+          }));
+        } else {
+          processed.options = [];
+        }
+      } else {
+        processed.options = [];
+      }
+      return processed;
+    });
 
   const fetchQuizzes = useCallback(async () => {
     setIsLoading(true);
@@ -205,118 +235,42 @@ const TeacherQuizSection = () => {
       setQuestionsLoading(true);
       setViewModalOpen(true);
       
-      // Always fetch complete quiz details to ensure we have questions with answers
       const quizDetails = await quizService.getQuizDetails(quizId);
       
       if (!quizDetails) {
         throw new Error('Quiz not found');
       }
       
-      // Handle different question data formats from backend
-      let questions = [];
-      
-      if (quizDetails.current_questions) {
-        questions = quizDetails.current_questions;
-      } else if (quizDetails.questions) {
-        questions = quizDetails.questions;
-      }
-      
-      // Handle case where questions might be a JSON string
-      if (typeof questions === 'string') {
-        try {
-          questions = JSON.parse(questions);
-        } catch (parseError) {
-          console.error('Failed to parse questions JSON:', parseError);
-          questions = [];
-        }
-      }
-      
-      // Ensure we have an array
-      if (!Array.isArray(questions)) {
-        questions = [];
-      }
-      
-      console.log('Raw questions from backend (current only):', questions);
-      
-      // Process questions to normalize the data structure
-      questions = questions
-      .filter(Boolean) // Filter out any null or undefined questions
-      .map((question, qIndex) => {
-        console.log(`Processing question ${qIndex + 1}:`, {
-          question: question.question,
-          type: question.question_type || question.type,
-          correct_answer: question.correct_answer,
-          options: question.options,
-          options_type: typeof question.options
-        });
-        
-        const processedQuestion = {
-          ...question,
-          question_text: question.question_text || question.question,
-          type: question.question_type || question.type || 'mcq'
-        };
+      let questions = quizDetails.current_questions || quizDetails.questions || [];
+      let additionalQuestions = quizDetails.additional_question_list || [];
 
-        // Handle MCQ questions with options object
-        if (processedQuestion.type === 'mcq' && question.options && typeof question.options === 'object' && !Array.isArray(question.options)) {
-          console.log('Converting MCQ options object to array:', question.options);
-          
-          // Convert options object to array format for display
-          processedQuestion.options = Object.entries(question.options).map(([key, text]) => {
-            // Extract the correct answer key from "B: Patrick Hitler" format
-            let correctKey = question.correct_answer;
-            if (correctKey && correctKey.includes(':')) {
-              correctKey = correctKey.split(':')[0].trim();
-            }
-            
-            const optionObj = {
-              option_text: text,
-              is_correct: key === correctKey,
-              id: key
-            };
-            
-            console.log(`  Option ${key}: "${text}", is_correct: ${key === correctKey} (correctKey: ${correctKey})`);
-            return optionObj;
-          });
-          
-          console.log('Final processed MCQ options:', processedQuestion.options);
-        } else if (processedQuestion.type === 'mcq' && Array.isArray(question.options)) {
-          // Already in correct format
-          processedQuestion.options = question.options;
-          console.log('MCQ options already in array format:', processedQuestion.options);
-        } else if (processedQuestion.type === 'mcq') {
-          // MCQ but no valid options - create defaults
-          processedQuestion.options = [
-            { option_text: 'Option A', is_correct: false, id: 'A' },
-            { option_text: 'Option B', is_correct: true, id: 'B' },
-            { option_text: 'Option C', is_correct: false, id: 'C' },
-            { option_text: 'Option D', is_correct: false, id: 'D' }
-          ];
-          console.log('MCQ question but no valid options found, using defaults');
-        } else {
-          // Non-MCQ questions
-          processedQuestion.options = [];
-        }
-
-        // For non-MCQ questions, ensure correct_answer is properly set
-        if (processedQuestion.type !== 'mcq' && question.correct_answer) {
-          // Clean up the correct answer (remove prefix if it exists)
-          let cleanAnswer = question.correct_answer;
-          if (cleanAnswer.includes(':')) {
-            cleanAnswer = cleanAnswer.split(':')[1]?.trim() || cleanAnswer;
+      const parseJsonIfString = (jsonString) => {
+        if (typeof jsonString === 'string') {
+          try {
+            return JSON.parse(jsonString);
+          } catch (e) {
+            console.error('Failed to parse JSON string:', e);
+            return [];
           }
-          processedQuestion.correct_answer = cleanAnswer;
         }
+        return Array.isArray(jsonString) ? jsonString : [];
+      };
 
-        console.log(`Final processed question ${qIndex + 1}:`, processedQuestion);
-        return processedQuestion;
-      });
-      
-      console.log('All processed questions:', questions);
+      questions = parseJsonIfString(questions);
+      additionalQuestions = parseJsonIfString(additionalQuestions);
+
+      const processedQuestions = processQuestionList(questions).map((question, index) => ({
+        ...question,
+        question_number: index + 1
+      }));
+      const processedAdditionalQuestions = processQuestionList(additionalQuestions);
       
       setSelectedQuiz({
         ...quizDetails,
-        questions: questions
+        questions: processedQuestions
       });
+      setAdditionalQuestionsPool(processedAdditionalQuestions);
+      setBalanceQuestions(quizDetails.balance_questions || 0);
     } catch (error) {
       console.error('Failed to load quiz questions:', error);
       showSnackbar('Failed to load quiz questions', 'error');
@@ -326,22 +280,80 @@ const TeacherQuizSection = () => {
     }
   };
 
-  const handleReplaceQuestion = async (questionNumber) => {
+  const handleRegenerateQuestion = async (questionIndex) => {
     if (!selectedQuiz) return;
+
+    if (!selectedQuiz.is_published && regenerationsUsed >= balanceQuestions) {
+      showSnackbar('You have used all your regenerations for this quiz.', 'warning');
+      return;
+    }
+
+    const questionToReplace = selectedQuiz.questions[questionIndex];
+    if (!questionToReplace) {
+      showSnackbar('Could not find the question to regenerate.', 'error');
+      return;
+    }
+    const originalQuestionNumber = questionToReplace.question_number;
+
     try {
-      await quizService.replaceQuestion(selectedQuiz.quiz_id, questionNumber);
-      showSnackbar('Question replaced successfully!', 'success');
-      // Refresh the view
-      await handleViewQuiz(selectedQuiz.quiz_id);
+      await quizService.replaceQuestion(selectedQuiz.quiz_id, originalQuestionNumber);
+      
+      // Refresh the quiz data from backend after regeneration
+      const refreshedQuizData = await quizService.getQuizDetails(selectedQuiz.quiz_id);
+      
+      if (!refreshedQuizData) {
+        throw new Error('Quiz not found');
+      }
+      
+      let questions = refreshedQuizData.current_questions || refreshedQuizData.questions || [];
+      let additionalQuestions = refreshedQuizData.additional_question_list || [];
+
+      const parseJsonIfString = (jsonString) => {
+        if (typeof jsonString === 'string') {
+          try {
+            return JSON.parse(jsonString);
+          } catch (e) {
+            console.error('Failed to parse JSON string:', e);
+            return [];
+          }
+        }
+        return Array.isArray(jsonString) ? jsonString : [];
+      };
+
+      questions = parseJsonIfString(questions);
+      additionalQuestions = parseJsonIfString(additionalQuestions);
+
+      // Process questions and assign sequential question numbers (1, 2, 3, etc.)
+      const processedQuestions = processQuestionList(questions).map((question, index) => ({
+        ...question,
+        question_number: index + 1
+      }));
+      const processedAdditionalQuestions = processQuestionList(additionalQuestions);
+      
+      setSelectedQuiz({
+        ...refreshedQuizData,
+        questions: processedQuestions
+      });
+      setAdditionalQuestionsPool(processedAdditionalQuestions);
+      setBalanceQuestions(refreshedQuizData.balance_questions || 0);
+
+      showSnackbar('Question regenerated successfully!', 'success');
+
+      if (!selectedQuiz.is_published) {
+        setRegenerationsUsed(prev => prev + 1);
+      }
     } catch (error) {
-      console.error('Failed to replace question:', error);
-      showSnackbar('Failed to replace question', 'error');
+      console.error('Failed to regenerate question:', error);
+      showSnackbar(error.message || 'Failed to regenerate question', 'error');
     }
   };
 
   const closeViewModal = () => {
     setViewModalOpen(false);
     setSelectedQuiz(null);
+    setRegenerationsUsed(0);
+    setAdditionalQuestionsPool([]);
+    setBalanceQuestions(0);
   };
 
   const getStatusChip = (isPublished) => {
@@ -432,7 +444,14 @@ const TeacherQuizSection = () => {
                   <Typography variant="caption">Dept: {getDepartmentName(quiz)}</Typography>
                 </Grid>
                 <Grid item xs={6}>
-                  <Typography variant="caption">Difficulty: {quiz.quiz_type || 'Normal'}</Typography>
+                  <Typography variant="caption">Difficulty: {
+                    (quiz.quiz_type && typeof quiz.quiz_type === 'object')
+                      ? Object.entries(quiz.quiz_type)
+                          .filter(([, value]) => value) // Filter out empty values
+                          .map(([key, value]) => `${value} ${key}`)
+                          .join(', ') || 'Not set'
+                      : (quiz.quiz_type || 'Normal')
+                  }</Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="caption">Type: {quiz.question_type || 'Mixed'}</Typography>
@@ -469,7 +488,7 @@ const TeacherQuizSection = () => {
                 </IconButton>
               </Box>
               
-              {!quiz.is_published && (
+              {!quiz.is_published && quiz.no_of_questions > 0 ? (
                 <Button 
                   variant="contained" 
                   size="small"
@@ -483,9 +502,7 @@ const TeacherQuizSection = () => {
                 >
                   Publish
                 </Button>
-              )}
-              
-              {quiz.is_published && (
+              ) : quiz.is_published ? (
                 <Button 
                   variant="outlined" 
                   size="small"
@@ -512,7 +529,7 @@ const TeacherQuizSection = () => {
                 >
                   Copy Link
                 </Button>
-              )}
+              ) : null}
             </CardActions>
           </StyledCard>
         </motion.div>
@@ -703,7 +720,23 @@ const TeacherQuizSection = () => {
             </Box>
           ) : selectedQuiz?.questions?.length > 0 ? (
             <Box sx={{ p: 2 }}>
-              {selectedQuiz.questions.map((question, index) => (
+              {!selectedQuiz.is_published && (
+                <Box sx={{ p: 2, mb: 2, backgroundColor: 'info.50', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
+                  <Typography variant="body2" sx={{ color: 'info.dark', fontWeight: 'medium' }}>
+                    Note: You can regenerate up to {balanceQuestions} questions for this quiz. This will use a question from the additional questions pool. 
+                    You have {balanceQuestions - regenerationsUsed} regenerations remaining.
+                  </Typography>
+                </Box>
+              )}
+              {selectedQuiz.questions.map((question, index) => {
+                const canRegenerate = regenerationsUsed < balanceQuestions && additionalQuestionsPool.length > 0;
+                const tooltipTitle = canRegenerate 
+                  ? 'Regenerate this question' 
+                  : regenerationsUsed >= balanceQuestions
+                    ? 'No more regenerations available.'
+                    : 'No additional questions in the pool.';
+
+                return (
                 <Box key={question.question_number || index} sx={{ mb: 4, p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, backgroundColor: 'background.paper' }}>
                   {/* Question Header */}
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
@@ -722,14 +755,20 @@ const TeacherQuizSection = () => {
                         color="primary" 
                         variant="outlined" 
                       />
-                      <IconButton 
-                        size="small"
-                        aria-label="replace" 
-                        onClick={() => handleReplaceQuestion(question.question_number)}
-                        sx={{ color: 'action.active' }}
-                      >
-                        <ReplayIcon />
-                      </IconButton>
+                      {!selectedQuiz.is_published && (
+                        <Tooltip title={tooltipTitle}>
+                          <span>
+                            <IconButton 
+                              size="small"
+                              aria-label="replace" 
+                              onClick={() => handleRegenerateQuestion(index)}
+                              disabled={!canRegenerate}
+                            >
+                              <ReplayIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
                     </Box>
                   </Box>
                   
@@ -828,7 +867,8 @@ const TeacherQuizSection = () => {
                     </Box>
                   )}
                 </Box>
-              ))}
+                );
+              })}
             </Box>
           ) : (
             <Box sx={{ textAlign: 'center', py: 4 }}>

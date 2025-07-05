@@ -39,7 +39,7 @@ import {
   ScheduleOutlined as ScheduleIcon,
   ChatOutlined as ChatIcon
 } from '@mui/icons-material';
-import { useTheme as useCustomTheme } from '../contexts/ThemeContext';
+import { useThemeContext } from '../contexts/ThemeContext';
 import { useTheme } from '@mui/material/styles';
 import apiService from '../api';
 
@@ -64,7 +64,7 @@ const mobileDrawerWidth = 260;
 
 const FullLayout = ({ children, hideToolbar = false }) => {
   const theme = useTheme();
-  const { appearance, highContrast } = useCustomTheme();
+  const { appearance, highContrast } = useThemeContext();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));

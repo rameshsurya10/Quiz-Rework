@@ -34,7 +34,7 @@ import DateRangeIcon from '@mui/icons-material/DateRange';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 import api from '../../services/api';
 import { useSnackbar } from '../../contexts/SnackbarContext';
-import { useTheme as useCustomTheme } from '../../contexts/ThemeContext';
+import { useThemeContext } from '../../contexts/ThemeContext';
 import { getTimezoneOptions } from '../../utils/localeUtils';
 
 const TabPanel = (props) => {
@@ -68,7 +68,7 @@ const SettingsPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { showSnackbar } = useSnackbar();
-  const { mode, toggleMode, appearance, changeAppearance, highContrast, toggleHighContrast } = useCustomTheme();
+  const { mode, toggleMode, appearance, changeAppearance, highContrast, toggleHighContrast } = useThemeContext();
   const [tabValue, setTabValue] = useState(0);
   const [isConfirmOpen, setConfirmOpen] = useState(false);
   const [currentPlan, setCurrentPlan] = useState('professional');
@@ -784,7 +784,6 @@ const NotificationSettings = ({ settings, handleChange, cardStyles }) => (
 
 const AppearanceSettings = ({ mode, toggleMode, appearance, changeAppearance, highContrast, toggleHighContrast, cardStyles }) => {
   const theme = useTheme();
-
   return (
     <Grid container spacing={3}>
       {/* Theme Mode */}
