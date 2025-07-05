@@ -5,7 +5,7 @@ from django.conf import settings
 from documents.models import DocumentVector
 import tiktoken
 
-def compress_file_if_needed(file_obj, max_size_mb=60):
+def compress_file_if_needed(file_obj, max_size_mb=100):
     file_size_mb = file_obj.size / (1024 * 1024)
     if file_size_mb <= max_size_mb:
         return file_obj, file_obj.name  # No compression neede  d

@@ -115,244 +115,171 @@ class DocumentProcessingService:
         }
 
     def generate_questions_from_text(self, text, question_type, quiz_type, num_questions):
-        """
-        Generate questions from text using OpenAI API.
-        """
         from openai import OpenAI
         from django.conf import settings
         import json
+        import math
 
-        try:
-            logger.info(f"Attempting to initialize OpenAI client with API key: {'present' if settings.OPENAI_API_KEY else 'missing'}")
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            
-            # Make the prompt more specific for 'mixed' type
-            if question_type == 'mixed':
-                type_instruction = "a mix of question types, including 'mcq', 'fill', 'truefalse', 'oneline', and 'match-the-following'"
-                format_instruction = """
-                For mixed questions, ensure each question object has:
-                - "question": The question text
-                - "type": The specific type ('mcq', 'fill', 'truefalse', 'oneline', 'match-the-following')
-                - "options": For MCQ, an object with keys "A", "B", "C", "D". For others, empty object {}
-                - "correct_answer": The correct answer (for MCQ, use the key like "A" or "B")
-                - "explanation": Brief explanation
-                
-                Generate approximately:
-                - 30% MCQ questions
-                - 25% True/False questions  
-                - 20% Fill-in-the-blank questions
-                - 15% One-line answer questions
-                - 10% Match-the-following questions
-                """
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
+        MAX_BATCH = 25
+        total_batches = math.ceil(num_questions / MAX_BATCH)
+        all_validated_questions = []
+        current_question_number = 1
+
+        logger.info(f"🔄 Generating {num_questions} questions in {total_batches} batch(es)...")
+
+        for batch_index in range(total_batches):
+            batch_question_count = min(MAX_BATCH, num_questions - len(all_validated_questions))
+            logger.info(f"📦 Generating batch {batch_index+1} with {batch_question_count} questions...")
+
+            try:
+                batch_questions = self._generate_question_batch(
+                    client=client,
+                    text=text,
+                    question_type=question_type,
+                    quiz_type=quiz_type,
+                    num_questions=batch_question_count,
+                    start_question_number=current_question_number
+                )
+
+                if batch_questions:
+                    all_validated_questions.extend(batch_questions)
+                    current_question_number += len(batch_questions)
+
+            except Exception as e:
+                logger.error(f"❌ Batch {batch_index+1} failed: {str(e)}")
+                continue
+
+        logger.info(f"✅ Total generated questions: {len(all_validated_questions)} / {num_questions}")
+        return all_validated_questions[:num_questions]
+
+    def _generate_question_batch(self, client, text, question_type, quiz_type, num_questions, start_question_number=1):
+        import re
+        import json
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Step 1: Text processing (same as before)
+        text_sections = []
+        current_section = []
+        current_page = None
+
+        for line in text.split('\n'):
+            if line.startswith('==================== PAGE '):
+                if current_section and current_page:
+                    text_sections.append((current_page, '\n'.join(current_section)))
+                current_section = []
+                page_match = re.search(r'PAGE (\d+)', line)
+                if page_match:
+                    current_page = page_match.group(1)
+            elif line.startswith('==================== END OF PAGE'):
+                continue
             else:
-                type_instruction = f"the question type should be '{question_type}'"
-                format_instruction = """
-                Ensure each question object has:
-                - "question": The question text
-                - "type": The question type
-                - "options": For MCQ, an object with keys "A", "B", "C", "D". For others, empty object {}
-                - "correct_answer": The correct answer
-                - "explanation": Brief explanation
-                """
+                current_section.append(line)
 
-            # Parse text to identify pages and their content
-            text_sections = []
-            current_section = []
-            current_page = None
-            
-            for line in text.split('\n'):
-                if line.startswith('==================== PAGE '):
-                    if current_section and current_page:
-                        text_sections.append((current_page, '\n'.join(current_section)))
-                    current_section = []
-                    # Extract page number more reliably
-                    page_match = re.search(r'PAGE (\d+)', line)
-                    if page_match:
-                        current_page = page_match.group(1)
-                elif line.startswith('==================== END OF PAGE'):
-                    continue
-                else:
-                    current_section.append(line)
-            
-            # Add the last section if it exists
-            if current_section and current_page:
-                text_sections.append((current_page, '\n'.join(current_section)))
-            
-            # If no page markers found, treat as single text block
-            if not text_sections:
-                text_sections = [('all', text)]
+        if current_section and current_page:
+            text_sections.append((current_page, '\n'.join(current_section)))
+        if not text_sections:
+            text_sections = [('all', text)]
 
-            # Log page analysis
-            logger.info(f"Found {len(text_sections)} page sections")
-            for page_num, content in text_sections:
-                logger.info(f"Page {page_num}: {len(content)} characters")
+        sections_text = ""
+        page_numbers = []
+        for page_num, section_text in text_sections:
+            sections_text += f"\nContent from page {page_num}:\n{section_text}\n"
+            page_numbers.append(page_num)
+        primary_page = page_numbers[0] if page_numbers else 'all'
 
-            # Prepare content for question generation
-            if len(text_sections) == 1:
-                # Single page or no page markers - use all content
-                page_num, page_content = text_sections[0]
-                sections_text = f"Content from page {page_num}:\n{page_content}\n"
-                primary_page = page_num
-            else:
-                # Multiple pages - include all but note primary pages
-                sections_text = ""
-                page_numbers = []
-                for page_num, section_text in text_sections:
-                    sections_text += f"\nContent from page {page_num}:\n{section_text}\n"
-                    page_numbers.append(page_num)
-                primary_page = page_numbers[0] if page_numbers else 'all'
+        max_content_length = 4000
+        if len(sections_text) > max_content_length:
+            sections_text = sections_text[:max_content_length] + "\n[Content truncated]"
+            logger.warning(f"Content truncated to {max_content_length} characters")
 
-            # Truncate text if too long for API
-            max_content_length = 4000
-            if len(sections_text) > max_content_length:
-                sections_text = sections_text[:max_content_length] + "\n[Content truncated for API limits]"
-                logger.warning(f"Content truncated from {len(sections_text)} to {max_content_length} characters")
-
-            base_prompt = f"""
-            You are an expert quiz creator. Based on the following text content, generate {num_questions} high-quality questions.
-            The quiz difficulty should be '{quiz_type}' and you should generate {type_instruction}.
-
-            Text content to analyze:
-            ---
-            {sections_text}
-            ---
-
-            {format_instruction}
-
-            IMPORTANT REQUIREMENTS:
-            1. Each question MUST be based directly on the content provided above
-            2. Questions should test understanding of the specific concepts, facts, or procedures mentioned in the text
-            3. Avoid generic questions that could apply to any document
-            4. For single page content, all questions should reference that specific page
-            5. Ensure questions are at '{quiz_type}' difficulty level
-
-            Please format the output as a JSON object with a "questions" key containing an array of question objects.
-            Each question object must have the following keys:
-            - "question": The question text based on the specific content provided (string)
-            - "type": The type of question. Must be one of 'mcq', 'fill', 'truefalse', 'oneline', 'match-the-following' (string)
-            - "options": An object with keys "A", "B", "C", "D" for 'mcq' type, otherwise an empty object {{}}
-            - "correct_answer": The correct answer (string)
-            - "explanation": A brief explanation for the answer (string).
-            - "question_number": The question number (integer)
-            - "source_page": The page number where this question's content comes from (string)
-
-            Return only valid JSON in this format:
-            {{
-                "questions": [
-                    {{
-                        "question": "Based on the content, what is...",
-                        "type": "mcq",
-                        "options": {{"A": "Option 1", "B": "Option 2", "C": "Option 3", "D": "Option 4"}},
-                        "correct_answer": "A",
-                        "explanation": "Explanation here",
-                        "question_number": 1
-                    }}
-                ]
-            }}
+        if question_type == 'mixed':
+            type_instruction = "a mix of 'mcq', 'fill', 'truefalse', 'oneline', 'match-the-following'"
+            format_instruction = """
+            Each question must have:
+            - "question", "type", "options", "correct_answer", "explanation", "question_number", "source_page"
+            For 'mcq', options should include "A", "B", "C", "D". For others, options should be empty.
+            """
+        else:
+            type_instruction = f"only questions of type '{question_type}'"
+            format_instruction = """
+            Each question must include:
+            - "question", "type", "options", "correct_answer", "explanation", "question_number", "source_page"
+            For non-MCQ types, use empty options.
             """
 
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant that generates quiz questions specifically from the provided content. All questions must be directly based on the given text."},
-                    {"role": "user", "content": base_prompt}
-                ],
-                temperature=0.3,  # Lower temperature for more consistent results
-            )
-            
-            content = response.choices[0].message.content
-            logger.info(f"Generated content from OpenAI: {len(content)} characters")
-            
-            try:
-                # Clean the content by stripping markdown JSON markers
-                if content.startswith("```json"):
-                    content = content[7:]
-                    if content.endswith("```"):
-                        content = content[:-3]
-                
-                generated_data = json.loads(content)
-            except json.JSONDecodeError:
-                logger.error(f"Raw OpenAI output:\n{content}")
-                raise ValueError("OpenAI response was not valid JSON. Please check formatting.")
-                        
-            questions = []
-            # Handle different response formats
-            if isinstance(generated_data, dict):
-                # Check for questions key first
-                if 'questions' in generated_data and isinstance(generated_data['questions'], list):
-                    questions = generated_data['questions']
-                else:
-                    # Fallback: look for any list value
-                    for key, value in generated_data.items():
-                        if isinstance(value, list) and len(value) > 0:
-                            questions = value
-                            break
-            elif isinstance(generated_data, list):
-                questions = generated_data
+        base_prompt = f"""
+        You are an expert quiz generator. Based on the following content, generate exactly {num_questions} questions.
+        Difficulty: {quiz_type}. Types: {type_instruction}.
 
-            # Validate and fix questions
-            validated_questions = []
-            for i, q in enumerate(questions):
-                if not isinstance(q, dict) or 'question' not in q:
-                    logger.warning(f"Skipping invalid question {i+1}: {q}")
-                    continue
-                
-                # Set default type if missing
-                if 'type' not in q:
-                    if question_type == 'mixed':
-                        # Assign types in a balanced way for mixed quizzes
-                        type_cycle = ['mcq', 'truefalse', 'fill', 'oneline', 'match-the-following']
-                        q['type'] = type_cycle[i % len(type_cycle)]
-                    else:
-                        q['type'] = question_type
-                
-                # Ensure options exist for MCQ
-                if q['type'] == 'mcq':
-                    if 'options' not in q or not isinstance(q['options'], dict) or len(q['options']) < 2:
-                        q['options'] = {
-                            "A": "Option A",
-                            "B": "Option B", 
-                            "C": "Option C",
-                            "D": "Option D"
-                        }
-                    if 'correct_answer' not in q or q['correct_answer'] not in q['options']:
-                        q['correct_answer'] = list(q['options'].keys())[0]  # Default to first option
-                else:
-                    q['options'] = {}
-                    if 'correct_answer' not in q:
-                        if q['type'] == 'truefalse':
-                            q['correct_answer'] = "True"
-                        else:
-                            q['correct_answer'] = "Answer"
-                
-                # Ensure explanation exists
-                if 'explanation' not in q:
-                    q['explanation'] = "Based on the provided content."
-                
-                # Clean question text
-                if not q['question'] or q['question'].strip() == "":
-                    q['question'] = f"Question {i+1} content missing"
-                
-                # Ensure source_page exists
-                if 'source_page' not in q or not q['source_page']:
-                    q['source_page'] = primary_page
-                
-                validated_questions.append(q)
-                logger.info(f"Validated question {len(validated_questions)}: {q['type']} - {q['question'][:50]}... (Page: {q['source_page']})")
-            
-            logger.info(f"Successfully generated and validated {len(validated_questions)} questions")
-            return validated_questions[:num_questions] if validated_questions else []
+        Content:
+        {sections_text}
 
-        except Exception as e:
-            logger.error(f"Error in generate_questions_from_text: {str(e)}")
-            logger.error(f"OpenAI API Key present: {'Yes' if settings.OPENAI_API_KEY else 'No'}")
-            logger.error(f"Text length: {len(text)}")
-            logger.error(f"Question type: {question_type}")
-            logger.error(f"Quiz type: {quiz_type}")
-            logger.error(f"Num questions: {num_questions}")
-            import traceback
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-            return None
+        {format_instruction}
+        Format the output strictly as:
+        {{
+            "questions": [
+                {{
+                    "question": "...",
+                    "type": "mcq",
+                    "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
+                    "correct_answer": "...",
+                    "explanation": "...",
+                    "question_number": 1,
+                    "source_page": "..."
+                }},
+                ...
+            ]
+        }}
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that creates quiz questions strictly based on the provided content."},
+                {"role": "user", "content": base_prompt}
+            ],
+            temperature=0.3,
+        )
+
+        content = response.choices[0].message.content
+        if content.startswith("```json"):
+            content = content[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            logger.error("Failed to parse JSON:\n" + content)
+            raise
+
+        questions = parsed.get('questions', [])
+        validated_questions = []
+        type_cycle = ['mcq', 'truefalse', 'fill', 'oneline', 'match-the-following']
+
+        for i, q in enumerate(questions):
+            qtype = q.get('type') or (type_cycle[i % len(type_cycle)] if question_type == 'mixed' else question_type)
+
+            # Validate fields
+            q['type'] = qtype
+            q['options'] = q.get('options', {}) if qtype == 'mcq' else {}
+            if qtype == 'mcq' and (not q.get('correct_answer') or q['correct_answer'] not in q['options']):
+                q['correct_answer'] = next(iter(q['options']), "A")
+            elif not q.get('correct_answer'):
+                q['correct_answer'] = "Answer" if qtype != 'truefalse' else "True"
+            q['explanation'] = q.get('explanation', "Based on the provided content.")
+            q['question'] = q.get('question', f"Question {i+1}")
+            q['question_number'] = start_question_number + i
+            q['source_page'] = q.get('source_page', primary_page)
+
+            validated_questions.append(q)
+
+        logger.info(f"✅ Batch generated {len(validated_questions)} questions starting from #{start_question_number}")
+        return validated_questions[:num_questions]
+
 
     def process_single_document(self, uploaded_file, quiz, user, page_range=None):
         """
