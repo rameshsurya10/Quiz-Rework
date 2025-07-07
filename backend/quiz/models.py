@@ -146,7 +146,8 @@ class QuizAttempt(models.Model):
         blank=True,
         db_column='quiz_id'
     )
-    question_answer = models.JSONField(help_text="Stores question-answer pairs as JSON")
+    # question_answer = models.JSONField(help_text="Stores question-answer pairs as JSON")
+    question_answer = models.JSONField(default=list)
     score = models.IntegerField(default=0)
     result = models.CharField(
         max_length=10,
