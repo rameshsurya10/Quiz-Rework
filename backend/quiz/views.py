@@ -603,68 +603,89 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         return Response(data)
         
     def put(self, request, quiz_id):
-        quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
-        # 1. Update quiz fields
-        quiz.title = request.data.get("title", quiz.title)
-        quiz.description = request.data.get("description", quiz.description)
-        quiz.is_published = request.data.get("is_published", quiz.is_published)
-        quiz.time_limit_minutes = request.data.get("time_limit_minutes", quiz.time_limit_minutes)
-        quiz.passing_score = request.data.get("passing_score", quiz.passing_score)
+        try:
+            quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
+            # 1. Update quiz fields
+            quiz.title = request.data.get("title", quiz.title)
+            quiz.description = request.data.get("description", quiz.description)
+            quiz.is_published = request.data.get("is_published", quiz.is_published)
+            quiz.time_limit_minutes = request.data.get("time_limit_minutes", quiz.time_limit_minutes)
+            quiz.passing_score = request.data.get("passing_score", quiz.passing_score)
 
-        quiz_date_str = request.data.get("quiz_date")
-        if quiz_date_str:
-            parsed_date = parse_datetime(quiz_date_str)
-            if parsed_date:
-                quiz.quiz_date = parsed_date
+            quiz_date_str = request.data.get("quiz_date")
+            if quiz_date_str:
+                parsed_date = parse_datetime(quiz_date_str)
+                if parsed_date:
+                    quiz.quiz_date = parsed_date
 
-        quiz.save()
+            quiz.save()
 
-        # 2. Load existing questions for this quiz
-        existing_questions = Question.objects.filter(quiz=quiz)
-        question_map = {}
+            # 2. Load existing questions for this quiz
+            existing_questions = Question.objects.filter(quiz=quiz)
+            question_map = {}
 
-        for q in existing_questions:
-            try:
-                q_data = json.loads(q.question)
-                if isinstance(q_data, dict):
-                    q_num = q_data.get("question_number")
-                    if q_num is not None:
-                        question_map[str(q_num)] = q
-            except json.JSONDecodeError:
-                continue  # skip corrupted data
+            for q in existing_questions:
+                try:
+                    q_data = json.loads(q.question)
+                    if isinstance(q_data, dict):
+                        q_num = q_data.get("question_number")
+                        if q_num is not None:
+                            question_map[str(q_num)] = q
+                except json.JSONDecodeError:
+                    continue # skip corrupted data
 
-        # 3. Update matching questions from incoming payload
-        incoming_questions = request.data.get("questions", [])
-        updated_numbers = []
+            # 3. Update matching questions from incoming payload
+            incoming_questions = request.data.get("questions", [])
+            updated_numbers = []
 
-        for new_q in incoming_questions:
-            q_num = new_q.get("question_number")
-            if q_num is None:
-                continue
+            for new_q in incoming_questions:
+                q_num = new_q.get("question_number")
 
-            existing = question_map.get(str(q_num))
-            if existing:
-                # Update only the fields you want
-                existing.question = json.dumps({
-                    "question": new_q.get("question"),
-                    "options": new_q.get("options", {}),
-                    "type": new_q.get("type"),
-                    "correct_answer": new_q.get("correct_answer"),
-                    "explanation": new_q.get("explanation"),
-                    "question_number": q_num
-                })
-                existing.question_type = new_q.get("question_type", existing.question_type)
-                existing.correct_answer = new_q.get("correct_answer")
-                existing.explanation = new_q.get("explanation")
-                existing.options = new_q.get("options", {})
-                existing.save()
-                updated_numbers.append(q_num)
+                if q_num is None:
+                    continue
 
-        return Response({
-            "message": "Quiz and matching questions updated successfully.",
-            "updated_question_numbers": updated_numbers,
-            "quiz_id": quiz.quiz_id
-        }, status=status.HTTP_200_OK)
+                # Loop through all Question rows in this quiz
+                questions = Question.objects.filter(quiz=quiz)
+
+                q_obj = None
+                matched_question_index = None
+                q_list = []
+
+                for question in questions:
+                    try:
+                        q_list = json.loads(question.question)  # this is a list of dicts
+                        if isinstance(q_list, list):
+                            for idx, item in enumerate(q_list):
+                                if str(item.get("question_number")) == str(q_num):
+                                    q_obj = question
+                                    matched_question_index = idx
+                                    break
+                    except json.JSONDecodeError as e:
+                        continue
+
+                if not q_obj or matched_question_index is None:
+                    continue
+
+                # Update only explanation and options
+                target = q_list[matched_question_index]
+                target["explanation"] = new_q.get("explanation", target.get("explanation"))
+                target["options"] = new_q.get("options", target.get("options"))
+                target["question_number"] = q_num  # ensure it's present
+
+                # Save updated list back
+                q_obj.question = json.dumps(q_list)
+                q_obj.save(update_fields=["question"])
+                updated_numbers.append(q_num)   
+
+            return Response({
+                "message": "Quiz and matching questions updated successfully.",
+                "updated_question_numbers": updated_numbers,
+                "quiz_id": quiz.quiz_id
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, *args, **kwargs):
         """
