@@ -179,11 +179,13 @@ const BulkUploadDialog = ({ open, onClose, onSuccess, departments = [] }) => {
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      setUploadResults(response.data);
+      // Handle different response formats
+      const results = response.data.data || response.data;
+      setUploadResults(results);
       setActiveStep(2);
 
       if (onSuccess) {
-        onSuccess(response.data);
+        onSuccess(results);
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -284,23 +286,23 @@ const BulkUploadDialog = ({ open, onClose, onSuccess, departments = [] }) => {
               {uploadType === 'excel' ? (
                 <>
                   <Typography variant="body2" color="text.secondary" paragraph>
-                    Excel file with columns: <strong>name, email, mobile_number, department_id, gender, dob, country_code, country_name</strong>
+                    Excel file with columns: <strong>register_number, class_name, section, name, email, mobile_number, department_name, department_code</strong>
                   </Typography>
                   <Typography variant="body2" color="text.secondary" paragraph>
-                    • Use department_id (numeric) for existing departments<br/>
-                    • Date format: YYYY-MM-DD (e.g., 1995-01-15)<br/>
-                    • Include country code with + sign (e.g., +1, +91)
+                    • Include department name and code for auto-creation<br/>
+                    • Register number, class, and section are now required fields<br/>
+                    • System will auto-create departments if they don't exist
                   </Typography>
                 </>
               ) : (
                 <>
                   <Typography variant="body2" color="text.secondary" paragraph>
-                    CSV file with columns: <strong>name, email, mobile_number, department_id, gender, dob, country_code, country_name</strong>
+                    CSV file with columns: <strong>register_number, class_name, section, name, email, mobile_number, department_name, department_code</strong>
                   </Typography>
                   <Typography variant="body2" color="text.secondary" paragraph>
-                    • Use department_id (numeric) for existing departments<br/>
-                    • Date format: YYYY-MM-DD (e.g., 1995-01-15)<br/>
-                    • Include country code with + sign (e.g., +1, +91)
+                    • Include department name and code for matching<br/>
+                    • Register number, class, and section are now required fields<br/>
+                    • Must select a target department for CSV uploads
                   </Typography>
                 </>
               )}
