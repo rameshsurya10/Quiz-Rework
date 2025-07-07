@@ -285,7 +285,7 @@ const QuizResultView = () => {
                       <Box sx={{ textAlign: 'center', p: 1 }}>
                         <QuizIcon color="primary" sx={{ mb: 1 }} />
                         <Typography variant="body2" color="text.secondary">Total</Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>{total}</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>{result.attended_questions}</Typography>
                       </Box>
                     </Grid>
                     <Grid item xs={4}>
