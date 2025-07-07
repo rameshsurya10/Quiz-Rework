@@ -9,7 +9,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env file
 env_path = os.path.join(BASE_DIR, '.env')
 load_dotenv(env_path)
-print(f"Loading environment variables from: {env_path}")
 print(f"OPENAI_API_KEY exists: {os.getenv('OPENAI_API_KEY') is not None}")
 
 # Supabase settings
@@ -247,9 +246,8 @@ elif not OPENAI_API_KEY.startswith('sk-'):
     print("WARNING: Invalid OpenAI API key format")
     print("API key should start with 'sk-'")
     print("Please get a valid API key from: https://platform.openai.com/account/api-keys")
-    print("Current key starts with:", OPENAI_API_KEY[:10] + "...")
 else:
-    print("OpenAI API Key found:", OPENAI_API_KEY[:10] + "...")
+    print("OpenAI API Key found")
 
 # Supabase settings
 SUPABASE_URL = os.getenv('SUPABASE_URL')

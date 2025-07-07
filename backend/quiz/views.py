@@ -43,9 +43,7 @@ from quiz.utils import *
 logger = logging.getLogger(__name__)
 
 supabase_url = "https://jlrirnwhigtmognookoe.supabase.co"
-print("supabase_url:",supabase_url)
 supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpscmlybndoaWd0bW9nbm9va29lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc4MjA3MjcsImV4cCI6MjA2MzM5NjcyN30.sqDr7maHEmd2xKoH3JA5UoUddcQaWrj8Lab6AMdDLSk"
-print("supabase_key:",supabase_key)
 SUPABASE_BUCKET = "fileupload"  # Your bucket name
 
 def get_supabase_client():
@@ -69,7 +67,6 @@ class QuizFileUploadView(APIView):
         return Quiz.objects.filter(pk=quiz_id).first()
 
     def post(self, request, quiz_id, format=None):
-        logger.info(f"📥 Processing file upload for quiz {quiz_id}")
         quiz = self.get_quiz(quiz_id)
         if not quiz:
             return Response({"error": "Quiz not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -87,10 +84,8 @@ class QuizFileUploadView(APIView):
 
             # ✅ Upload to Supabase
             file_path = f"{quiz.quiz_id}/{new_file_name}"
-            logger.info(f"📤 Uploading file to Supabase path: {file_path}")
             supa = create_client(supabase_url, supabase_key)
             supa.storage.from_("fileupload").upload(file_path, compressed_file_data.read())
-            logger.info("✅ File successfully uploaded to Supabase")
 
             # Reset pointer before processing
             compressed_file_data.seek(0)
@@ -109,13 +104,6 @@ class QuizFileUploadView(APIView):
                     {"error": processing_result.get("error", "Failed to process file.")},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
-
-            # ✅ Print page extraction result
-            print("✅ Text extraction result:")
-            print(" - Pages extracted:", processing_result.get("pages_processed"))
-            print(" - Page ranges used:", processing_result.get("page_ranges_used"))
-            print(" - Questions generated:", processing_result.get("questions_generated"))
-            print(" - Questions with page attribution:", processing_result.get("questions_with_page_attribution"))
 
             return Response({
                 "message": "File uploaded and processed successfully",
@@ -251,17 +239,9 @@ class QuizListCreateView(generics.ListCreateAPIView):
         logger = logging.getLogger(__name__)
         
         try:
-            logger.info(f"Received quiz creation request")
-            logger.info(f"Request method: {request.method}")
-            logger.info(f"Content type: {request.content_type}")
-            logger.info(f"Request data keys: {list(request.data.keys()) if hasattr(request.data, 'keys') else 'No keys'}")
-            logger.info(f"Request FILES: {list(request.FILES.keys()) if hasattr(request, 'FILES') else 'No FILES'}")
-            
             data = request.data.copy()
             user = request.user
-            
-            logger.info(f"User: {user}, Role: {getattr(user, 'role', 'No role')}")
-
+   
             # ✅ Check quiz creation limit for both TEACHER and ADMIN
             role = getattr(user, 'role', '').upper()
             if role in ['TEACHER', 'ADMIN']:
@@ -313,16 +293,11 @@ class QuizListCreateView(generics.ListCreateAPIView):
             if isinstance(quiz_type, dict):
                 data['quiz_type'] = json.dumps(quiz_type)
 
-            logger.info("About to create serializer")
-
             # ✅ Continue with quiz creation
             serializer = self.get_serializer(data=data)
             
-            logger.info("About to validate serializer")
             serializer.is_valid(raise_exception=True)
             
-            logger.info("Serializer is valid, about to perform create")
-
             self.perform_create(serializer)
             quiz = Quiz.objects.get(pk=serializer.data['quiz_id'])
 
@@ -333,12 +308,9 @@ class QuizListCreateView(generics.ListCreateAPIView):
             response_data['message'] = "Quiz created successfully"
 
             headers = self.get_success_headers(serializer.data)
-            logger.info("Quiz created successfully")
             return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 
         except Exception as e:
-            logger.error(f"Error in create method: {str(e)}")
-            logger.error(f"Exception type: {type(e)}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -632,7 +604,6 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         
     def put(self, request, quiz_id):
         quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
-        print("quiz:", quiz)
         # 1. Update quiz fields
         quiz.title = request.data.get("title", quiz.title)
         quiz.description = request.data.get("description", quiz.description)
@@ -655,7 +626,6 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         for q in existing_questions:
             try:
                 q_data = json.loads(q.question)
-                print("q_data:", q_data)
                 if isinstance(q_data, dict):
                     q_num = q_data.get("question_number")
                     if q_num is not None:
@@ -669,12 +639,10 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
         for new_q in incoming_questions:
             q_num = new_q.get("question_number")
-            print("q_num:", q_num)
             if q_num is None:
                 continue
 
             existing = question_map.get(str(q_num))
-            print("existing:", existing)
             if existing:
                 # Update only the fields you want
                 existing.question = json.dumps({

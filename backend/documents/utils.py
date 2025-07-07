@@ -12,7 +12,6 @@ try:
     PDF_SUPPORT = True
 except ImportError:
     PDF_SUPPORT = False
-    logger.warning("PDF support not available. Install with: pip install PyPDF2")
 
 try:
     import pytesseract
@@ -20,27 +19,23 @@ try:
     OCR_SUPPORT = True
 except ImportError:
     OCR_SUPPORT = False
-    logger.warning("OCR packages not available. Install with: pip install pytesseract pillow")
 
 try:
     import pandas as pd
     PANDAS_SUPPORT = True
 except ImportError:
     PANDAS_SUPPORT = False
-    logger.warning("Pandas not available. Install with: pip install pandas")
 
 try:
     import docx
     DOCX_SUPPORT = True
 except ImportError:
     DOCX_SUPPORT = False
-    logger.warning("DocX support not available. Install with: pip install python-docx")
 
 def extract_text_from_pdf(document):
     """Legacy function for backward compatibility"""
     try:
         if not PDF_SUPPORT:
-            logger.error("PDF support not available")
             return False
             
         document.file.seek(0)
@@ -61,7 +56,6 @@ def extract_text_from_pdf(document):
         document.is_processed = True
         document.save()
         
-        logger.info(f"Successfully extracted text from PDF: {document.title}")
         return True
         
     except Exception as e:
