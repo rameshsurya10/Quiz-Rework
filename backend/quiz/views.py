@@ -689,14 +689,38 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
     def destroy(self, request, *args, **kwargs):
         """
-        Soft delete: set is_deleted=True for the quiz instead of deleting from DB.
-        Return a success message in the response.
+        Soft delete the quiz (set is_deleted=True),
+        but hard delete all related data like questions and attempts.
         """
-        instance = self.get_object()
-        instance.is_deleted = True
-        instance.save()
-        return Response({'message': 'Quiz deleted successfully'}, status=status.HTTP_200_OK)
+        try:
+            quiz = self.get_object()
 
+            # 1. Hard delete all related Question entries
+            questions_deleted, _ = Question.objects.filter(quiz=quiz).delete()
+
+            # 2. Hard delete all related QuizAttempt entries
+            attempts_deleted, _ = QuizAttempt.objects.filter(quiz=quiz).delete()
+
+            # 3. Hard delete all related StudentQuizAttempt entries
+            student_attempts_deleted, _ = Document.objects.filter(quiz=quiz).delete()
+
+            # 4. Soft delete the quiz
+            quiz.is_deleted = True
+            quiz.is_published = False
+            quiz.save()
+
+            return Response({
+                "message": "Quiz soft-deleted successfully. Related data removed.",
+                "questions_deleted": questions_deleted,
+                "quiz_attempts_deleted": attempts_deleted,
+                "student_quiz_attempts_deleted": student_attempts_deleted,
+                "quiz_id": quiz.quiz_id
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR )
 
 class QuizQuestionGenerateView(APIView):
     """
