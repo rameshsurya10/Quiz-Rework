@@ -156,6 +156,7 @@ const SimpleStudentDashboard = () => {
   });
   const [quizLink, setQuizLink] = useState('');
   const [availableQuizzes, setAvailableQuizzes] = useState([]);
+  const [allQuizzes, setAllQuizzes] = useState([]);
   const [quizAttempts, setQuizAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -215,38 +216,15 @@ const SimpleStudentDashboard = () => {
 
   const loadStudentDetails = async () => {
     try {
-      // Try to get student ID from localStorage or token
-      const studentId = localStorage.getItem('student_id') || localStorage.getItem('user_id');
-      
+      const studentId = localStorage.getItem('student_id');
       if (!studentId) {
-        console.log('No student ID found, skipping profile fetch');
+        console.warn('No student ID found, skipping profile fetch');
         return;
       }
-
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/students/${studentId}/`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Student details received:', data);
-        setStudentDetails(data);
-        
-        // Update userInfo with actual API data
-        setUserInfo(prev => ({
-          ...prev,
-          name: data.name || data.full_name || data.first_name || data.user?.name || prev.name,
-          email: data.email || data.user?.email || prev.email,
-          studentId: data.student_id || data.id || prev.studentId
-        }));
-      } else {
-        console.error('Failed to fetch student details:', response.status);
-      }
-    } catch (error) {
-      console.error('Error loading student details:', error);
+      const response = await quizApi.getById(studentId);
+      setStudentDetails(response.data);
+    } catch (err) {
+      console.error('Failed to load student details:', err);
     }
   };
 
@@ -258,17 +236,28 @@ const SimpleStudentDashboard = () => {
       
       console.log('All quizzes received:', data);
       
-      const allQuizzes = data.current_quizzes || data.results || (Array.isArray(data) ? data : []);
+      // Handle different response structures for all quizzes
+      let allFetchedQuizzes = [];
+      if (data.current_quizzes || data.upcoming_quizzes || data.past_quizzes) {
+          allFetchedQuizzes = [
+              ...(data.current_quizzes || []),
+              ...(data.upcoming_quizzes || []),
+              ...(data.past_quizzes || []),
+          ];
+      } else {
+          allFetchedQuizzes = data.results || (Array.isArray(data) ? data : []);
+      }
+      
+      setAllQuizzes(allFetchedQuizzes);
       
       // Filter for published quizzes that haven't been attempted
       const attemptedQuizIds = new Set(attempts.map(a => a.quiz?.id || a.quiz?.quiz_id || a.quiz_id));
-
-      const filteredQuizzes = allQuizzes
-        .filter(q => q.is_published)
-        .filter(q => !attemptedQuizIds.has(q.id || q.quiz_id));
-
-      setAvailableQuizzes(filteredQuizzes);
       
+      const filteredQuizzes = allFetchedQuizzes
+        .filter(q => q.is_published) // Ensure we only show published quizzes
+        .filter(q => !attemptedQuizIds.has(q.id || q.quiz_id));
+  
+      setAvailableQuizzes(filteredQuizzes);
     } catch (error) {
       console.error('Error loading available quizzes:', error);
       setError('An error occurred while fetching quizzes.');
@@ -404,6 +393,7 @@ const SimpleStudentDashboard = () => {
   };
 
   const handleViewResult = (attempt) => {
+    console.log('Attempt object:', attempt);
     if (isResultAvailable(attempt)) {
       const quizId = attempt.quiz_id || attempt.quiz?.quiz_id || attempt.quiz?.id;
       navigate(`/quiz/result/${quizId}`);
@@ -413,25 +403,45 @@ const SimpleStudentDashboard = () => {
     }
   };
 
+  const findFullQuiz = (attempt) => {
+    const attemptQuizId = attempt.quiz_id || attempt.quiz?.id || attempt.quiz?.quiz_id;
+    return allQuizzes.find(q => (q.id || q.quiz_id) === attemptQuizId);
+  };
+
   const isResultAvailable = (attempt) => {
-    const quizStartTime = new Date(attempt.attempted_at);
-    // Use quiz duration from the attempt, providing a fallback
-    const quizDurationMinutes = attempt.quiz?.time_limit_minutes || attempt.quiz?.duration || 0;
-    // Result is available 10 minutes after the quiz's official end time
-    const resultAvailableTime = new Date(quizStartTime.getTime() + (quizDurationMinutes * 60 * 1000) + (10 * 60 * 1000));
+    // Use the actual time when the student took the quiz
+    const attemptedAtRaw = attempt.attempted_at || attempt.created_at || attempt.completed_at;
+    
+    if (!attemptedAtRaw) {
+      return false;
+    }
+
+    const attemptTime = new Date(attemptedAtRaw);
+    const resultWaitMinutes = 10; // wait 10 minutes after quiz attempt
+
+    const resultAvailableTime = new Date(attemptTime.getTime() + (resultWaitMinutes * 60 * 1000));
     return new Date() >= resultAvailableTime;
   };
 
   const getTimeUntilResult = (attempt) => {
-    const quizStartTime = new Date(attempt.attempted_at);
-    const quizDurationMinutes = attempt.quiz?.time_limit_minutes || attempt.quiz?.duration || 0;
-    const resultAvailableTime = new Date(quizStartTime.getTime() + (quizDurationMinutes * 60 * 1000) + (10 * 60 * 1000));
+    // Use the actual time when the student took the quiz
+    const attemptedAtRaw = attempt.attempted_at || attempt.created_at || attempt.completed_at;
+
+    if (!attemptedAtRaw) {
+      return 'Result time unavailable';
+    }
+
+    const attemptTime = new Date(attemptedAtRaw);
+    const resultWaitMinutes = 10;
+    const resultAvailableTime = new Date(attemptTime.getTime() + (resultWaitMinutes * 60 * 1000));
+
     const now = new Date();
-    const remainingMs = resultAvailableTime - now;
-    
-    if (remainingMs <= 0) return 'Available now';
-    
-    const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+    if (now >= resultAvailableTime) {
+      return 'Result is available';
+    }
+
+    const remainingMilliseconds = resultAvailableTime - now;
+    const remainingMinutes = Math.ceil(remainingMilliseconds / (60 * 1000));
     return `${remainingMinutes} min`;
   };
 
