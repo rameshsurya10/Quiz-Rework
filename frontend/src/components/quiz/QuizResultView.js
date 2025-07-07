@@ -268,7 +268,7 @@ const QuizResultView = () => {
                     Final Score
                   </Typography>
                   <Chip
-                    label={`${score} / ${total} Correct`}
+                    label={`${score} / ${result.attended_questions} Correct`}
                     color={getScoreColor(percentage)}
                     size="large"
                   />
