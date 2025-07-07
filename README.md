@@ -1,117 +1,80 @@
 # AI-Powered Quiz Generator
 
-A modern web application that generates quiz from PDF documents using AI.
+A modern web application that generates quizzes from PDF documents and other file types using AI. This project features a Django backend and a React frontend, providing a seamless experience for administrators, teachers, and students.
 
 ## Core Features
 
-- PDF Upload and Text Extraction
-- AI-Generated Quiz Questions from PDF & Text Documents
-- Vector Search-powered Document Retrieval (pgvector)
-- Isolated Authentication Flows: Admin (password) & Teacher/Student (OTP)
-- Quiz Creation, Scheduling, and Sharing via Secure URLs
-- Real-time Analytics & Performance Tracking
-- Supabase & AWS S3 Pluggable Storage Backends
-
-## Recent Updates
-
-### Codebase Optimization (July 2024)
-
-- **Vector Database Integration**: Migrated from local file storage to vector database storage for improved document management
-- **Code Consolidation**: Removed duplicate text extraction code and centralized document processing utilities
-- **Storage Optimization**: Eliminated redundant upload directories and streamlined file handling
-- **API Response Improvement**: Modified document upload responses to include file metadata instead of exposing generated questions
-- **Unused Module Removal**: Removed the unused ai_processing module as its functionality had been moved elsewhere
-- **Package Management Optimization**: Consolidated package.json files and removed redundant node_modules directories
-
-### Authentication Revamp (August 2024)
-
-- **Isolated Auth Services**: Introduced `adminAuthService` (password-based) and `otpAuthService` (OTP-based) with independent request headers, timeouts, and localStorage scopes.
-- **Fault Isolation**: Errors in one auth flow no longer affect the other, preventing cross-contamination between admin and teacher/student sessions.
-- **Improved Security**: Added role-scoped JWTs and stricter CORS policies for auth endpoints.
-
-## Project Structure
-
-### Backend (Django)
-
-- **accounts**: User authentication and management
-- **documents**: Document upload, storage, and processing
-- **quiz**: Quiz creation, management, and question generation
-- **departments**: Department management
-- **students**: Student management
-- **teacher**: Teacher management
-- **settings**: Application settings
-- **notifications**: User notifications
-- **dashboard**: Analytics and reporting
-- **reports**: Result aggregation and PDF exports
-
-### Frontend (React)
-
-- **components**: Reusable UI components
-- **contexts**: React contexts for global state management
-- **services**: API & Supabase service integrations
-- **routes**: React Router route definitions
-- **utils**: Utility functions
+-   **AI-Powered Quiz Generation**: Create quizzes from PDF, DOCX, TXT, and other file formats.
+-   **Multiple Question Types**: Supports MCQ, Fill in the Blanks, True/False, and One-Line questions.
+-   **Role-Based Access Control**: Separate interfaces and functionality for Admins, Teachers, and Students.
+-   **Isolated Authentication**: Secure and independent authentication flows for admins (password-based) and users (OTP-based).
+-   **File and Document Management**: Upload documents and associate them with quizzes.
+-   **Quiz Management**: Create, edit, publish, and share quizzes with unique URLs.
+-   **Student and Department Management**: Organize students into departments and manage their data.
+-   **Bulk User Upload**: Easily add multiple students at once using CSV/XLSX templates.
+-   **Analytics and Reporting**: Track quiz performance and student results.
+-   **Pluggable Storage**: Supports local file storage, Supabase, and AWS S3.
 
 ## Technology Stack
 
-- **Backend**: Django, Django REST Framework
-- **Frontend**: React, Material-UI
-- **Database**: PostgreSQL with pgvector extension
-- **Storage**: Vector Database for documents
-- **AI**: OpenAI API for question generation
-- **Authentication**: Isolated JWT & OTP-based authentication services
+| Category      | Technology                                                                                                  |
+| ------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Backend**   | Django, Django REST Framework                                                                               |
+| **Frontend**  | React, Material-UI                                                                                          |
+| **Database**  | PostgreSQL with pgvector extension                                                                          |
+| **AI**        | OpenAI API for question generation                                                                          |
+| **Auth**      | JWT (for admins) and OTP (for teachers/students)                                                            |
+| **Storage**   | Supabase Storage, AWS S3, Local File Storage                                                                |
+| **Deployment**| Docker (optional)                                                                                           |
 
-## Setup Instructions
+## Project Architecture
 
-1. Clone the repository
-2. Install frontend dependencies: `cd frontend && npm install`
-3. Install backend dependencies: `cd backend && pip install -r requirements.txt`
-4. Configure environment variables
-5. Run migrations: `cd backend && python manage.py migrate`
-6. Start the backend server: `cd backend && python manage.py runserver`
-7. Start the frontend development server: `cd frontend && npm start`
+The application is structured as a monorepo with a `backend` (Django) and a `frontend` (React) directory.
 
-## Environment Variables
+### Backend Structure
 
-Create a `.env` file in the backend directory with the following variables:
+The Django backend is organized into several apps, each responsible for a specific domain:
 
-```
-SECRET_KEY=your_django_secret_key
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-OPENAI_API_KEY=your_openai_api_key
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_key
-SUPABASE_SECRET=your_supabase_secret
-USE_SUPABASE_STORAGE=True
-```
+-   `accounts`: Manages user authentication (Admin, Teacher, Student) and profiles.
+-   `quiz`: Core application for creating, managing, and taking quizzes. Handles file uploads associated with quizzes.
+-   `departments`: Manages organizational units and student groupings.
+-   `students`: Manages student profiles and data.
+-   `teacher`: Manages teacher-specific functionalities.
+-   `dashboard`: Provides data for analytics dashboards.
+-   `notifications`: Handles user notifications.
+-   `settings`: Manages application-level settings.
+-   `documents`: *Note: This app appears to be partially deprecated. Core document/file handling is managed by the `quiz` app.*
 
-## API Documentation
+### Frontend Structure
 
-API documentation is available at `/api/docs/` when the backend server is running.
+The React frontend is built with functional components and hooks:
 
-## Tech Stack
+-   `components`: Contains reusable UI components for different features (auth, quiz, dashboard, etc.).
+-   `services`: Manages API interactions, separating data-fetching logic from UI components (`quizService.js` is a key service).
+-   `contexts`: Provides global state management for features like snackbar notifications and theming.
+-   `routes`: Defines the application's routing using React Router.
+-   `utils`: Contains helper functions and utilities.
 
-### Backend
-- Django/Django REST Framework
-- PostgreSQL
-- OpenAI API & LangChain
-- PyPDF2 for PDF processing
-- pgvector for vector database storage
+## User Flows
 
-### Frontend
-- React.js
-- TypeScript
-- Tailwind CSS
-- React Query
-- React Router
+### 1. Teacher: Creating a Quiz
 
-### Infrastructure
-- Supabase for database, storage, and authentication (primary)
-- AWS S3 for alternative file storage
-- Docker for containerization (optional)
+The primary workflow for a teacher involves creating a quiz from a document:
 
-## Project Structure
+1.  **Login**: The teacher logs in using an OTP sent to their registered email.
+2.  **Navigate to Quiz Section**: The teacher accesses the quiz management dashboard.
+3.  **Initiate Quiz Creation**: The teacher clicks "Create New Quiz".
+4.  **Fill Quiz Details**: The teacher provides a title, description, number of questions, time limit, etc.
+5.  **Upload Document**: The teacher uses the `FileUpload` component to upload a relevant document (e.g., a PDF textbook chapter). The component allows for drag-and-drop or browsing files.
+6.  **Submit Form**: Upon submission, the following occurs:
+    a. The frontend (`TeacherQuizSection.js`) calls the `quizService.createQuizWithFiles` function.
+    b. The `quizService` first sends a request to the backend to create the quiz metadata.
+    c. If the quiz is created successfully, the service then uploads the associated file(s) to the `/api/quiz/<quiz_id>/upload/` endpoint.
+7.  **Backend Processing**:
+    a. The backend's `QuizFileUploadView` receives the file.
+    b. The file is saved to the configured storage (e.g., Supabase).
+    c. An AI-powered process is triggered to extract text from the document and generate questions.
+8.  **Review and Publish**: The teacher can review the generated questions, edit them if needed, and then publish the quiz to make it available for students.
 
 ```
 quiz-app/
@@ -164,97 +127,71 @@ The implementation is toggled via the `USE_SUPABASE_STORAGE` setting in `.env`. 
 
 Migrations are consolidated in a central `migrations` app, which simplifies schema evolution across tightly coupled models. To apply migrations, use `python manage.py migrate migrations`.
 
-### Database Structure
+1.  **Login**: The student logs in using OTP.
+2.  **Access Quiz**: The student can access the quiz through their dashboard or via a direct shareable link provided by the teacher.
+3.  **Take Quiz**: The student answers the questions within the given time limit.
+4.  **View Results**: Upon completion, the student can view their score and results.
 
-Key tables in the application:
+### 3. Admin: Managing the Platform
 
-- **quizzes**: Stores quiz information including title, description, settings, and share URLs
-- **questions**: Stores quiz questions linked to quizzes
-- **documents_document**: Stores document information and metadata
-- **documents_documentvector**: Stores vector embeddings for document content
+1.  **Login**: The admin logs in using a username and password.
+2.  **Dashboard**: The admin has access to a dashboard with an overview of platform usage.
+3.  **User Management**: Admins can create, edit, and manage teacher and student accounts.
+4.  **Department Management**: Admins can create and manage departments.
 
-### Sample Templates
+## Setup and Installation
 
-Sample data templates are stored in the `backend/templates/samples/` directory:
-- `sample_students_upload.csv`: Template for bulk student uploads
+### Prerequisites
 
-## Getting Started
+-   Python 3.8+
+-   Node.js 14+
+-   PostgreSQL
 
 ### Backend Setup
 
-1. Copy `.env.sample` to `.env` and configure your environment variables
-2. Install dependencies: `pip install -r requirements.txt`
-3. Apply migrations: `python manage.py migrate migrations`
-4. Create superuser: `python manage.py createsuperuser`
-5. Run development server: `python manage.py runserver`
+1.  Navigate to the `backend` directory: `cd backend`
+2.  Create a virtual environment: `python -m venv venv` and activate it.
+3.  Install dependencies: `pip install -r requirements.txt`
+4.  Create a `.env` file (see [Configuration](#configuration)) and add your environment variables.
+5.  Run database migrations: `python manage.py migrate`
+6.  Start the server: `python manage.py runserver`
 
-## Supabase Integration
+### Frontend Setup
 
-This application supports Supabase for database, storage, and authentication services.
+1.  Navigate to the `frontend` directory: `cd frontend`
+2.  Install dependencies: `npm install`
+3.  Start the development server: `npm start`
 
-### Setting Up Supabase
+## Configuration
 
-1. Create a Supabase account at [supabase.com](https://supabase.com)
-2. Create a new Supabase project
-3. Set up the following tables in the Supabase database (via SQL Editor):
-
-```sql
--- Documents table for storing uploaded PDFs metadata
-CREATE TABLE documents (
-  id BIGSERIAL PRIMARY KEY,
-  filename TEXT NOT NULL,
-  original_filename TEXT NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT,
-  file_size BIGINT NOT NULL,
-  page_count INTEGER,
-  extracted_text_preview TEXT,
-  extracted_text TEXT,
-  is_processed BOOLEAN DEFAULT FALSE,
-  user_id UUID REFERENCES auth.users(id),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Set up Row Level Security (RLS)
-ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
-
--- Allow users to read their own documents and admins to read all documents
-CREATE POLICY "Users can read their own documents" ON documents
-  FOR SELECT USING (auth.uid() = user_id);
-
--- Create storage buckets for documents
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('documents', 'documents', false);
-```
-
-4. Configure Storage in Supabase: 
-   - Go to Storage in the Supabase dashboard
-   - Create buckets named `documents`, `public`, and `private`
-   - Set appropriate permissions for each bucket
-
-### Configuring the Application for Supabase
-
-1. Copy `.env.sample` to `.env` in the backend directory
-2. Update the following variables in your `.env` file:
+Create a `.env` file in the `backend` directory with the following variables.
 
 ```
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_KEY=your-supabase-anon-key
-SUPABASE_SECRET=your-supabase-service-role-key
-USE_SUPABASE_STORAGE=True
+# Django Settings
+SECRET_KEY=your_django_secret_key
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
 
-# Direct PostgreSQL connection details (find these in Supabase settings)
-SUPABASE_DB_NAME=postgres
-SUPABASE_DB_USER=postgres
-SUPABASE_DB_PASSWORD=your-postgres-db-password
-SUPABASE_DB_HOST=your-project-db-host.supabase.co
-SUPABASE_DB_PORT=5432
+# Database (PostgreSQL)
+DB_NAME=your_db_name
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+DB_HOST=localhost
+DB_PORT=5432
+
+# OpenAI API for AI features
+OPENAI_API_KEY=your_openai_api_key
+
+# Supabase (optional, for storage)
+USE_SUPABASE_STORAGE=False
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_key
+SUPABASE_SECRET=your_supabase_secret
+
+# Frontend URL
+FRONTEND_URL=http://localhost:3000
 ```
 
-### Switching Between Storage Providers
+## API Documentation
 
-You can toggle between Supabase Storage and AWS S3:
-
-- To use Supabase Storage, set `USE_SUPABASE_STORAGE=True` in your `.env` file
-- To use AWS S3, set `USE_SUPABASE_STORAGE=False` and `USE_S3=True`
+API documentation is generated using `drf-yasg` and is available at `/api/docs/` (Swagger) and `/api/redoc/` when the backend server is running.
