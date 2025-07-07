@@ -352,87 +352,111 @@ class SubmitQuizAttemptView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        data = request.data
-        quiz_id = data.get("quiz_id")
-        question_entries = data.get("questions")  # List of dicts: question_id, question_number, answer
+        try:
+            data = request.data
+            quiz_id = data.get("quiz_id")
+            submitted_questions = data.get("questions")
 
-        if not quiz_id or not isinstance(question_entries, list):
-            return Response({"error": "Invalid payload"}, status=status.HTTP_400_BAD_REQUEST)
+            if not quiz_id or not isinstance(submitted_questions, list):
+                return Response({"error": "Invalid payload"}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = request.user
-        student = Student.objects.filter(email=user.email, is_deleted=False).first()
-        quiz = Quiz.objects.filter(quiz_id=quiz_id, is_deleted=False).first()
+            user = request.user
+            student = Student.objects.filter(email=user.email, is_deleted=False).first()
+            quiz = Quiz.objects.filter(quiz_id=quiz_id, is_deleted=False).first()
 
-        if not student or not quiz:
-            return Response({"error": "Invalid student or quiz"}, status=status.HTTP_400_BAD_REQUEST)
+            if not student or not quiz:
+                return Response({"error": "Invalid student or quiz"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 👉 Build a lookup of submitted answers
-        submitted_answers_map = {
-            (int(q["question_id"]), int(q["question_number"])): q.get("answer")
-            for q in question_entries if q.get("question_id") and q.get("question_number") is not None
-        }
+            # Get all question objects for the quiz and build a lookup of subquestions
+            all_question_objs = Question.objects.filter(quiz=quiz)
+            question_map = {}
 
-        score = 0
-        stored_answers = []
+            for q_obj in all_question_objs:
+                try:
+                    sub_questions = json.loads(q_obj.question)
+                    for sub_q in sub_questions:
+                        key = (q_obj.question_id, sub_q.get("question_number"))
+                        question_map[key] = {
+                            "correct_answer": str(sub_q.get("correct_answer")).strip().lower(),
+                            "type": sub_q.get("type"),
+                            "question": sub_q.get("question"),
+                            "options": sub_q.get("options", {}),
+                            "explanation": sub_q.get("explanation", "")
+                        }
+                except Exception:
+                    continue
 
-        # 👉 Load all questions from the quiz
-        all_questions = []
-        all_question_objs = Question.objects.filter(quiz=quiz)
+            # Evaluate each submitted answer
+            evaluated_answers = []
+            score = 0
 
-        for question_obj in all_question_objs:
-            question_id = question_obj.question_id
-            subquestions = question_obj.question
-            if isinstance(subquestions, str):
-                subquestions = json.loads(subquestions)
-            if not isinstance(subquestions, list):
-                continue
+            for submitted in submitted_questions:
+                qid = submitted.get("question_id")
+                qnum = submitted.get("question_number")
+                student_answer = str(submitted.get("answer", "")).strip().lower()
+                key = (qid, qnum)
 
-            for q in subquestions:
-                question_number = int(q.get("question_number"))
-                correct_answer = str(q.get("correct_answer", "")).strip().lower()
-
-                key = (question_id, question_number)
-                student_answer = submitted_answers_map.get(key)
-
-                if student_answer is not None:
-                    is_correct = (correct_answer == str(student_answer).strip().lower())
+                correct = question_map.get(key)
+                if correct:
+                    correct_answer = correct.get("correct_answer", "")
+                    is_correct = student_answer == correct_answer
                     if is_correct:
                         score += 1
+
+                    evaluated_answers.append({
+                        "question_id": qid,
+                        "question_number": qnum,
+                        "question": correct.get("question"),
+                        "question_type": correct.get("type"),
+                        "options": correct.get("options"),
+                        "answer": submitted.get("answer"),
+                        "correct_answer": correct_answer,
+                        "explanation": correct.get("explanation"),
+                        "is_correct": is_correct
+                    })
                 else:
-                    student_answer = None
-                    is_correct = False
+                    # fallback if question not found
+                    evaluated_answers.append({
+                        "question_id": qid,
+                        "question_number": qnum,
+                        "question": submitted.get("question", ""),
+                        "question_type": submitted.get("question_type", ""),
+                        "options": submitted.get("options", {}),
+                        "answer": submitted.get("answer"),
+                        "correct_answer": "N/A",
+                        "explanation": "Not found",
+                        "is_correct": False
+                    })
 
-                stored_answers.append({
-                    "question_id": question_id,
-                    "question_number": question_number,
-                    "answer": student_answer,
-                    "is_correct": is_correct
-                })
+            passing_score = quiz.passing_score or int(quiz.no_of_questions * 0.5)
+            result = "pass" if score >= passing_score else "fail"
 
-        total = len(stored_answers)
+            QuizAttempt.objects.create(
+                student=student,
+                quiz=quiz,
+                question_answer=evaluated_answers,
+                score=score,
+                result=result,
+                created_by=student.email,
+                last_modified_by=student.email
+            )
 
-        passing_score = quiz.passing_score or (quiz.no_of_questions * 0.5)
-        result = "pass" if score >= passing_score else "fail"
+            return Response({
+                "message": "Quiz submitted successfully",
+                "quiz_id": quiz.quiz_id,
+                "student_id": student.student_id,
+                "score": score,
+                "total_questions": len(evaluated_answers),
+                "result": result
+            }, status=status.HTTP_201_CREATED)
 
-        QuizAttempt.objects.create(
-            student=student,
-            quiz=quiz,
-            question_answer=stored_answers,
-            score=score,
-            result=result,
-            created_by=student.email,
-            last_modified_by=student.email
-        )
-
-        return Response({
-            "message": "Quiz submitted successfully",
-            "quiz_id": quiz.quiz_id,
-            "student_id": student.student_id,
-            # "register_number": student.register_number,
-            # "score": score,
-            "total_questions": total,
-            # "result": result
-        }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({
+                "error": "Something went wrong",
+                "details": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RetrieveQuizAttemptView(APIView):
     permission_classes = [IsAuthenticated]
@@ -473,7 +497,10 @@ class RetrieveQuizAttemptView(APIView):
 
             try:
                 question_obj = Question.objects.get(question_id=question_id)
-                sub_questions = json.loads(question_obj.question)  # list of dicts
+                try:
+                    sub_questions = json.loads(question_obj.question)
+                except Exception:
+                    sub_questions = []
 
                 matched = next(
                     (q for q in sub_questions if q.get("question_number") == question_number),
@@ -489,6 +516,18 @@ class RetrieveQuizAttemptView(APIView):
                         "correct_answer": matched.get("correct_answer"),
                         "student_answer": student_answer,
                         "explanation": matched.get("explanation", ""),
+                        "is_correct": is_correct
+                    })
+                else:
+                    # Fallback if no matching subquestion
+                    detailed_answers.append({
+                        "question_number": question_number,
+                        "question": item.get("question", "N/A"),
+                        "type": item.get("question_type", "unknown"),
+                        "options": item.get("options", {}),
+                        "correct_answer": "N/A",
+                        "student_answer": student_answer,
+                        "explanation": "Question details not found",
                         "is_correct": is_correct
                     })
             except Question.DoesNotExist:
@@ -539,6 +578,7 @@ class RetrieveQuizAttemptView(APIView):
             "section" : student.section,
             "attempt_date": attempt.created_at.date(),
             "attempt_time": str(attempt.created_at.time()),
+            "quiz_attempt_question" : attempt.question_answer,
             "attempt_duration": str(attempt_duration),
             "quiz_duration": attempt.quiz.time_limit_minutes,
             "total_duration": f"{attempt.quiz.time_limit_minutes} mins",
@@ -868,46 +908,46 @@ class FetchQuizAttemptView(APIView):
                 q_data["is_correct"] = False
 
             detailed_answers.append(q_data)
-        # ✅ Conditionally show result only after quiz ends
-        quiz_end_time = attempt.quiz.quiz_date + timedelta(minutes=attempt.quiz.time_limit_minutes)
-        now = timezone.now()
-        # show_result = now >= quiz_end_time
-        if now >= quiz_end_time and attempt.created_at >= quiz.quiz_date:
-            show_result = True
-        else:
-            show_result = False
-        print("attempt.quiz.quiz_date:",attempt.quiz.quiz_date)
-        print("attempt.quiz.time_limit_minutes:",attempt.quiz.time_limit_minutes)
-        print("attempt.created_at:",attempt.created_at)
-        print("now:",now)
-        print("quiz_end_time:",quiz_end_time)
-        print("show_result:",show_result)
-        if show_result:
-            return Response({
-                "attempt_id": attempt.attempt_id,
-                "quiz_id": quiz.quiz_id,
-                "quiz_name": quiz.title,
-                "student_id": student.student_id,
-                "student_name": student.name,
-                "student_register_number": student.register_number,
-                "score": attempt.score,
-                "total_questions": total_questions,
-                "result": attempt.result,
-                "question_answer": attempt.question_answer,
-                "detailed_answers": detailed_answers,
-                "percentage": round(percentage, 2),
-                "rank": rank,
-                "attempt_date": attempt.created_at.date(),
-                "attempt_time": str(attempt.created_at.time()),
-                "quiz_duration": quiz.time_limit_minutes,
-                "total_time": attempt.created_at,
-            }, status=status.HTTP_200_OK)
-        else:
-            return Response({
-                "quiz_id": attempt.quiz.quiz_id,
-                "quiz_title": attempt.quiz.title,
-                "message": "The quiz time is not finished. Result will be available after quiz end time."
-            }, status=status.HTTP_200_OK)
+        # # ✅ Conditionally show result only after quiz ends
+        # quiz_end_time = attempt.quiz.quiz_date + timedelta(minutes=attempt.quiz.time_limit_minutes)
+        # now = timezone.now()
+        # # show_result = now >= quiz_end_time
+        # if now >= quiz_end_time and attempt.created_at >= quiz.quiz_date:
+        #     show_result = True
+        # else:
+        #     show_result = False
+        # print("attempt.quiz.quiz_date:",attempt.quiz.quiz_date)
+        # print("attempt.quiz.time_limit_minutes:",attempt.quiz.time_limit_minutes)
+        # print("attempt.created_at:",attempt.created_at)
+        # print("now:",now)
+        # print("quiz_end_time:",quiz_end_time)
+        # print("show_result:",show_result)
+        # if show_result:
+        return Response({
+            "attempt_id": attempt.attempt_id,
+            "quiz_id": quiz.quiz_id,
+            "quiz_name": quiz.title,
+            "student_id": student.student_id,
+            "student_name": student.name,
+            "student_register_number": student.register_number,
+            "score": attempt.score,
+            "total_questions": total_questions,
+            "result": attempt.result,
+            "question_answer": attempt.question_answer,
+            "detailed_answers": detailed_answers,
+            "percentage": round(percentage, 2),
+            "rank": rank,
+            "attempt_date": attempt.created_at.date(),
+            "attempt_time": str(attempt.created_at.time()),
+            "quiz_duration": quiz.time_limit_minutes,
+            "total_time": attempt.created_at,
+        }, status=status.HTTP_200_OK)
+        # else:
+        #     return Response({
+        #         "quiz_id": attempt.quiz.quiz_id,
+        #         "quiz_title": attempt.quiz.title,
+        #         "message": "The quiz time is not finished. Result will be available after quiz end time."
+        #     }, status=status.HTTP_200_OK)
 
 class QuizReminderStudent(APIView):
     permission_classes = [permissions.IsAuthenticated, IsTeacherOrAdmin]
