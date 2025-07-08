@@ -8,9 +8,9 @@ djangorestframework-simplejwt==5.2.2
 django-phonenumber-field==7.1.0
 phonenumbers==8.13.19
 python-dateutil==2.9.0
-langgraph==0.4.8
-langgraph-checkpoints==0.1.70
-langgraph-sdk==0.1.70
+langgraph==0.5.1
+langgraph-checkpoints==0.5.1
+langgraph-sdk==0.5.1
 
 # PostgreSQL Adapter
 psycopg2-binary==2.9.6
