@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 # Import necessary packages for different file types
 try:
-    from PyPDF2 import PdfReader
+    from pypdf import PdfReader
     PDF_SUPPORT = True
 except ImportError:
     PDF_SUPPORT = False

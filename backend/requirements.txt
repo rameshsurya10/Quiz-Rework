@@ -21,7 +21,7 @@ langgraph-sdk==0.1.72
 openai==1.58.1
 
 # Document Processing
-pypdf2==3.0.1
+pypdf==5.7.0
 python-docx==1.1.2
 pandas==2.2.3
 openpyxl==3.1.5
@@ -48,17 +48,32 @@ django-cors-headers==4.6.0
 # Task Queue & Background Jobs
 celery==5.4.0
 redis==5.2.0
+APScheduler==3.11.0
 
-# Development & Testing
+# Development & Testing Tools
 pytest==8.3.4
 pytest-django==4.9.0
 black==24.10.0
 isort==5.13.2
 flake8==7.1.1
 
-# Production Server
+# Production
 gunicorn==23.0.0
 whitenoise==6.8.2
+
+# Django Extensions
+django-filter==25.1
+django-extensions==4.1
+django-phonenumber-field==8.1.0
+drf-yasg==1.21.10
+
+# Additional Dependencies Found During Testing
+PyMuPDF==1.26.3
+tiktoken==0.9.0
+regex==2024.11.6
+tzlocal==5.3.1
+inflection==0.5.1
+uritemplate==4.2.0
 
 # Additional Dependencies
 pytz==2024.2

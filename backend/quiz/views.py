@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 from accounts.permissions import IsTeacherOrAdmin, IsOwnerOrAdminOrReadOnly
 from openai import OpenAI
-import PyPDF2
+import pypdf as PyPDF2
 import io
 from rest_framework.decorators import action
 import random
@@ -760,7 +760,7 @@ class QuizQuestionGenerateView(APIView):
         file_ext = os.path.splitext(abs_file_path)[1].lower()
         try:
             if file_ext == '.pdf':
-                from PyPDF2 import PdfReader
+                from pypdf import PdfReader
                 pdf = PdfReader(abs_file_path)
                 file_content = "\n".join(page.extract_text() or '' for page in pdf.pages)
             elif file_ext == '.txt':
