@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any, Optional, List, Union, Tuple
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 import re
 import io
 from django.conf import settings
@@ -321,7 +321,7 @@ class DocumentProcessingService:
             file_data = supabase.storage.from_("fileupload").download(file_path)
             
             # Get total pages for validation
-            from PyPDF2 import PdfReader
+            from pypdf import PdfReader
             import io
             pdf_reader = PdfReader(io.BytesIO(file_data))
             total_pages = len(pdf_reader.pages)
