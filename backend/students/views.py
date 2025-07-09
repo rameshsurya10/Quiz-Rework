@@ -697,6 +697,7 @@ class ListStudentQuizResultsView(APIView):
                 "student_id" : attempt.student_id,
                 "student_name" : attempt.student.name,
                 "score": attempt.score,
+                "student_mail" : attempt.student.email,
                 "percentage": round(percentage, 2),
                 "rank": rank,
                 "result": attempt.result,
@@ -841,7 +842,7 @@ class AdminTeacherViewReport(APIView):
             "wrong_answer_count": wrong_answer_count,
             "percentage": round(percentage, 2),
             "rank": rank,
-            # "detailed_answers": detailed_answers
+            "detailed_answers": detailed_answers
         }, status=status.HTTP_200_OK)
 
 class FetchQuizAttemptView(APIView):

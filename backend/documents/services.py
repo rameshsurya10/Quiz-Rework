@@ -115,46 +115,101 @@ class DocumentProcessingService:
         }
 
     def generate_questions_from_text(self, text, question_type, quiz_type, num_questions):
+        import math
+        import logging
+        import re
         from openai import OpenAI
         from django.conf import settings
-        import json
-        import math
 
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        logger = logging.getLogger(__name__)
 
-        MAX_BATCH = 25
-        total_batches = math.ceil(num_questions / MAX_BATCH)
-        all_validated_questions = []
-        current_question_number = 1
+        # --- 1. Extract pages from text ---
+        text_sections = []
+        current_section = []
+        current_page = None
 
-        logger.info(f"🔄 Generating {num_questions} questions in {total_batches} batch(es)...")
+        for line in text.split('\n'):
+            if line.startswith('==================== PAGE '):
+                if current_section and current_page:
+                    text_sections.append((current_page, '\n'.join(current_section)))
+                current_section = []
+                match = re.search(r'PAGE (\d+)', line)
+                if match:
+                    current_page = match.group(1)
+            elif line.startswith('==================== END OF PAGE'):
+                continue
+            else:
+                current_section.append(line)
 
-        for batch_index in range(total_batches):
-            batch_question_count = min(MAX_BATCH, num_questions - len(all_validated_questions))
-            logger.info(f"📦 Generating batch {batch_index+1} with {batch_question_count} questions...")
+        if current_section and current_page:
+            text_sections.append((current_page, '\n'.join(current_section)))
 
-            try:
-                batch_questions = self._generate_question_batch(
-                    client=client,
-                    text=text,
-                    question_type=question_type,
-                    quiz_type=quiz_type,
-                    num_questions=batch_question_count,
-                    start_question_number=current_question_number
-                )
+        # --- 2. Sample start/middle/end pages ---
+        num_samples = min(5, len(text_sections))
+        if len(text_sections) <= num_samples:
+            sampled_sections = text_sections
+        else:
+            indices = [0, len(text_sections)//2, len(text_sections)-1]
+            if num_samples > 3:
+                quarter = len(text_sections) // 4
+                indices = [0, quarter, len(text_sections)//2, len(text_sections)-quarter-1, len(text_sections)-1]
+            sampled_sections = [text_sections[i] for i in indices]
 
-                if batch_questions:
-                    all_validated_questions.extend(batch_questions)
-                    current_question_number += len(batch_questions)
+        logger.info(f"📖 Sampled page sections: {[s[0] for s in sampled_sections]}")
 
-            except Exception as e:
-                logger.error(f"❌ Batch {batch_index+1} failed: {str(e)}")
+        # --- 3. Distribute questions evenly ---
+        per_section = num_questions // len(sampled_sections)
+        remaining = num_questions % len(sampled_sections)
+
+        all_questions = []
+        question_number = 1
+        seen_questions = set()
+
+        def is_duplicate(text):
+            clean = text.lower().strip()
+            for existing in seen_questions:
+                if clean in existing or existing in clean:
+                    return True
+            return False
+
+        # --- 4. Generate and deduplicate ---
+        for idx, (page_num, content) in enumerate(sampled_sections):
+            q_count = per_section + (1 if idx < remaining else 0)
+            if not content.strip():
                 continue
 
-        logger.info(f"✅ Total generated questions: {len(all_validated_questions)} / {num_questions}")
-        return all_validated_questions[:num_questions]
+            logger.info(f"✏️ Generating {q_count} questions from page {page_num}")
+            try:
+                questions = self._generate_question_batch(
+                    client=client,
+                    text=f"Content from page {page_num}:\n{content}",
+                    question_type=question_type,
+                    quiz_type=quiz_type,
+                    num_questions=q_count,
+                    start_question_number=question_number,
+                    override_source_page=page_num
+                )
 
-    def _generate_question_batch(self, client, text, question_type, quiz_type, num_questions, start_question_number=1):
+                unique_batch = []
+                for q in questions:
+                    question_text = q.get("question", "")
+                    if not is_duplicate(question_text):
+                        seen_questions.add(question_text.lower().strip())
+                        q["question_number"] = question_number
+                        unique_batch.append(q)
+                        question_number += 1
+                    else:
+                        logger.info(f"🚫 Duplicate skipped: {question_text}")
+
+                all_questions.extend(unique_batch)
+
+            except Exception as e:
+                logger.error(f"❌ Error generating for page {page_num}: {e}")
+
+        return all_questions[:num_questions]
+
+    def _generate_question_batch(self, client, text, question_type, quiz_type, num_questions, start_question_number=1, override_source_page=None):
         import re
         import json
         import logging
@@ -183,14 +238,26 @@ class DocumentProcessingService:
         if not text_sections:
             text_sections = [('all', text)]
 
+        # Sample pages from start, middle, and end
+        num_samples = 3  # you can increase this to 5 for more spread
+        total_sections = len(text_sections)
+        sampled_sections = []
+
+        if total_sections <= num_samples:
+            sampled_sections = text_sections
+        else:
+            indices = [0, total_sections // 2, total_sections - 1]
+            sampled_sections = [text_sections[i] for i in indices]
+
         sections_text = ""
         page_numbers = []
-        for page_num, section_text in text_sections:
+        for page_num, section_text in sampled_sections:
             sections_text += f"\nContent from page {page_num}:\n{section_text}\n"
             page_numbers.append(page_num)
-        primary_page = page_numbers[0] if page_numbers else 'all'
 
-        max_content_length = 4000
+        primary_page = override_source_page if override_source_page else 'all'
+
+        max_content_length = 10000
         if len(sections_text) > max_content_length:
             sections_text = sections_text[:max_content_length] + "\n[Content truncated]"
             logger.warning(f"Content truncated to {max_content_length} characters")
@@ -273,7 +340,7 @@ class DocumentProcessingService:
             q['explanation'] = q.get('explanation', "Based on the provided content.")
             q['question'] = q.get('question', f"Question {i+1}")
             q['question_number'] = start_question_number + i
-            q['source_page'] = q.get('source_page', primary_page)
+            q['source_page'] = q.get('source_page', str(primary_page))
 
             validated_questions.append(q)
 
