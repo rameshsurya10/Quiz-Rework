@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress, Tooltip
+  Container, Button, Box, Typography, Grid, Card, CardContent, CardActions, IconButton, Chip, useTheme, alpha, Paper, Tabs, Tab, CircularProgress, Tooltip, Divider
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -11,7 +12,7 @@ import ReplayIcon from '@mui/icons-material/Replay';
 import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText, ListItemIcon, Checkbox } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText, ListItemIcon, Checkbox, TextField, Switch, FormControlLabel } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 import FullLayout from '../FullLayout';
@@ -56,6 +57,13 @@ const QuizSection = () => {
   const [regenerationsUsed, setRegenerationsUsed] = useState(0);
   const [balanceQuestions, setBalanceQuestions] = useState(0);
   const [additionalQuestionsPool, setAdditionalQuestionsPool] = useState([]);
+
+  // State for publishing
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  // State for editing questions
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [initialQuiz, setInitialQuiz] = useState(null);
 
   const processQuestionList = (list) => 
     list.filter(Boolean).map((q, index) => {
@@ -209,21 +217,26 @@ const QuizSection = () => {
 
   // Publish quiz and refresh list
   const handlePublishClick = async (quizId) => {
+    setIsPublishing(true);
     try {
       // Re-validate before publishing as a safeguard
       const quizDetails = await quizService.getQuizDetails(quizId);
       const questions = quizDetails.current_questions || quizDetails.questions || [];
       if (!areAllQuestionsValid(questions)) {
         showSnackbar('Cannot publish: Quiz has incomplete or invalid questions.', 'error');
+        setIsPublishing(false);
         return;
       }
 
       await quizApi.publish(quizId);
       await fetchQuizzes();
       showSnackbar('Quiz published successfully and notifications sent!', 'success');
+      closeViewModal();
     } catch (error) {
       console.error('Failed to publish quiz:', error);
       showSnackbar(error.response?.data?.message || 'Failed to publish quiz', 'error');
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -283,10 +296,12 @@ const QuizSection = () => {
       console.log('Final processed questions:', processedQuestions);
       console.log('Final additional questions:', processedAdditionalQuestions);
 
-      setSelectedQuiz({
+      const fullQuizData = {
         ...quizData,
-        questions: processedQuestions
-      });
+        questions: processedQuestions,
+      };
+      setSelectedQuiz(fullQuizData);
+      setInitialQuiz(JSON.parse(JSON.stringify(fullQuizData))); // Deep copy
       setAdditionalQuestionsPool(processedAdditionalQuestions);
       setBalanceQuestions(quizData.balance_questions || 0);
 
@@ -363,6 +378,7 @@ const QuizSection = () => {
         ...refreshedQuizData,
         questions: processedQuestions
       }));
+      setInitialQuiz(JSON.parse(JSON.stringify(processedQuestions))); // Deep copy
       setAdditionalQuestionsPool(processedAdditionalQuestions);
       setBalanceQuestions(refreshedQuizData.balance_questions || 0);
 
@@ -383,6 +399,117 @@ const QuizSection = () => {
     setRegenerationsUsed(0);
     setAdditionalQuestionsPool([]);
     setBalanceQuestions(0);
+    setIsEditMode(false);
+    setInitialQuiz(null);
+  };
+
+  const handleQuizDetailChange = (field, value) => {
+    setSelectedQuiz(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleQuestionChange = (questionIndex, field, value) => {
+    setSelectedQuiz(prev => {
+      const newQuestions = [...prev.questions];
+      newQuestions[questionIndex] = {
+        ...newQuestions[questionIndex],
+        [field]: value
+      };
+      return { ...prev, questions: newQuestions };
+    });
+  };
+
+  const handleOptionChange = (questionIndex, optionIndex, value) => {
+    setSelectedQuiz(prev => {
+      const newQuestions = [...prev.questions];
+      const newOptions = [...newQuestions[questionIndex].options];
+      newOptions[optionIndex] = {
+        ...newOptions[optionIndex],
+        option_text: value
+      };
+      newQuestions[questionIndex].options = newOptions;
+      return { ...prev, questions: newQuestions };
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setSelectedQuiz(initialQuiz);
+    setIsEditMode(false);
+  };
+
+  const handleSaveChanges = async () => {
+    console.log('🔧 Save Changes clicked');
+    console.log('🔧 selectedQuiz:', selectedQuiz);
+    console.log('🔧 initialQuiz:', initialQuiz);
+    
+    if (!selectedQuiz || !initialQuiz) {
+      console.log('❌ Missing quiz data');
+      showSnackbar('Missing quiz data', 'error');
+      return;
+    }
+
+    const quizDetailsChanged =
+      selectedQuiz.title !== initialQuiz.title ||
+      selectedQuiz.description !== initialQuiz.description ||
+      selectedQuiz.time_limit_minutes !== initialQuiz.time_limit_minutes ||
+      selectedQuiz.passing_score !== initialQuiz.passing_score ||
+      selectedQuiz.is_published !== initialQuiz.is_published;
+
+    const questionsChanged = JSON.stringify(selectedQuiz.questions) !== JSON.stringify(initialQuiz.questions);
+
+    console.log('🔧 Quiz details changed:', quizDetailsChanged);
+    console.log('🔧 Questions changed:', questionsChanged);
+
+    if (!quizDetailsChanged && !questionsChanged) {
+      console.log('ℹ️ No changes detected');
+      showSnackbar('No changes were made.', 'info');
+      setIsEditMode(false);
+      return;
+    }
+
+    const timeLimit = parseInt(selectedQuiz.time_limit_minutes, 10);
+    const passingScore = parseInt(selectedQuiz.passing_score, 10);
+
+    const payload = {
+      title: selectedQuiz.title,
+      description: selectedQuiz.description,
+      is_published: selectedQuiz.is_published,
+      time_limit_minutes: isNaN(timeLimit) ? null : timeLimit,
+      passing_score: isNaN(passingScore) ? null : passingScore,
+      questions: selectedQuiz.questions.map(q => {
+        const optionsObject = (q.type === 'mcq' && Array.isArray(q.options))
+          ? q.options.reduce((acc, opt) => {
+            acc[opt.id] = opt.option_text;
+            return acc;
+          }, {})
+          : {};
+
+        return {
+          question_number: q.question_number,
+          options: optionsObject,
+          explanation: q.explanation || ''
+        };
+      })
+    };
+
+    console.log('🚀 API Payload:', payload);
+    console.log('🚀 Quiz ID:', selectedQuiz.quiz_id);
+
+    try {
+      console.log('📡 Making API call...');
+      const response = await quizApi.update(selectedQuiz.quiz_id, payload);
+      console.log('✅ API Success:', response);
+      showSnackbar('Quiz updated successfully!', 'success');
+      setIsEditMode(false);
+      fetchQuizzes();
+      closeViewModal();
+    } catch (error) {
+      console.error('❌ API Error:', error);
+      console.error('❌ Error response:', error.response);
+      showSnackbar(error.response?.data?.error || 'Failed to update quiz.', 'error');
+    }
   };
 
   const getStatusChip = (isPublished) => {
@@ -616,8 +743,37 @@ const QuizSection = () => {
           <DialogTitle sx={{ 
             background: 'linear-gradient(135deg, #44a08d 0%, #093637 100%)',
             color: 'white',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
           }}>
-            {selectedQuiz?.title}
+            {isEditMode ? (
+              <TextField
+                value={selectedQuiz?.title || ''}
+                onChange={(e) => handleQuizDetailChange('title', e.target.value)}
+                variant="standard"
+                sx={{
+                  '.MuiInput-input': {
+                    color: 'white',
+                    fontSize: '1.25rem',
+                    fontWeight: 700,
+                  },
+                }}
+              />
+            ) : (
+              selectedQuiz?.title
+            )}
+            {!isEditMode && (
+              <Button
+                startIcon={<EditIcon />}
+                onClick={() => setIsEditMode(true)}
+                variant="contained"
+                color="secondary"
+                size="small"
+              >
+                Edit
+              </Button>
+            )}
           </DialogTitle>
           <DialogContent dividers>
             {isQuestionsLoading ? (
@@ -626,7 +782,72 @@ const QuizSection = () => {
               </Box>
             ) : selectedQuiz ? (
               <>
-                {!selectedQuiz.is_published && (
+                {isEditMode && (
+                  <Box sx={{ p: 2 }}>
+                    <Grid container spacing={3}>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="Quiz Title"
+                          value={selectedQuiz.title}
+                          onChange={(e) => setSelectedQuiz({ ...selectedQuiz, title: e.target.value })}
+                          fullWidth
+                          variant="outlined"
+                          margin="normal"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={selectedQuiz.is_published}
+                              onChange={(e) => setSelectedQuiz({ ...selectedQuiz, is_published: e.target.checked })}
+                              name="is_published"
+                              color="primary"
+                            />
+                          }
+                          label="Published"
+                          sx={{ mt: 2 }}
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <TextField
+                          label="Description"
+                          value={selectedQuiz.description}
+                          onChange={(e) => setSelectedQuiz({ ...selectedQuiz, description: e.target.value })}
+                          fullWidth
+                          multiline
+                          rows={3}
+                          variant="outlined"
+                          margin="normal"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="Time Limit (minutes)"
+                          type="number"
+                          value={selectedQuiz.time_limit_minutes}
+                          onChange={(e) => setSelectedQuiz({ ...selectedQuiz, time_limit_minutes: e.target.value })}
+                          fullWidth
+                          variant="outlined"
+                          margin="normal"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="Passing Score"
+                          type="number"
+                          value={selectedQuiz.passing_score}
+                          onChange={(e) => setSelectedQuiz({ ...selectedQuiz, passing_score: e.target.value })}
+                          fullWidth
+                          variant="outlined"
+                          margin="normal"
+                        />
+                      </Grid>
+                    </Grid>
+                    <Divider sx={{ my: 3 }} />
+                  </Box>
+                )}
+                {!selectedQuiz.is_published && !isEditMode && (
                   <Box sx={{ p: 2, mb: 2, backgroundColor: 'info.50', borderRadius: 1, border: '1px solid', borderColor: 'info.main' }}>
                     <Typography variant="body2" sx={{ color: 'info.dark', fontWeight: 'medium' }}>
                       Note: You can regenerate up to 5 questions for this quiz. This will use a question from the additional questions pool. 
@@ -670,14 +891,31 @@ const QuizSection = () => {
                         
                         {question.type === 'mcq' && Array.isArray(question.options) && (
                           <List dense sx={{ pl: 2, mt: 1 }}>
-                            {question.options.map((option, optIndex) => (
-                              <ListItem key={optIndex} disablePadding sx={{ color: option.is_correct ? 'success.main' : 'text.primary' }}>
-                                <ListItemIcon sx={{ minWidth: 'auto', mr: 1, color: 'inherit' }}>
-                                  {option.is_correct && <CheckCircleIcon fontSize="small" />}
-                                </ListItemIcon>
-                                <ListItemText primary={`${String.fromCharCode(65 + optIndex)}. ${option.option_text}`} />
-                              </ListItem>
-                            ))}
+                            {question.options.map((option, optIndex) => {
+                              if (!option) return null;
+
+                              if (isEditMode) {
+                                return (
+                                  <TextField
+                                    key={optIndex}
+                                    fullWidth
+                                    variant="outlined"
+                                    label={`Option ${String.fromCharCode(65 + optIndex)}`}
+                                    value={option.option_text || ''}
+                                    onChange={(e) => handleOptionChange(index, optIndex, e.target.value)}
+                                    sx={{ mb: 1 }}
+                                  />
+                                );
+                              }
+                              return (
+                                <ListItem key={optIndex} disablePadding sx={{ color: option.is_correct ? 'success.main' : 'text.primary' }}>
+                                  <ListItemIcon sx={{ minWidth: 'auto', mr: 1, color: 'inherit' }}>
+                                    {option.is_correct && <CheckCircleIcon fontSize="small" />}
+                                  </ListItemIcon>
+                                  <ListItemText primary={`${String.fromCharCode(65 + optIndex)}. ${option.option_text}`} />
+                                </ListItem>
+                              );
+                            })}
                           </List>
                         )}
 
@@ -690,15 +928,29 @@ const QuizSection = () => {
                         )}
 
                         {question.explanation && (
-                          <Box sx={{ mt: 1, p: 1, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1 }}>
-                             <Typography variant="body2" sx={{ color: 'info.dark', fontWeight: 'medium' }}>
-                              Explanation: {question.explanation}
-                            </Typography>
+                          <Box sx={{ mt: 2, p: 2, backgroundColor: alpha(theme.palette.info.light, 0.1), borderRadius: 1 }}>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 1, fontWeight: 'bold' }}>Explanation:</Typography>
+                            {isEditMode ? (
+                              <TextField
+                                fullWidth
+                                multiline
+                                variant="outlined"
+                                value={question.explanation || ''}
+                                onChange={(e) => handleQuestionChange(index, 'explanation', e.target.value)}
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    backgroundColor: alpha(theme.palette.background.paper, 0.5),
+                                  },
+                                }}
+                              />
+                            ) : (
+                              <Typography variant="body2">{question.explanation || 'No explanation provided.'}</Typography>
+                            )}
                           </Box>
                         )}
                         
                         {question.source_page && (
-                          <Typography variant="caption" sx={{ display: 'block', textAlign: 'right', color: 'text.secondary', mt: 1 }}>
+                          <Typography variant="caption" color="textSecondary" sx={{ display: 'block', textAlign: 'right', mt: 1 }}>
                             Source: Page {question.source_page}
                           </Typography>
                         )}
@@ -712,19 +964,24 @@ const QuizSection = () => {
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={closeViewModal}>Close</Button>
-            {selectedQuiz && !selectedQuiz.is_published && (
-              <Button 
-                onClick={() => {
-                  // The navigation or publish action would go here
-                  console.log(`Publishing quiz ${selectedQuiz.quiz_id}`);
-                  closeViewModal();
-                }}
-                variant="contained"
-                disabled={selectedQuiz.questions?.length !== selectedQuiz.no_of_questions}
-              >
-                Proceed to PUBLISH
-              </Button>
+            {isEditMode ? (
+              <>
+                <Button onClick={handleCancelEdit}>Cancel</Button>
+                <Button onClick={handleSaveChanges} variant="contained">Save Changes</Button>
+              </>
+            ) : (
+              <>
+                <Button onClick={closeViewModal}>Close</Button>
+                {selectedQuiz && !selectedQuiz.is_published && (
+                  <Button
+                    onClick={() => handlePublishClick(selectedQuiz.quiz_id)}
+                    variant="contained"
+                    disabled={selectedQuiz.questions?.length !== selectedQuiz.no_of_questions || isPublishing}
+                  >
+                    {isPublishing ? <CircularProgress size={24} color="inherit" /> : 'Proceed to PUBLISH'}
+                  </Button>
+                )}
+              </>
             )}
           </DialogActions>
         </Dialog>

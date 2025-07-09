@@ -26,7 +26,8 @@ import {
   ViewList as ListViewIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Upload as UploadIcon
+  Upload as UploadIcon,
+  Event as EventIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSnackbar } from '../../contexts/SnackbarContext';
@@ -61,6 +62,15 @@ const TeacherStudentSection = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleString();
+    } catch (e) {
+      return dateString;
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -612,6 +622,140 @@ const TeacherStudentSection = () => {
     }
   };
 
+  const renderStudentDetailsDialog = () => {
+    if (!selectedStudent) return null;
+
+    const departmentName = getDepartmentName(selectedStudent.department_id);
+
+    return (
+      <Dialog 
+        open={detailsDialogOpen} 
+        onClose={handleCloseDetails}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '16px',
+            backgroundColor: alpha(theme.palette.background.paper, 0.9),
+            backdropFilter: 'blur(10px)',
+          }
+        }}
+      >
+        <DialogTitle sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="h5" fontWeight="bold">Student Details</Typography>
+            <IconButton onClick={handleCloseDetails}><ClearIcon /></IconButton>
+          </Stack>
+        </DialogTitle>
+        <DialogContent sx={{ p: { xs: 2, md: 3 } }}>
+          <Grid container spacing={3} alignItems="center">
+            <Grid item xs={12} md={3} sx={{ textAlign: 'center' }}>
+              <Avatar
+                sx={{
+                  width: { xs: 80, md: 120 },
+                  height: { xs: 80, md: 120 },
+                  fontSize: { xs: '2rem', md: '3.5rem' },
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
+                  mx: 'auto'
+                }}
+              >
+                {getStudentInitials(selectedStudent.name)}
+              </Avatar>
+            </Grid>
+            <Grid item xs={12} md={9}>
+              <Typography variant="h4" component="h2" fontWeight="bold">{selectedStudent.name}</Typography>
+              <Typography variant="body1" color="text.secondary" gutterBottom>{departmentName}</Typography>
+              <Chip
+                icon={getStatusIcon(selectedStudent.is_verified)}
+                label={selectedStudent.is_verified ? "Verified" : "Pending Verification"}
+                color={getStatusColor(selectedStudent.is_verified)}
+                size="small"
+              />
+            </Grid>
+          </Grid>
+          <Divider sx={{ my: 3 }} />
+          
+          {/* Simplified Student Info Section */}
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Contact Information
+            </Typography>
+            <List>
+              <ListItem>
+                <ListItemAvatar>
+                  <Avatar><EmailIcon /></Avatar>
+                </ListItemAvatar>
+                <ListItemText primary="Email Address" secondary={selectedStudent.email} />
+              </ListItem>
+              <ListItem>
+                <ListItemAvatar>
+                  <Avatar><PhoneIcon /></Avatar>
+                </ListItemAvatar>
+                <ListItemText primary="Phone Number" secondary={selectedStudent.phone || 'N/A'} />
+              </ListItem>
+            </List>
+
+            <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+              Academic Information
+            </Typography>
+            <List>
+              <ListItem>
+                <ListItemAvatar>
+                  <Avatar><SchoolIcon /></Avatar>
+                </ListItemAvatar>
+                <ListItemText primary="Register Number" secondary={selectedStudent.roll_number || 'N/A'} />
+              </ListItem>
+              <ListItem>
+                <ListItemAvatar>
+                  <Avatar><SchoolIcon /></Avatar>
+                </ListItemAvatar>
+                <ListItemText primary="Class & Section" secondary={`${selectedStudent.class_name || 'N/A'} - ${selectedStudent.section || 'N/A'}`} />
+              </ListItem>
+            </List>
+          </Box>
+
+          <Divider sx={{ my: 3 }} />
+
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Additional Information
+            </Typography>
+            <List>
+              <ListItem>
+                <ListItemAvatar>
+                  <Avatar><EventIcon /></Avatar>
+                </ListItemAvatar>
+                <ListItemText primary="Created On" secondary={formatDate(selectedStudent.created_at)} />
+              </ListItem>
+              <ListItem>
+                <ListItemAvatar>
+                  <Avatar><PersonIcon /></Avatar>
+                </ListItemAvatar>
+                <ListItemText primary="Created By" secondary={selectedStudent.created_by || 'N/A'} />
+              </ListItem>
+              <ListItem>
+                <ListItemAvatar>
+                  <Avatar><EventIcon /></Avatar>
+                </ListItemAvatar>
+                <ListItemText primary="Last Modified On" secondary={formatDate(selectedStudent.last_modified_at)} />
+              </ListItem>
+              <ListItem>
+                <ListItemAvatar>
+                  <Avatar><PersonIcon /></Avatar>
+                </ListItemAvatar>
+                <ListItemText primary="Last Modified By" secondary={selectedStudent.last_modified_by || 'N/A'} />
+              </ListItem>
+            </List>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Button onClick={handleCloseDetails}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    );
+  };
+
   if (isLoading) {
     return (
       <Container maxWidth={false} sx={{ py: { xs: 2, sm: 3 } }}>
@@ -849,152 +993,8 @@ const TeacherStudentSection = () => {
           {getTabContent()}
         </motion.div>
       </AnimatePresence>
-
-      {/* Student Details Dialog */}
-      <Dialog
-        open={detailsDialogOpen}
-        onClose={handleCloseDetails}
-        maxWidth="sm"
-        fullWidth
-        fullScreen={isSmallMobile}
-        PaperProps={{
-          sx: {
-            background: alpha(theme.palette.background.paper, 0.95),
-            backdropFilter: 'blur(20px)',
-            borderRadius: isSmallMobile ? 0 : 3,
-            border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-          }
-        }}
-      >
-        {selectedStudent && (
-          <>
-            <DialogTitle sx={{ 
-              pb: 1,
-              fontSize: { xs: '1.1rem', sm: '1.25rem' }
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Avatar
-                  sx={{
-                    width: { xs: 48, sm: 56 },
-                    height: { xs: 48, sm: 56 },
-                    background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-                    fontSize: { xs: '1.2rem', sm: '1.5rem' },
-                    fontWeight: 700
-                  }}
-                >
-                  {getStudentInitials(selectedStudent.name)}
-                </Avatar>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    {selectedStudent.name}
-                  </Typography>
-                  <Chip
-                    icon={getStatusIcon(selectedStudent.is_verified)}
-                    label={selectedStudent.is_verified ? 'Verified' : 'Pending'}
-                    color={getStatusColor(selectedStudent.is_verified)}
-                    size="small"
-                    sx={{ fontWeight: 600 }}
-                  />
-                </Box>
-              </Box>
-            </DialogTitle>
-            
-            <DialogContent sx={{ pt: 2 }}>
-              <List disablePadding>
-                <ListItem disablePadding sx={{ mb: 1 }}>
-                  <ListItemAvatar>
-                    <Avatar sx={{ background: alpha(theme.palette.primary.main, 0.1) }}>
-                      <EmailIcon sx={{ color: 'primary.main' }} />
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary="Email"
-                    secondary={selectedStudent.email}
-                    primaryTypographyProps={{ fontWeight: 600, fontSize: '0.875rem' }}
-                    secondaryTypographyProps={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
-                  />
-                </ListItem>
-                
-                <Divider sx={{ my: 1 }} />
-                
-                <ListItem disablePadding sx={{ mb: 1 }}>
-                  <ListItemAvatar>
-                    <Avatar sx={{ background: alpha(theme.palette.secondary.main, 0.1) }}>
-                      <SchoolIcon sx={{ color: 'secondary.main' }} />
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary="Department"
-                    secondary={getDepartmentName(selectedStudent.department_id)}
-                    primaryTypographyProps={{ fontWeight: 600, fontSize: '0.875rem' }}
-                    secondaryTypographyProps={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
-                  />
-                </ListItem>
-                
-                {selectedStudent.roll_number && (
-                  <>
-                    <Divider sx={{ my: 1 }} />
-                    <ListItem disablePadding sx={{ mb: 1 }}>
-                      <ListItemAvatar>
-                        <Avatar sx={{ background: alpha(theme.palette.info.main, 0.1) }}>
-                          <PersonIcon sx={{ color: 'info.main' }} />
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary="Roll Number"
-                        secondary={selectedStudent.roll_number}
-                        primaryTypographyProps={{ fontWeight: 600, fontSize: '0.875rem' }}
-                        secondaryTypographyProps={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
-                      />
-                    </ListItem>
-                  </>
-                )}
-                
-                {selectedStudent.phone && (
-                  <>
-                    <Divider sx={{ my: 1 }} />
-                    <ListItem disablePadding sx={{ mb: 1 }}>
-                      <ListItemAvatar>
-                        <Avatar sx={{ background: alpha(theme.palette.success.main, 0.1) }}>
-                          <PhoneIcon sx={{ color: 'success.main' }} />
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary="Phone"
-                        secondary={selectedStudent.phone}
-                        primaryTypographyProps={{ fontWeight: 600, fontSize: '0.875rem' }}
-                        secondaryTypographyProps={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
-                      />
-                    </ListItem>
-                  </>
-                )}
-              </List>
-            </DialogContent>
-            
-            <DialogActions sx={{ p: { xs: 2, sm: 3 }, gap: 1 }}>
-              <Button
-                onClick={handleCloseDetails}
-                sx={{ 
-                  minWidth: { xs: 80, sm: 100 },
-                  fontSize: { xs: '0.8rem', sm: '0.875rem' }
-                }}
-              >
-                Close
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<AssessmentIcon />}
-                sx={{ 
-                  minWidth: { xs: 100, sm: 120 },
-                  fontSize: { xs: '0.8rem', sm: '0.875rem' }
-                }}
-              >
-                View Reports
-              </Button>
-            </DialogActions>
-          </>
-        )}
-      </Dialog>
+      
+      {renderStudentDetailsDialog()}
 
       {/* Edit Student Dialog */}
       <Dialog 
