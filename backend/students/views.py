@@ -748,62 +748,57 @@ class AdminTeacherViewReport(APIView):
             return Response({"error": "No attempt found for this quiz"}, status=status.HTTP_404_NOT_FOUND)
 
         detailed_answers = []
-        answered_question_numbers = set()
         correct_answer_count = 0
         wrong_answer_count = 0
 
-        answer_map = {
-            (a["question_id"], a["question_number"]): {
-                "answer": a.get("answer"),
-                "is_correct": a.get("is_correct", False)
-            } for a in attempt.question_answer
-        }
-
-        all_question_numbers = set()
-
-        all_question_objs = Question.objects.filter(quiz__quiz_id=quiz_id)
-        for q_obj in all_question_objs:
+        # Fetch all questions for this quiz once
+        question_map = {}
+        question_objs = Question.objects.filter(quiz__quiz_id=quiz_id)
+        for q_obj in question_objs:
+            qid = q_obj.question_id
             try:
-                qid = q_obj.question_id
-                sub_questions = q_obj.question
-                if isinstance(sub_questions, str):
-                    sub_questions = json.loads(sub_questions)
-
-                for q in sub_questions:
-                    q_no = q.get("question_number")
-                    all_question_numbers.add(q_no)
-
-                    key = (qid, q_no)
-                    student_answer = answer_map.get(key, {}).get("answer")
-                    is_correct = answer_map.get(key, {}).get("is_correct", False)
-
-                    if student_answer is not None:
-                        answered_question_numbers.add(q_no)
-
-                    if is_correct:
-                        correct_answer_count += 1
-                    elif student_answer is not None:
-                        wrong_answer_count += 1
-
-                    detailed_answers.append({
-                        "question_number": q_no,
-                        "question": q.get("question"),
-                        "type": q.get("type"),
-                        "options": q.get("options", {}),
-                        "correct_answer": q.get("correct_answer"),
-                        "student_answer": student_answer,
-                        "explanation": q.get("explanation", ""),
-                        "is_correct": is_correct
-                    })
+                q_list = json.loads(q_obj.question) if isinstance(q_obj.question, str) else q_obj.question
+                for q in q_list:
+                    key = (qid, q.get("question_number"))
+                    question_map[key] = q
             except Exception:
                 continue
 
-        total_questions = len(all_question_numbers)
-        attended_questions = len(answered_question_numbers)
+        # Process only questions the student answered
+        for a in attempt.question_answer:
+            qid = a.get("question_id")
+            q_no = a.get("question_number")
+            key = (qid, q_no)
+
+            question_data = question_map.get(key)
+            if not question_data:
+                continue  # skip if the question content is missing
+
+            is_correct = a.get("is_correct", False)
+            student_answer = a.get("answer")
+
+            if is_correct:
+                correct_answer_count += 1
+            else:
+                wrong_answer_count += 1
+
+            detailed_answers.append({
+                "question_number": q_no,
+                "question": question_data.get("question"),
+                "type": question_data.get("type"),
+                "options": question_data.get("options", {}),
+                "correct_answer": question_data.get("correct_answer"),
+                "student_answer": student_answer,
+                "explanation": question_data.get("explanation", ""),
+                "is_correct": is_correct
+            })
+
+        total_questions = len(Question.objects.filter(quiz__quiz_id=quiz_id).values_list("question", flat=True))  # optional logic here
+        attended_questions = len(detailed_answers)
         not_answered_questions = max(0, total_questions - attended_questions)
         percentage = (attempt.score / total_questions) * 100 if total_questions else 0
 
-        # Rank logic (only for pass)
+        # Rank logic (only for pass)    
         rank = None
         if attempt.result.lower() == "pass":
             all_attempts = QuizAttempt.objects.filter(quiz__quiz_id=quiz_id, result__iexact="pass").order_by("-score", "created_at")
