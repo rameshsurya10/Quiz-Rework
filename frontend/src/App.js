@@ -23,7 +23,6 @@ import PageLoader from './common/PageLoader';
 
 // New authentication components
 import TeacherDashboard, { TeacherLayout } from './components/dashboards/TeacherDashboard';
-import StudentDashboard from './components/dashboards/StudentDashboard';
 import SimpleStudentDashboard from './components/dashboards/SimpleStudentDashboard';
 // Add OTP Verification component import
 import OTPVerification from './components/auth/OTPVerification';
