@@ -146,7 +146,7 @@ class QuizSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True)
     last_modified_at = serializers.DateTimeField(read_only=True)
     published_at = serializers.DateTimeField(required=False)
-    questions = QuestionSerializer(many=True, read_only=True, source='db_questions')
+    # questions = QuestionSerializer(many=True, read_only=True, source='db_questions')
     
     class Meta:
         model = Quiz
@@ -164,7 +164,7 @@ class QuizSerializer(serializers.ModelSerializer):
             'uploaded_files',
             'uploadedfiles',
             'time_limit_minutes', 'passing_score',
-            'questions',
+            # 'questions',
             'metadata'
         ]
         read_only_fields = ['quiz_id', 'created_at', 'last_modified_at']

@@ -481,130 +481,77 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         data = serializer.data
 
         all_questions = Question.objects.filter(quiz=instance).order_by('question_id')
-        total_questions_count = all_questions.count()
         max_questions = instance.no_of_questions or 0
 
-        def serialize_question(q):
-            # For mixed type questions, the question field contains JSON with multiple questions
-            if q.question_type == 'mixed':
+        def extract_individual_questions(q):
+            """Extracts individual questions whether stored as JSON string or normal."""
+            result = []
+
+            if q.question_type == 'mixed' or isinstance(q.question, str):
                 try:
                     parsed = json.loads(q.question)
+
                     if isinstance(parsed, list):
-                        # Ensure each question has all required fields
-                        for question_item in parsed:
-                            # Add missing fields with defaults
-                            if 'question_id' not in question_item:
-                                question_item['question_id'] = q.question_id
-                            if 'question_type' not in question_item and 'type' in question_item:
-                                question_item['question_type'] = question_item['type']
-                            elif 'question_type' not in question_item:
-                                question_item['question_type'] = 'mcq'  # default
-                            
-                            # Ensure the actual question content exists
-                            if 'question' not in question_item:
-                                question_item['question'] = 'Missing question text'
-                            
-                            # Ensure options is properly formatted for MCQ questions
-                            if question_item.get('question_type') == 'mcq' or question_item.get('type') == 'mcq':
-                                if 'options' not in question_item or not question_item['options']:
-                                    question_item['options'] = {
-                                        "A": "Option A",
-                                        "B": "Option B",
-                                        "C": "Option C", 
-                                        "D": "Option D"
-                                    }
-                            else:
-                                question_item['options'] = {}
-                            
-                            # Ensure correct_answer exists
-                            if 'correct_answer' not in question_item:
-                                question_item['correct_answer'] = ''
-                            
-                            # Ensure explanation exists
-                            if 'explanation' not in question_item:
-                                question_item['explanation'] = ''
-                        
-                        return parsed
-                    else:
-                        # Single question object
-                        if 'question_id' not in parsed:
-                            parsed['question_id'] = q.question_id
-                        if 'question_type' not in parsed and 'type' in parsed:
-                            parsed['question_type'] = parsed['type']
-                        elif 'question_type' not in parsed:
-                            parsed['question_type'] = 'mcq'
-                        
-                        # Ensure the actual question content exists
-                        if 'question' not in parsed:
-                            parsed['question'] = 'Missing question text'
-                        
-                        if parsed.get('question_type') == 'mcq' or parsed.get('type') == 'mcq':
-                            if 'options' not in parsed or not parsed['options']:
-                                parsed['options'] = {
-                                    "A": "Option A",
-                                    "B": "Option B",
-                                    "C": "Option C",
-                                    "D": "Option D"
-                                }
-                        else:
-                            parsed['options'] = {}
-                        
-                        if 'correct_answer' not in parsed:
-                            parsed['correct_answer'] = ''
-                        if 'explanation' not in parsed:
-                            parsed['explanation'] = ''
-                        
-                        return [parsed]
-                except (json.JSONDecodeError, TypeError):
-                    # Fallback if JSON parsing fails
-                    return [{
-                        "question_id": q.question_id,
-                        "question_type": q.question_type,
-                        "question": q.question,
-                        "options": q.options or {},
-                        "correct_answer": q.correct_answer or '',
-                        "explanation": q.explanation or ''
-                    }]
+                        for item in parsed:
+                            result.append({
+                                "question_id": q.question_id,
+                                "question_type": item.get("type", "mcq"),
+                                "question": item.get("question", ""),
+                                "options": item.get("options", {}) if item.get("type") == "mcq" else {},
+                                "correct_answer": item.get("correct_answer", ""),
+                                "explanation": item.get("explanation", ""),
+                                "source_page": item.get("source_page", ""),
+                                "question_number": item.get("question_number", "")
+                            })
+                    elif isinstance(parsed, dict):
+                        item = parsed
+                        result.append({
+                            "question_id": q.question_id,
+                            "question_type": item.get("type", "mcq"),
+                            "question": item.get("question", ""),
+                            "options": item.get("options", {}) if item.get("type") == "mcq" else {},
+                            "correct_answer": item.get("correct_answer", ""),
+                            "explanation": item.get("explanation", ""),
+                            "source_page": item.get("source_page", "")
+                        })
+                except json.JSONDecodeError:
+                    pass  # Invalid JSON, skip
             else:
-                # For non-mixed questions, return standard format
-                return [{
+                result.append({
                     "question_id": q.question_id,
                     "question_type": q.question_type,
                     "question": q.question,
                     "options": q.options or {},
-                    "correct_answer": q.correct_answer or '',
-                    "explanation": q.explanation or ''
-                }]
+                    "correct_answer": q.correct_answer or "",
+                    "explanation": q.explanation or "",
+                    "source_page": ""
+                })
+            return result
 
-        # Collect all serialized questions
-        all_serialized_questions = []
+        # 🔄 Flatten all questions
+        flattened_questions = []
         for q in all_questions:
-            serialized_questions = serialize_question(q)
-            all_serialized_questions.extend(serialized_questions)
+            flattened_questions.extend(extract_individual_questions(q))
 
-        # Add question numbers
-        # for i, question in enumerate(all_serialized_questions, 1):
-        #     question['question_number'] = i
+        # 📤 Split current vs additional
+        current_questions = flattened_questions[:max_questions]
+        additional_questions = flattened_questions[max_questions:]
 
-        # Split based on required number
-        current_questions = all_serialized_questions[:max_questions]
-        additional_questions = all_serialized_questions[max_questions:]
-
-        # Build response
-        data['current_questions'] = current_questions
-        data['total_questions'] = total_questions_count
-        data['returned_questions'] = len(current_questions)
-        data['balance_questions'] = len(additional_questions)
-        data['additional_question_list'] = additional_questions
-
-        # Clean up any previously present 'questions'
-        data.pop('questions', None)
+        # 📦 Final structured response
+        data["current_questions"] = current_questions
+        data["additional_question_list"] = additional_questions
+        data["total_questions"] = len(flattened_questions)
+        data["returned_questions"] = len(current_questions)
+        data["balance_questions"] = len(additional_questions)
+        data.pop("questions", None)  # Remove serialized .questions field if present
 
         return Response(data)
         
     def put(self, request, quiz_id):
         try:
             quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
+            add_question = request.data.get("add_question", False)
+
             # 1. Update quiz fields
             quiz.title = request.data.get("title", quiz.title)
             quiz.description = request.data.get("description", quiz.description)
@@ -620,72 +567,91 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
             quiz.save()
 
-            # 2. Load existing questions for this quiz
+            # 2. Load all existing questions and calculate max question number
             existing_questions = Question.objects.filter(quiz=quiz)
-            question_map = {}
-
+            current_max_number = 0
             for q in existing_questions:
                 try:
                     q_data = json.loads(q.question)
-                    if isinstance(q_data, dict):
+                    if isinstance(q_data, list):
+                        for item in q_data:
+                            q_num = item.get("question_number")
+                            if isinstance(q_num, int):
+                                current_max_number = max(current_max_number, q_num)
+                    elif isinstance(q_data, dict):
                         q_num = q_data.get("question_number")
-                        if q_num is not None:
-                            question_map[str(q_num)] = q
+                        if isinstance(q_num, int):
+                            current_max_number = max(current_max_number, q_num)
                 except json.JSONDecodeError:
-                    continue # skip corrupted data
+                    continue
 
-            # 3. Update matching questions from incoming payload
+            # 3. Update matching questions
             incoming_questions = request.data.get("questions", [])
             updated_numbers = []
 
             for new_q in incoming_questions:
                 q_num = new_q.get("question_number")
-
                 if q_num is None:
                     continue
 
-                # Loop through all Question rows in this quiz
-                questions = Question.objects.filter(quiz=quiz)
-
-                q_obj = None
-                matched_question_index = None
-                q_list = []
-
-                for question in questions:
+                for question in existing_questions:
                     try:
-                        q_list = json.loads(question.question)  # this is a list of dicts
+                        q_list = json.loads(question.question)
                         if isinstance(q_list, list):
                             for idx, item in enumerate(q_list):
                                 if str(item.get("question_number")) == str(q_num):
-                                    q_obj = question
-                                    matched_question_index = idx
+                                    item["explanation"] = new_q.get("explanation", item.get("explanation"))
+                                    item["options"] = new_q.get("options", item.get("options"))
+                                    item["question_number"] = q_num
+                                    q_list[idx] = item
+                                    question.question = json.dumps(q_list)
+                                    question.save(update_fields=["question"])
+                                    updated_numbers.append(q_num)
                                     break
-                    except json.JSONDecodeError as e:
+                    except json.JSONDecodeError:
                         continue
 
-                if not q_obj or matched_question_index is None:
-                    continue
+            # 4. Add new questions to the same `mixed` question row
+            if add_question:
+                mixed_q = existing_questions.filter(question_type="mixed").first()
 
-                # Update only explanation and options
-                target = q_list[matched_question_index]
-                target["explanation"] = new_q.get("explanation", target.get("explanation"))
-                target["options"] = new_q.get("options", target.get("options"))
-                target["question_number"] = q_num  # ensure it's present
+                if mixed_q:
+                    try:
+                        existing_q_data = json.loads(mixed_q.question)
+                        if not isinstance(existing_q_data, list):
+                            existing_q_data = [existing_q_data]
+                    except Exception:
+                        existing_q_data = []
+                else:
+                    # Edge case: if mixed question does not exist, create it ONCE
+                    mixed_q = Question.objects.create(
+                        quiz=quiz, question_type="mixed", question="[]"
+                    )
+                    existing_q_data = []
 
-                # Save updated list back
-                q_obj.question = json.dumps(q_list)
-                q_obj.save(update_fields=["question"])
-                updated_numbers.append(q_num)   
+                for new_q in incoming_questions:
+                    q_num = new_q.get("question_number")
+                    if q_num and str(q_num) in [str(qn) for qn in updated_numbers]:
+                        continue  # already updated above
+
+                    current_max_number += 1
+                    new_q["question_number"] = current_max_number
+                    existing_q_data.append(new_q)
+
+                mixed_q.question = json.dumps(existing_q_data)
+                mixed_q.save(update_fields=["question"])   
 
             return Response({
                 "message": "Quiz and matching questions updated successfully.",
                 "updated_question_numbers": updated_numbers,
                 "quiz_id": quiz.quiz_id
             }, status=status.HTTP_200_OK)
+
         except Exception as e:
             return Response({
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -695,6 +661,16 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         try:
             quiz = self.get_object()
 
+            # 1. Delete associated files from Supabase Storage
+            supabase = create_client(supabase_url, supabase_key)
+
+            documents = Document.objects.filter(quiz=quiz)
+            file_paths_to_delete = [doc.storage_path for doc in documents if doc.storage_path]
+
+            if file_paths_to_delete:
+                for path in file_paths_to_delete:
+                    supabase.storage.from_(SUPABASE_BUCKET).remove([path])
+
             # 1. Hard delete all related Question entries
             questions_deleted, _ = Question.objects.filter(quiz=quiz).delete()
 
@@ -702,7 +678,7 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
             attempts_deleted, _ = QuizAttempt.objects.filter(quiz=quiz).delete()
 
             # 3. Hard delete all related StudentQuizAttempt entries
-            student_attempts_deleted, _ = Document.objects.filter(quiz=quiz).delete()
+            student_attempts_deleted, _ = documents.delete()
 
             # 4. Soft delete the quiz
             quiz.is_deleted = True
@@ -711,6 +687,7 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
             return Response({
                 "message": "Quiz soft-deleted successfully. Related data removed.",
+                "files_deleted": len(file_paths_to_delete),
                 "questions_deleted": questions_deleted,
                 "quiz_attempts_deleted": attempts_deleted,
                 "student_quiz_attempts_deleted": student_attempts_deleted,
@@ -944,7 +921,9 @@ class QuizQuestionGenerateFromPromptView(APIView):
             'name': filename,
             'path': db_file_path,
             'file_size': uploaded_file.size,
-            'file_type': uploaded_file.content_type
+            'file_type': uploaded_file.content_type,
+            'storage_path': f"{quiz.quiz_id}/{filename}",
+            'file': filename
         }
 
         quiz.uploadedfiles.append(file_info)
