@@ -531,6 +531,8 @@ class DocumentProcessingService:
 
             document.is_processed = True
             document.processing_status = 'success'
+            document.storage_path = f"{quiz.quiz_id}/{uploaded_file.name}"
+            document.file = uploaded_file.name
             document.save()
 
             return {
@@ -626,6 +628,8 @@ def process_uploaded_documents(files_data, quiz, user):
                     storage_type='local',
                     file_type=file_obj.content_type,
                     quiz=quiz,
+                    storage_path=f"{quiz.quiz_id}/{file_obj.name}",
+                    file=file_obj.name,
                     metadata={
                         'page_range': page_range_str,
                         'processing_order': idx + 1

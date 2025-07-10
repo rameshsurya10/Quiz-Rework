@@ -27,6 +27,10 @@ from quiz.serializers import AvailableQuizSerializer
 from quiz.models import QuizAttempt
 from django.utils import timezone
 from datetime import timedelta
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import action
+from django.contrib.sites.shortcuts import get_current_site
+
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -276,46 +280,184 @@ class StudentVerificationView(View):
     def get(self, request, student_id):
         try:
             student = Student.objects.get(student_id=student_id)
-            
-            # Check if already verified
+
             if student.is_verified:
                 return HttpResponse(
-                    '<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">'
-                    '<h2>Verification Link Expired</h2>'
-                    '<p>This verification link has already been used or is no longer valid.</p>'
-                    '</div>',
-                    status=410
+                    """
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>Link Expired</title>
+                        <style>
+                            body {
+                                background-color: #fff8f0;
+                                font-family: "Segoe UI", sans-serif;
+                                display: flex;
+                                justify-content: center;
+                                align-items: center;
+                                height: 100vh;
+                                margin: 0;
+                            }
+                            .box {
+                                background-color: #fff;
+                                border: 2px solid #ffcccc;
+                                padding: 30px 40px;
+                                border-radius: 12px;
+                                text-align: center;
+                                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                                max-width: 400px;
+                            }
+                            h2 {
+                                color: #d9534f;
+                                margin-bottom: 12px;
+                            }
+                            p {
+                                font-size: 16px;
+                                color: #333;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="box">
+                            <h2>⚠️ Verification Link Expired</h2>
+                            <p>This link has already been used or is no longer valid.</p>
+                        </div>
+                    </body>
+                    </html>
+                    """,
+                    status=410,
+                    content_type="text/html"
                 )
 
-            # Mark student as verified
+            # ✅ Mark verified
             student.is_verified = True
             student.save()
-            
-            # Optionally, you can log the user in here
-            # login(request, student.user)  # If you have a user object linked to the student
+
+            # full_url = "http://localhost:3001/login"
+            full_url = "https://qna.kol.tel/login"
 
             return HttpResponse(
-                '<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">'
-                '<h1>Verification Successful!</h1>'
-                '<p>Your account has been successfully verified. You can now log in.</p>'
-                '</div>'
+                f"""
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Verification Successful</title>
+                    <style>
+                        body {{
+                            background-color: #eef6f9;
+                            font-family: "Segoe UI", sans-serif;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            height: 100vh;
+                            margin: 0;
+                        }}
+                        .box {{
+                            background-color: #ffffff;
+                            border: 2px solid #a3d5ff;
+                            padding: 30px 40px;
+                            border-radius: 16px;
+                            text-align: center;
+                            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+                            max-width: 400px;
+                        }}
+                        h1 {{
+                            color: #2e8b57;
+                            font-size: 24px;
+                            margin-bottom: 16px;
+                        }}
+                        p {{
+                            font-size: 16px;
+                            color: #333;
+                            margin-bottom: 24px;
+                        }}
+                        a {{
+                            display: inline-block;
+                            background-color: #007bff;
+                            color: white;
+                            padding: 10px 20px;
+                            border-radius: 8px;
+                            text-decoration: none;
+                            font-weight: bold;
+                        }}
+                        a:hover {{
+                            background-color: #0056b3;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="box">
+                        <h1>🎉 Verification Successful!</h1>
+                        <p>Your account has been successfully verified.</p>
+                        <a href="{full_url}">Login Now</a>
+                    </div>
+                </body>
+                </html>
+                """,
+                content_type="text/html"
             )
+
         except Student.DoesNotExist:
             return HttpResponse(
-                '<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">'
-                '<h2>Invalid Verification Link</h2>'
-                '<p>The verification link is invalid or has expired. Please request a new one.</p>'
-                '</div>',
-                status=404
-            )
-        except Exception as e:
-            # Generic error for any other issues
-            return HttpResponse(
-                f'<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">'
-                f'<h2>Verification Failed</h2>'
-                f'<p>An unexpected error occurred: {str(e)}</p>'
-                f'</div>',
-                status=500
+                """
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Invalid Link</title>
+                    <style>
+                        body {
+                            background-color: #fdf1f1;
+                            font-family: "Segoe UI", sans-serif;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            height: 100vh;
+                            margin: 0;
+                        }
+                        .box {
+                            background-color: #fff;
+                            border: 2px solid #f5c6cb;
+                            padding: 30px 40px;
+                            border-radius: 12px;
+                            text-align: center;
+                            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+                            max-width: 400px;
+                        }
+                        h2 {
+                            color: #dc3545;
+                        }
+                        p {
+                            font-size: 16px;
+                            color: #333;
+                        }
+                        .resend {
+                            margin-top: 15px;
+                            display: inline-block;
+                            background-color: #dc3545;
+                            color: white;
+                            padding: 10px 20px;
+                            border-radius: 6px;
+                            text-decoration: none;
+                        }
+                        .resend:hover {
+                            background-color: #c82333;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="box">
+                        <h2>❌ Invalid or Expired Link</h2>
+                        <p>The verification link is invalid or has expired. Please request a new one.</p>
+                        <a class="resend" href="/resend-verification/">Resend Verification</a>
+                    </div>
+                </body>
+                </html>
+                """,
+                status=404,
+                content_type="text/html"
             )
 
 class AvailableQuizzesView(generics.ListAPIView):
