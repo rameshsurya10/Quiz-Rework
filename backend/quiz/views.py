@@ -550,6 +550,8 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     def put(self, request, quiz_id):
         try:
             quiz = get_object_or_404(Quiz, quiz_id=quiz_id, is_deleted=False)
+            # 1. Track initial publish state
+            was_unpublished = not quiz.is_published 
             add_question = request.data.get("add_question", False)
 
             # 1. Update quiz fields
@@ -639,7 +641,106 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                     existing_q_data.append(new_q)
 
                 mixed_q.question = json.dumps(existing_q_data)
-                mixed_q.save(update_fields=["question"])   
+                mixed_q.save(update_fields=["question"])  
+
+            # 6. ✅ Only send mail if quiz is published now but wasn't before
+            if was_unpublished and quiz.is_published:
+                if not quiz.published_at:
+                    quiz.published_at = timezone.now()
+                    quiz.save(update_fields=["published_at"])
+
+                students = Student.objects.filter(
+                    department_id=quiz.department_id,
+                    is_verified=True,
+                    is_deleted=False,
+                    class_name=quiz.class_name,
+                    section=quiz.section    
+                )
+
+                domain = get_current_site(request).domain
+                full_url = f"student/quiz/{quiz.quiz_id}/join/"
+                quiz.url_link = full_url
+
+                subject = f"Quiz Assigned: {quiz.title}"
+                from_email = settings.DEFAULT_FROM_EMAIL
+
+                for student in students:
+                    if student.email:
+                        message = f""" 
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                    <meta charset="UTF-8">
+                                    <style>
+                                        body {{
+                                            font-family: "Segoe UI", sans-serif;
+                                            background-color: #f3f7fa;
+                                            padding: 30px;
+                                            color: #333;
+                                        }}
+                                        .email-container {{
+                                            max-width: 600px;
+                                            margin: auto;
+                                            background-color: #ffffff;
+                                            border-radius: 10px;
+                                            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                                            padding: 30px;
+                                            border-left: 6px solid #4a90e2;
+                                        }}
+                                        h2 {{
+                                            color: #2c3e50;
+                                            margin-top: 0;
+                                        }}
+                                        .info-box {{
+                                            background-color: #e8f0fe;
+                                            border: 1px solid #cfe2ff;
+                                            border-radius: 8px;
+                                            padding: 12px 16px;
+                                            margin: 20px 0;
+                                            font-size: 14px;
+                                        }}
+                                        .copy-link-box {{
+                                            background-color: #f3e5f5;
+                                            border: 1px dashed #ba68c8;
+                                            font-family: monospace;
+                                            font-size: 13px;
+                                            padding: 8px 12px;
+                                            margin: 10px 0;
+                                            border-radius: 6px;
+                                            word-break: break-word;
+                                            user-select: all;
+                                            color: #6a1b9a;
+                                            display: inline-block;
+                                        }}
+                                    </style>
+                                </head>
+                                <body>
+                                    <div class="email-container">
+                                        <h2>Hello {student.name},</h2>
+                                        <p>A new quiz has been assigned to you!</p>
+
+                                        <div class="info-box">
+                                            <strong>Quiz Title:</strong> {quiz.title}<br>
+                                            <strong>Assigned On:</strong> {quiz.published_at.strftime('%Y-%m-%d %I:%M %p')}
+                                        </div>
+
+                                        <p>👉 Copy the link below to join your quiz:</p>
+                                        <div class="copy-link-box">{quiz.url_link}</div>
+
+                                        <p style="margin-top: 30px;">Best regards,<br>Redlitmus Team</p>
+                                    </div>
+                                </body>
+                                </html>
+                                """
+
+                        send_mail(
+                            subject,
+                            message,
+                            from_email,
+                            [student.email],
+                            fail_silently=False,
+                            html_message=message,
+                        )       
 
             return Response({
                 "message": "Quiz and matching questions updated successfully.",
@@ -785,51 +886,107 @@ class QuizPublishView(APIView):
                 if not quiz.published_at:
                     quiz.published_at = timezone.now()
 
-                # ✅ Generate URL and save in model
+                # ✅ Generate and save full join URL
                 domain = get_current_site(request).domain
-                full_url = f"http://{domain}/student/quiz/{quiz.quiz_id}/join/"
-                # test_path = reverse('quiz-join', kwargs={'quiz_id': quiz.quiz_id})
-                # full_url = f"http://{domain}{test_path}"
+                full_url = f"student/quiz/{quiz.quiz_id}/join/"
                 quiz.url_link = full_url
 
-                # ✅ Fetch department students
-                department = quiz.department_id
-                students = Student.objects.filter(department_id=department,is_verified=True,
-                is_deleted=False,class_name=quiz.class_name,section=quiz.section)
+                # ✅ Fetch valid students in the same department/class/section
+                students = Student.objects.filter(
+                    department_id=quiz.department_id,
+                    is_verified=True,
+                    is_deleted=False,
+                    class_name=quiz.class_name,
+                    section=quiz.section
+                )
 
-                # Email content
                 subject = f"Quiz Assigned: {quiz.title}"
                 from_email = settings.DEFAULT_FROM_EMAIL
 
                 for student in students:
                     if student.email:
-                        message = f"""
-                            Hello {student.name},
+                        message = f""" 
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <style>
+                                body {{
+                                    font-family: "Segoe UI", sans-serif;
+                                    background-color: #f3f7fa;
+                                    padding: 30px;
+                                    color: #333;
+                                }}
+                                .email-container {{
+                                    max-width: 600px;
+                                    margin: auto;
+                                    background-color: #ffffff;
+                                    border-radius: 10px;
+                                    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+                                    padding: 30px;
+                                    border-left: 6px solid #4a90e2;
+                                }}
+                                h2 {{
+                                    color: #2c3e50;
+                                    margin-top: 0;
+                                }}
+                                .info-box {{
+                                    background-color: #e8f0fe;
+                                    border: 1px solid #cfe2ff;
+                                    border-radius: 8px;
+                                    padding: 12px 16px;
+                                    margin: 20px 0;
+                                    font-size: 14px;
+                                }}
+                                .copy-link-box {{
+                                    background-color: #f3e5f5;
+                                    border: 1px dashed #ba68c8;
+                                    font-family: monospace;
+                                    font-size: 13px;
+                                    padding: 8px 12px;
+                                    margin: 10px 0;
+                                    border-radius: 6px;
+                                    word-break: break-word;
+                                    user-select: all;
+                                    color: #6a1b9a;
+                                    display: inline-block;
+                                }}
+                            </style>
+                        </head>
+                        <body>
+                            <div class="email-container">
+                                <h2>Hello {student.name},</h2>
+                                <p>A new quiz has been assigned to you!</p>
 
-                            A new quiz titled "{quiz.title}" has been assigned to you.
+                                <div class="info-box">
+                                    <strong>Quiz Title:</strong> {quiz.title}<br>
+                                    <strong>Assigned On:</strong> {quiz.published_at.strftime('%Y-%m-%d %I:%M %p')}
+                                </div>
 
-                            Date Assigned: {quiz.published_at.strftime('%Y-%m-%d %I:%M %p')}
+                                <p>👉 Copy the link below to join your quiz:</p>
+                                <div class="copy-link-box">{quiz.url_link}</div>
 
-                            👉 Click the link below to join your quiz:
-                            {quiz.url_link}
+                                <p style="margin-top: 30px;">Best regards,<br>Redlitmus Team</p>
+                            </div>
+                        </body>
+                        </html>
+                        """
 
-                            Best Regards,
-                            Redlitmus teams
-                            """.strip()
                         send_mail(
                             subject,
                             message,
                             from_email,
                             [student.email],
-                            fail_silently=False
+                            fail_silently=False,
+                            html_message=message,
                         )
 
-            else:
-                # Unpublishing: clear fields
+            elif not quiz.is_published:
+                # ✅ If unpublishing, clear these fields
                 quiz.published_at = None
                 quiz.url_link = None
 
-            # Ensure quiz_date is timezone-aware
+            # Make sure `quiz_date` is timezone-aware
             if quiz.quiz_date and timezone.is_naive(quiz.quiz_date):
                 quiz.quiz_date = timezone.make_aware(quiz.quiz_date)
 
@@ -840,15 +997,14 @@ class QuizPublishView(APIView):
                 'quiz_id': quiz.quiz_id,
                 'is_published': quiz.is_published,
                 'published_at': quiz.published_at,
-                'quiz_url': quiz.share_url
+                'quiz_url': quiz.url_link
             })
 
         except Exception as e:
             return Response({
                 'status': 'error',
-                'message': f'An error occurred: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+                'message': str(e)
+            }, status=500)
 
 class QuizQuestionGenerateFromPromptView(APIView):
     """
