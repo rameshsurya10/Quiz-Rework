@@ -100,9 +100,9 @@ const QuizDetailsContent = ({ quizData, onBack }) => {
       return {
         id: attempt.id || index,
         studentId: attempt.student_id,
-        registerNo: attempt.register_number || 'N/A',
-        name: attempt.student_name || 'Unknown Student',
-        email: attempt.student_mail || 'N/A', 
+        studentInfo: `${attempt.register_number || 'N/A'} - ${attempt.student_name || 'Unknown Student'}`,
+        classSection: `${attempt.class_name || 'N/A'} / ${attempt.section || 'N/A'}`,
+        email: attempt.student_mail || 'N/A',
         status: 'Attempted',
         correctAnswers: attempt.correct_answer_count ?? 0,
         wrongAnswers: attempt.wrong_answer_count ?? 0,
@@ -144,8 +144,8 @@ const QuizDetailsContent = ({ quizData, onBack }) => {
   }
 
   const columns = [
-    { id: 'registerNo', label: 'Register No', minWidth: 100 },
-    { id: 'name', label: 'Name (Student)', minWidth: 170 },
+    { id: 'studentInfo', label: 'Student (Reg No & Name)', minWidth: 200 },
+    { id: 'classSection', label: 'Class & Section', minWidth: 120 },
     { id: 'email', label: 'Email', minWidth: 170 },
     { id: 'status', label: 'Status', minWidth: 100 },
     { id: 'correctAnswers', label: 'Correct Ans Count', align: 'right', minWidth: 100 },
@@ -261,4 +261,4 @@ const QuizDetailsContent = ({ quizData, onBack }) => {
   );
 };
 
-export default QuizDetailsContent; 
+export default QuizDetailsContent;

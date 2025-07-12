@@ -166,6 +166,37 @@ const SimpleStudentDashboard = () => {
   const [quizToConfirm, setQuizToConfirm] = useState(null);
   const [isConfirmLoading, setConfirmLoading] = useState(false);
 
+  const [remainingTimes, setRemainingTimes] = useState({});
+
+  // Real-time timer effect for quiz attempts
+  useEffect(() => {
+    if (!quizAttempts.length) return;
+    const interval = setInterval(() => {
+      const now = new Date();
+      const newTimes = {};
+      quizAttempts.forEach((attempt) => {
+        if (!isResultAvailable(attempt)) {
+          const attemptedAtRaw = attempt.attempted_at || attempt.created_at || attempt.completed_at;
+          if (attemptedAtRaw) {
+            const attemptTime = new Date(attemptedAtRaw);
+            const resultWaitMinutes = 10;
+            const resultAvailableTime = new Date(attemptTime.getTime() + (resultWaitMinutes * 60 * 1000));
+            const diff = resultAvailableTime - now;
+            if (diff > 0) {
+              const minutes = Math.floor(diff / 60000);
+              const seconds = Math.floor((diff % 60000) / 1000);
+              newTimes[attempt.id || attempt.quiz_id || attempt.quiz?.id] = `${minutes}m ${seconds}s`;
+            } else {
+              newTimes[attempt.id || attempt.quiz_id || attempt.quiz?.id] = 'Result is available';
+            }
+          }
+        }
+      });
+      setRemainingTimes(newTimes);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [quizAttempts]);
+
   useEffect(() => {
     loadDashboardData();
     // Check for pending quiz from login
@@ -919,7 +950,7 @@ const SimpleStudentDashboard = () => {
                                 </Typography>
                                 {!isResultAvailable(attempt) && (
                                   <Typography variant="caption" sx={{ display: 'block', color: '#f57c00' }}>
-                                    Result in: {getTimeUntilResult(attempt)}
+                                    Result in: {remainingTimes[attempt.id || attempt.quiz_id || attempt.quiz?.id] || getTimeUntilResult(attempt)}
                                   </Typography>
                                 )}
                               </Box>

@@ -199,8 +199,9 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
         hour12: false,
       });
 
+      const pad = (n) => n.toString().padStart(2, '0');
       const today = formatter.format(now);
-      const timePart = timeFormatter.format(now);
+      const timePart = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
       setFormData({
         name: '',
@@ -274,8 +275,13 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
     
     // Prevent past datetime
     if (formData.join_date && formData.join_time) {
-      const selectedDT = new Date(`${formData.join_date}T${formData.join_time}`);
-      if (selectedDT < new Date()) {
+      // Ensure join_time is in HH:mm:ss format
+      let joinTime = formData.join_time;
+      if (joinTime.length === 5) joinTime += ':00';
+      const selectedDT = new Date(`${formData.join_date}T${joinTime}`);
+      const now = new Date();
+      const diff = selectedDT - now;
+      if (diff < -60000) { // allow up to 1 minute in the past
         newErrors.join_time = 'Join date/time cannot be in the past';
       }
     }
@@ -293,7 +299,8 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
     setErrors(prev => { const newErrors = { ...prev }; delete newErrors.form; return newErrors; });
 
     const userTimezone = getUserTimezone();
-    const dateString = `${formData.join_date}T${formData.join_time}:00`;
+    const joinTime = formData.join_time.length === 5 ? formData.join_time + ':00' : formData.join_time;
+    const dateString = `${formData.join_date}T${joinTime}`;
 
     // Create a date object from the form inputs. This will be in the browser's local timezone.
     const localDate = new Date(dateString);
@@ -463,9 +470,10 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
             helperText={errors.join_time}
             InputLabelProps={{ shrink: true }}
             inputProps={{
+              step: 1, // allow seconds
               min: (() => {
                 const today = new Date().toISOString().split('T')[0];
-                return formData.join_date === today ? new Date().toISOString().slice(11,16) : '00:00';
+                return formData.join_date === today ? new Date().toISOString().slice(11,19) : '00:00:00';
               })(),
             }}
             required
