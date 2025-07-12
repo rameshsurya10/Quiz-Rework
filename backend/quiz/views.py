@@ -1419,6 +1419,15 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 """Helper function to generate a single question with retries"""
                 for attempt in range(max_retries):
                     try:
+                        extra_guidelines = ""
+                        if q_type == "fill_in_blank":
+                            extra_guidelines += "The correct answer must be 1 or 2 words only. Do not generate full sentence answers.\n"
+                        elif q_type == "true_false":
+                            extra_guidelines += (
+                                    "The correct_answer must be strictly 'True' or 'False'. "
+                                    "Do NOT write 'Not specified', 'Cannot determine', 'Unclear', or similar phrases. "
+                                    "If the information is missing or ambiguous, skip the question.\n"
+                                )
                         prompt = f"""Generate 1 {q_type} question based on the following code content.
                         
                         Code Content:
@@ -1561,6 +1570,9 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                         continue
                     if 'correct_answer' not in question:
                         continue
+                    answer_words = str(question['correct_answer']).strip().split()
+                    if len(answer_words) > 2:
+                        continue    
 
                 elif actual_question_type == 'true_false':
                     if 'answer' not in question:
@@ -1629,12 +1641,31 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                             if 'correct_answer' not in question:
                                 continue
                         elif actual_question_type == 'true_false':
-                            if 'answer' not in question:
+                            answer = question.get('answer') or question.get('correct_answer', '')
+                            answer = str(answer).strip().lower()
+                            explanation_text = str(question.get('explanation', '')).lower()
+
+                            # Reject if vague answers
+                            vague_phrases = ['not specified', 'cannot determine', 'not provided', 'unclear', 'unknown', 'not mentioned']
+                            if 'not' in answer or any(phrase in answer for phrase in vague_phrases) or any(phrase in explanation_text for phrase in vague_phrases):
                                 continue
-                            answer = str(question['answer']).strip().capitalize()
-                            if answer not in ['True', 'False']:
-                                continue
-                            question['answer'] = answer
+                            
+                            if answer in ['true', 'false']:
+                                question['correct_answer'] = answer.capitalize()
+                            elif 'true' in explanation_text:
+                                question['correct_answer'] = 'True'
+                            elif 'false' in explanation_text:
+                                question['correct_answer'] = 'False'
+                            else:
+                                continue  # skip if we still don't have a clear answer
+
+                            # Remove "?" from the end of true/false questions
+                            question_text = question['question'].strip()
+                            if question_text.endswith('?'):
+                                question['question'] = question_text.rstrip('?').strip()
+
+                            question['answer'] = question['correct_answer']
+
                         elif actual_question_type == 'one_line':
                             if 'correct_answer' not in question:
                                 continue

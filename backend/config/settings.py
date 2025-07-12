@@ -176,6 +176,7 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     # 'http://localhost:8000',
+    # 69.62.78.175:443
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True  # More permissive for development
@@ -270,7 +271,11 @@ if SUPABASE_URL and SUPABASE_KEY:
 # PDF settings
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_DOCUMENT_TYPES = ['application/pdf']
-SITE_DOMAIN = "http://localhost:8000" 
+SITE_DOMAIN = "https://qna.kol.tel" 
+# "https://qna.kol.tel" 
+# "http://localhost:8000" 
+# "https://69.62.78.175:443"
+
 OTP_CACHE_PREFIX = "login_otp_"
 
 

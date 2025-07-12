@@ -535,12 +535,23 @@ class SubmitQuizAttemptView(APIView):
             for submitted in submitted_questions:
                 qid = submitted.get("question_id")
                 qnum = submitted.get("question_number")
-                student_answer = str(submitted.get("answer", "")).strip().lower()
+                student_answer = str(submitted.get("answer", "")).strip()
                 key = (qid, qnum)
 
                 correct = question_map.get(key)
+                # ✅ FIX: Define student_answer_raw before using
+                student_answer_raw = str(submitted.get("answer", "")).strip()   
                 if correct:
-                    correct_answer = correct.get("correct_answer", "")
+                    correct_answer_raw = str(correct.get("correct_answer", "")).strip()
+                    q_type = correct.get("type", "").lower()
+
+                    if q_type in ["fill", "oneline"]:
+                        student_answer = student_answer_raw.lower()
+                        correct_answer = correct_answer_raw.lower()
+                    else:
+                        student_answer = student_answer_raw
+                        correct_answer = correct_answer_raw
+
                     is_correct = student_answer == correct_answer
                     if is_correct:
                         score += 1
@@ -551,7 +562,7 @@ class SubmitQuizAttemptView(APIView):
                         "question": correct.get("question"),
                         "question_type": correct.get("type"),
                         "options": correct.get("options"),
-                        "answer": submitted.get("answer"),
+                        "answer": student_answer,
                         "correct_answer": correct_answer,
                         "explanation": correct.get("explanation"),
                         "is_correct": is_correct

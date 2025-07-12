@@ -10,6 +10,7 @@ from .utils import extract_text_from_file, _extract_text_from_pdf_content, _pars
 from openai import OpenAI
 import json
 from supabase import create_client, Client
+import random
 
 
 logger = logging.getLogger(__name__)
@@ -145,16 +146,15 @@ class DocumentProcessingService:
         if current_section and current_page:
             text_sections.append((current_page, '\n'.join(current_section)))
 
-        # --- 2. Sample start/middle/end pages ---
+        # --- 2. Sample diverse pages randomly ---
         num_samples = min(5, len(text_sections))
         if len(text_sections) <= num_samples:
             sampled_sections = text_sections
         else:
-            indices = [0, len(text_sections)//2, len(text_sections)-1]
-            if num_samples > 3:
-                quarter = len(text_sections) // 4
-                indices = [0, quarter, len(text_sections)//2, len(text_sections)-quarter-1, len(text_sections)-1]
-            sampled_sections = [text_sections[i] for i in indices]
+            # 🔁 Randomly shuffle and pick diverse pages
+            random.seed()  # system time
+            indices = random.sample(range(len(text_sections)), num_samples)
+            sampled_sections = [text_sections[i] for i in sorted(indices)]
 
         logger.info(f"📖 Sampled page sections: {[s[0] for s in sampled_sections]}")
 
@@ -168,10 +168,7 @@ class DocumentProcessingService:
 
         def is_duplicate(text):
             clean = text.lower().strip()
-            for existing in seen_questions:
-                if clean in existing or existing in clean:
-                    return True
-            return False
+            return any(clean in existing or existing in clean for existing in seen_questions)
 
         # --- 4. Generate and deduplicate ---
         for idx, (page_num, content) in enumerate(sampled_sections):
@@ -345,6 +342,12 @@ class DocumentProcessingService:
             validated_questions.append(q)
 
         logger.info(f"✅ Batch generated {len(validated_questions)} questions starting from #{start_question_number}")
+        # 🔁 Fix MCQ correct_answer to be full sentence instead of just "A", "B", etc.
+        for q in validated_questions:
+            if q["type"] == "mcq":
+                answer_key = q.get("correct_answer")
+                if answer_key in q.get("options", {}):
+                    q["correct_answer"] = q["options"][answer_key]
         return validated_questions[:num_questions]
 
 
