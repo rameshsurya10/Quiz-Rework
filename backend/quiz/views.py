@@ -39,6 +39,8 @@ from documents.services import DocumentProcessingService
 from django.utils.dateparse import parse_datetime
 from supabase import create_client, Client
 from quiz.utils import *
+from openai import OpenAI
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -153,14 +155,30 @@ class QuizListCreateView(generics.ListCreateAPIView):
                 )
 
             elif role == 'STUDENT':
-                student = Student.objects.filter(email=user.email, is_deleted=False).first()
-                if not student:
+                students = Student.objects.filter(email=user.email, is_deleted=False).all()
+                if not students.exists():
                     return Response({"message": "Student record not found"}, status=404)
-                quiz_queryset = base_queryset.filter(department_id=student.department_id, is_published=True,
-                class_name=student.class_name, section=student.section)
 
-            else:
-                return Response({"message": "Unauthorized role"}, status=403)
+                all_quizzes = Quiz.objects.none()  # start with empty queryset
+
+                for student in students:
+                    quiz_filter = {
+                        'department_id': student.department_id,
+                        'class_name': student.class_name,
+                        'is_published': True,
+                    }
+                    if student.section:
+                        quiz_filter['section'] = student.section
+
+                    matched_quizzes = base_queryset.filter(**quiz_filter)
+                    all_quizzes = all_quizzes.union(matched_quizzes)
+
+                if not all_quizzes.exists():
+                    return Response({"message": "No quizzes available for this student"}, status=200)
+
+                # serialize and return the quizzes
+                serializer = QuizSerializer(all_quizzes, many=True, context={'request': request})
+                return Response(serializer.data, status=200)
 
             # Make sure all quiz dates are timezone-aware
             def get_aware_date(quiz_date):
@@ -286,7 +304,9 @@ class QuizListCreateView(generics.ListCreateAPIView):
                 data['class_name'] = class_name
             
             section = data.get('section')
-            if section:
+            if not section:  # Handles '', None, etc.
+                data['section'] = None
+            else:
                 data['section'] = section
 
             quiz_type = data.get('quiz_type')
@@ -374,111 +394,127 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return Quiz.objects.filter(is_deleted=False)
     
-    def list(self, request, *args, **kwargs):
-        try:
-            user = self.request.user
-            now = timezone.now()
-            base_queryset = Quiz.objects.filter(is_deleted=False)
-            role = getattr(user, 'role', '').upper()
+    # def list(self, request, *args, **kwargs):
+    #     try:
+    #         user = self.request.user
+    #         now = timezone.now()
+    #         base_queryset = Quiz.objects.filter(is_deleted=False)
+    #         role = getattr(user, 'role', '').upper()
 
-            if role == 'ADMIN':
-                quiz_queryset = base_queryset
+    #         if role == 'ADMIN':
+    #             quiz_queryset = base_queryset
 
-            elif role == 'TEACHER':
-                teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
-                if not teacher:
-                    return Response({"message": "Teacher record not found"}, status=404)
-                department_ids = teacher.department_ids or []
-                quiz_queryset = base_queryset.filter(
-                    Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
-                )
+    #         elif role == 'TEACHER':
+    #             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
+    #             if not teacher:
+    #                 return Response({"message": "Teacher record not found"}, status=404)
+    #             department_ids = teacher.department_ids or []
+    #             quiz_queryset = base_queryset.filter(
+    #                 Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
+    #             )
 
-            elif role == 'STUDENT':
-                student = Student.objects.filter(email=user.email, is_deleted=False).first()
-                if not student:
-                    return Response({"message": "Student record not found"}, status=404)
-                quiz_queryset = base_queryset.filter(department_id=student.department_id, is_published=True)
+    #         elif role == 'STUDENT':
+    #             student = Student.objects.filter(email=user.email, is_deleted=False).first()
+    #             if not student:
+    #                 return Response({"message": "Student record not found"}, status=404)
+    #             quiz_queryset = base_queryset.filter(department_id=student.department_id, is_published=True)
 
-            else:
-                return Response({"message": "Unauthorized role"}, status=403)
+    #         else:
+    #             return Response({"message": "Unauthorized role"}, status=403)
 
-            # Make sure all quiz dates are timezone-aware
-            def get_aware_date(quiz_date):
-                if quiz_date and timezone.is_naive(quiz_date):
-                    return timezone.make_aware(quiz_date)
-                return quiz_date
+    #         # Make sure all quiz dates are timezone-aware
+    #         def get_aware_date(quiz_date):
+    #             if quiz_date and timezone.is_naive(quiz_date):
+    #                 return timezone.make_aware(quiz_date)
+    #             return quiz_date
 
-            # Get current date without time for date comparison
-            current_date = now.date()
+    #         # Get current date without time for date comparison
+    #         current_date = now.date()
 
-            # Filter quizzes with proper date handling
-            current_quizzes = []
-            upcoming_quizzes = []
-            past_quizzes = []
+    #         # Filter quizzes with proper date handling
+    #         current_quizzes = []
+    #         upcoming_quizzes = []
+    #         past_quizzes = []
 
-            for quiz in quiz_queryset:
-                quiz_date = get_aware_date(quiz.quiz_date)
-                if not quiz_date:
-                    continue
+    #         for quiz in quiz_queryset:
+    #             quiz_date = get_aware_date(quiz.quiz_date)
+    #             if not quiz_date:
+    #                 continue
 
-                quiz_date_only = quiz_date.date()
+    #             quiz_date_only = quiz_date.date()
                 
-                if quiz_date_only == current_date:
-                    current_quizzes.append(quiz)
-                elif quiz_date_only > current_date:
-                    upcoming_quizzes.append(quiz)
-                else:
-                    past_quizzes.append(quiz)
+    #             if quiz_date_only == current_date:
+    #                 current_quizzes.append(quiz)
+    #             elif quiz_date_only > current_date:
+    #                 upcoming_quizzes.append(quiz)
+    #             else:
+    #                 past_quizzes.append(quiz)
 
-            # Sort the lists
-            current_quizzes.sort(key=lambda x: x.quiz_date)
-            upcoming_quizzes.sort(key=lambda x: x.quiz_date)
-            past_quizzes.sort(key=lambda x: x.quiz_date, reverse=True)
+    #         # Sort the lists
+    #         current_quizzes.sort(key=lambda x: x.quiz_date)
+    #         upcoming_quizzes.sort(key=lambda x: x.quiz_date)
+    #         past_quizzes.sort(key=lambda x: x.quiz_date, reverse=True)
 
-            # Serialize the quizzes
-            serializer = QuizSerializer()
-            response_data = {
-                "current_quizzes": [
-                    serializer.to_representation(quiz) 
-                    for quiz in current_quizzes
-                ],
-                "upcoming_quizzes": [
-                    serializer.to_representation(quiz)
-                    for quiz in upcoming_quizzes
-                ],
-                "past_quizzes": [
-                    serializer.to_representation(quiz)
-                    for quiz in past_quizzes
-                ]
-            }
+    #         # Serialize the quizzes
+    #         serializer = QuizSerializer()
+    #         response_data = {
+    #             "current_quizzes": [
+    #                 serializer.to_representation(quiz) 
+    #                 for quiz in current_quizzes
+    #             ],
+    #             "upcoming_quizzes": [
+    #                 serializer.to_representation(quiz)
+    #                 for quiz in upcoming_quizzes
+    #             ],
+    #             "past_quizzes": [
+    #                 serializer.to_representation(quiz)
+    #                 for quiz in past_quizzes
+    #             ]
+    #         }
 
-            return Response(response_data)
+    #         return Response(response_data)
 
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error in quiz listing: {str(e)}", exc_info=True)
-            return Response(
-                {"error": "An error occurred while fetching quizzes. Please try again."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+    #     except Exception as e:
+    #         import logging
+    #         logger = logging.getLogger(__name__)
+    #         logger.error(f"Error in quiz listing: {str(e)}", exc_info=True)
+    #         return Response(
+    #             {"error": "An error occurred while fetching quizzes. Please try again."},
+    #             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    #         )
     
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
             return QuizUpdateSerializer
         return QuizSerializer
     
-    def get_serializer_context(self):
-        """Add request to serializer context"""
-        context = super().get_serializer_context()
-        context['request'] = self.request
-        return context
+    # def get_serializer_context(self):
+    #     """Add request to serializer context"""
+    #     context = super().get_serializer_context()
+    #     context['request'] = self.request
+    #     return context
     
     def retrieve(self, request, *args, **kwargs):
         """Retrieve quiz with limited questions and show extra ones in additional_question_list"""
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         data = serializer.data
+        user = request.user
+        role = getattr(user, 'role', None)
+        from datetime import timedelta
+        # Restrict student access based on time
+        if role == 'STUDENT':
+            student = Student.objects.filter(email=user.email, is_deleted=False).first()
+            now = datetime.now()
+            quiz_time = instance.quiz_date
+            access_window_minutes = instance.time_limit_minutes or 0
+            quiz_end_time = quiz_time + timedelta(minutes=access_window_minutes)
+
+            if not (quiz_time <= now <= quiz_end_time):
+                return Response({
+                    "status": "error",
+                    "message": f"⏳ Quiz is not available right now. Please check your scheduled quiz time in your local timezone: {quiz_time}."
+                }, status=403)
 
         all_questions = Question.objects.filter(quiz=instance).order_by('question_id')
         max_questions = instance.no_of_questions or 0
@@ -892,13 +928,17 @@ class QuizPublishView(APIView):
                 quiz.url_link = full_url
 
                 # ✅ Fetch valid students in the same department/class/section
-                students = Student.objects.filter(
-                    department_id=quiz.department_id,
-                    is_verified=True,
-                    is_deleted=False,
-                    class_name=quiz.class_name,
-                    section=quiz.section
-                )
+                student_filter = {
+                    'department_id': quiz.department_id,
+                    'class_name': quiz.class_name,
+                    'is_verified': True,
+                    'is_deleted': False,
+                }
+
+                if quiz.section:
+                    student_filter['section'] = quiz.section  # ✅ only include if section exists
+
+                students = Student.objects.filter(**student_filter)
 
                 subject = f"Quiz Assigned: {quiz.title}"
                 from_email = settings.DEFAULT_FROM_EMAIL

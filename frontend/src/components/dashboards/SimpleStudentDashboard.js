@@ -22,7 +22,11 @@ import {
   Divider,
   Chip,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
@@ -167,6 +171,11 @@ const SimpleStudentDashboard = () => {
   const [isConfirmLoading, setConfirmLoading] = useState(false);
 
   const [remainingTimes, setRemainingTimes] = useState({});
+  const [quizCountdowns, setQuizCountdowns] = useState({}); // NEW
+
+  const [errorModalOpen, setErrorModalOpen] = useState(false); // NEW
+  const [errorModalMsg, setErrorModalMsg] = useState(''); // NEW
+  const [absentModalOpen, setAbsentModalOpen] = useState(false); // NEW
 
   // Real-time timer effect for quiz attempts
   useEffect(() => {
@@ -196,6 +205,30 @@ const SimpleStudentDashboard = () => {
     }, 1000);
     return () => clearInterval(interval);
   }, [quizAttempts]);
+
+  // Add effect to update countdowns every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const newCountdowns = {};
+      availableQuizzes.forEach((quiz) => {
+        if (quiz.quiz_date) {
+          const quizTime = new Date(quiz.quiz_date);
+          const diff = quizTime - now;
+          if (diff > 0) {
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+            newCountdowns[quiz.id || quiz.quiz_id] = `${hours > 0 ? hours + 'h ' : ''}${minutes}m ${seconds}s`;
+          } else {
+            newCountdowns[quiz.id || quiz.quiz_id] = null; // Quiz is available
+          }
+        }
+      });
+      setQuizCountdowns(newCountdowns);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [availableQuizzes]);
 
   useEffect(() => {
     loadDashboardData();
@@ -367,57 +400,42 @@ const SimpleStudentDashboard = () => {
   };
 
   const handleTakeQuiz = async (quizId) => {
-    const attemptedQuiz = quizAttempts.find(attempt =>
-      (attempt.quiz_id || attempt.quiz?.quiz_id || attempt.quiz?.id) === parseInt(quizId)
-    );
+    setError('');
+    setQuizToConfirm(null);
+    setConfirmDialogOpen(false);
+    setErrorModalOpen(false);
+    setErrorModalMsg('');
 
-    if (attemptedQuiz) {
-      setQuizToConfirm({
-        id: quizId,
-        hasAttempted: true,
-        isAvailable: false,
-        details: attemptedQuiz.quiz,
-      });
-      setConfirmDialogOpen(true);
-      return;
-    }
-
-    const availableQuiz = availableQuizzes.find(quiz =>
-      (quiz.id || quiz.quiz_id) === parseInt(quizId)
-    );
-
-    if (availableQuiz) {
-      setQuizToConfirm({
-        id: quizId,
-        hasAttempted: false,
-        isAvailable: true,
-        details: availableQuiz,
-      });
-      setConfirmDialogOpen(true);
-      return;
-    }
-
-    // If not found, fetch from API
+    // Always fetch quiz details to check availability
     setConfirmLoading(true);
-    setConfirmDialogOpen(true);
     try {
       const response = await quizApi.getById(quizId);
       const quizDetails = response.data;
 
       if (quizDetails && quizDetails.is_published) {
+        // Quiz is available, show confirmation
         setQuizToConfirm({
           id: quizId,
           hasAttempted: false,
           isAvailable: true,
           details: quizDetails,
         });
+        setConfirmDialogOpen(true);
       } else {
         // Quiz is not published or invalid
-        setQuizToConfirm({ id: quizId, hasAttempted: false, isAvailable: false, details: null });
+        setErrorModalMsg('The quiz is not available to you. Please check with your instructor.');
+        setErrorModalOpen(true);
       }
     } catch (err) {
-      console.error('Failed to fetch quiz details by ID:', err);
-      setQuizToConfirm({ id: quizId, hasAttempted: false, isAvailable: false, details: null });
+      // Show backend error message in modal
+      let backendMsg = 'The quiz is not available to you. Please check with your instructor.';
+      if (err?.response?.data?.message) {
+        backendMsg = err.response.data.message;
+      } else if (err?.response?.data?.error) {
+        backendMsg = err.response.data.error;
+      }
+      setErrorModalMsg(backendMsg);
+      setErrorModalOpen(true);
     } finally {
       setConfirmLoading(false);
     }
@@ -516,6 +534,28 @@ const SimpleStudentDashboard = () => {
             {error}
           </Alert>
         )}
+
+        {/* Error Modal for quiz not available/time-based errors */}
+        <Dialog open={errorModalOpen} onClose={() => setErrorModalOpen(false)}>
+          <DialogTitle>Quiz Not Available</DialogTitle>
+          <DialogContent>
+            <Typography>{errorModalMsg}</Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setErrorModalOpen(false)} color="primary">OK</Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Absent Modal */}
+        <Dialog open={absentModalOpen} onClose={() => setAbsentModalOpen(false)}>
+          <DialogTitle>Quiz Marked as Absent</DialogTitle>
+          <DialogContent>
+            <Typography>You are marked as absent for this quiz because the time to attend has expired.</Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAbsentModalOpen(false)} color="primary">OK</Button>
+          </DialogActions>
+        </Dialog>
 
         <ConfirmationDialog
           open={isConfirmDialogOpen}
@@ -735,75 +775,120 @@ const SimpleStudentDashboard = () => {
 
                 {availableQuizzes.length > 0 ? (
                   <List sx={{ p: 0 }}>
-                    {availableQuizzes.map((quiz, index) => (
-          <motion.div
-                        key={quiz.quiz_id || index}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.1 }}
-          >
-                        <ListItem
-              sx={{
-                            mb: 2,
-                            bgcolor: alpha('#f3e5f5', 0.3),
-                borderRadius: 3,
-                            border: `1px solid ${alpha('#9c27b0', 0.1)}`,
-                            '&:hover': {
-                              bgcolor: alpha('#f3e5f5', 0.5),
-                              transform: 'translateX(4px)',
-                            },
-                            transition: 'all 0.3s ease',
-                          }}
+                    {availableQuizzes.map((quiz, index) => {
+                      const quizId = quiz.id || quiz.quiz_id;
+                      const quizTime = quiz.quiz_date ? new Date(quiz.quiz_date) : null;
+                      const timeLimit = quiz.time_limit_minutes || quiz.duration || 0;
+                      const quizEndTime = quizTime && timeLimit ? new Date(quizTime.getTime() + timeLimit * 60 * 1000) : null;
+                      const now = new Date();
+                      const isBeforeQuizTime = quizTime && now < quizTime;
+                      const isDuringQuizTime = quizTime && quizEndTime && now >= quizTime && now < quizEndTime;
+                      const isAfterQuizEnd = quizEndTime && now >= quizEndTime;
+                      const countdown = quizCountdowns[quizId];
+                      return (
+                        <motion.div
+                          key={quizId || index}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.1 }}
                         >
-                          <ListItemIcon>
-                            <Avatar sx={{ bgcolor: 'secondary.main', width: 40, height: 40 }}>
-                              <AssignmentIcon />
-                            </Avatar>
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={
-                              <Typography variant="h6" sx={{ fontWeight: 600, color: '#333' }}>
-                                {quiz.title}
-                              </Typography>
-                            }
-                            secondary={
-                              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                                <Chip
-                                  icon={<TimerIcon />}
-                                  label={`${quiz.time_limit_minutes || quiz.duration || 'Unknown'} min`}
-                                  size="small"
-                                  color="primary"
-                                  variant="outlined"
-                                />
-                                <Chip
-                                  icon={<QuizIcon />}
-                                  label={`${quiz.question_count || quiz.actual_question_count || quiz.total_questions || quiz.questions?.length || 'Unknown'} questions`}
-                                  size="small"
-                                  color="secondary"
-                                  variant="outlined"
-                                />
-                              </Stack>
-                            }
-                          />
-                          <Button
-                            variant="contained"
-                            onClick={() => handleTakeQuiz(quiz.quiz_id)}
+                          <ListItem
                             sx={{
-                              borderRadius: 2,
-                              background: 'linear-gradient(45deg, #9c27b0, #e91e63)',
-                              color: 'white',
-                              fontWeight: 600,
+                              mb: 2,
+                              bgcolor: alpha('#f3e5f5', 0.3),
+                              borderRadius: 3,
+                              border: `1px solid ${alpha('#9c27b0', 0.1)}`,
                               '&:hover': {
-                                background: 'linear-gradient(45deg, #7b1fa2, #c2185b)',
-                              }
+                                bgcolor: alpha('#f3e5f5', 0.5),
+                                transform: 'translateX(4px)',
+                              },
+                              transition: 'all 0.3s ease',
                             }}
-                            startIcon={<PlayIcon />}
                           >
-                            Take Quiz
-                          </Button>
-                        </ListItem>
-                      </motion.div>
-                    ))}
+                            <ListItemIcon>
+                              <Avatar sx={{ bgcolor: 'secondary.main', width: 40, height: 40 }}>
+                                <AssignmentIcon />
+                              </Avatar>
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={
+                                <Typography variant="h6" sx={{ fontWeight: 600, color: '#333' }}>
+                                  {quiz.title}
+                                </Typography>
+                              }
+                              secondary={
+                                <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                                  <Chip
+                                    icon={<TimerIcon />}
+                                    label={`${quiz.time_limit_minutes || quiz.duration || 'Unknown'} min`}
+                                    size="small"
+                                    color="primary"
+                                    variant="outlined"
+                                  />
+                                  <Chip
+                                    icon={<QuizIcon />}
+                                    label={`${quiz.no_of_questions || quiz.question_count || quiz.actual_question_count || quiz.total_questions || (quiz.questions?.length ?? 'Unknown')} questions`}
+                                    size="small"
+                                    color="secondary"
+                                    variant="outlined"
+                                  />
+                                  {isBeforeQuizTime && (
+                                    <Chip
+                                      icon={<TimerIcon />}
+                                      label={`Opens in: ${countdown || ''}`}
+                                      size="small"
+                                      color="warning"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                  {isDuringQuizTime && (
+                                    <Chip
+                                      icon={<TimerIcon />}
+                                      label={`Available now`}
+                                      size="small"
+                                      color="success"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                  {isAfterQuizEnd && (
+                                    <Chip
+                                      icon={<TimerIcon />}
+                                      label={`Finished`}
+                                      size="small"
+                                      color="error"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                </Stack>
+                              }
+                            />
+                            <Button
+                              variant="contained"
+                              onClick={() => {
+                                if (isAfterQuizEnd) {
+                                  setAbsentModalOpen(true);
+                                } else {
+                                  handleTakeQuiz(quizId);
+                                }
+                              }}
+                              disabled={isBeforeQuizTime || isAfterQuizEnd}
+                              sx={{
+                                borderRadius: 2,
+                                background: 'linear-gradient(45deg, #9c27b0, #e91e63)',
+                                color: 'white',
+                                fontWeight: 600,
+                                '&:hover': {
+                                  background: 'linear-gradient(45deg, #7b1fa2, #c2185b)',
+                                }
+                              }}
+                              startIcon={<PlayIcon />}
+                            >
+                              {isBeforeQuizTime ? 'Wait...' : isAfterQuizEnd ? 'Absent' : 'Take Quiz'}
+                            </Button>
+                          </ListItem>
+                        </motion.div>
+                      );
+                    })}
                   </List>
                 ) : (
                   <Box sx={{ textAlign: 'center', py: 6 }}>

@@ -10,6 +10,8 @@ class Department(models.Model):
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=20)
     description = models.TextField(blank=True, null=True)
+    class_name = models.CharField(max_length=255)
+    section = models.CharField(max_length=255,null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     created_by = models.CharField(max_length=255, unique=False)
     last_modified_at = models.DateTimeField(auto_now=True, null=True)
@@ -77,12 +79,16 @@ class Department(models.Model):
                     user=user,
                     defaults={
                         'student_id': row.get('student_id', str(uuid.uuid4())[:8]),
-                        'department': department
-                    }
+                        'department': department,
+                        'class_name': department.class_name,
+                        'section': department.section
+                    }                                                                                                                                        
                 )
                 
                 if not student_created:
                     student.department = department
+                    student.class_name = department.class_name
+                    student.section = department.section
                     student.save()
                 
                 success_count += 1

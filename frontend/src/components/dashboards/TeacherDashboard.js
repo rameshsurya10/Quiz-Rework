@@ -39,6 +39,8 @@ import {
   Menu as MenuIcon,
   WbSunny as SunIcon,
   Brightness4 as MoonIcon,
+  Logout as LogoutIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import apiService from '../../api';
@@ -49,7 +51,14 @@ const DRAWER_WIDTH = 280;
 const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  
+  const navigate = useNavigate();
+
+  // Logout handler
+  const handleLogout = () => {
+    apiService.logoutUser();
+    navigate('/login');
+  };
+
   const menuItems = [
     { label: 'Dashboard', icon: <DashboardIcon />, path: '/teacher-dashboard' },
     { label: 'Quizzes', icon: <QuizIcon />, path: '/teacher/quiz' },
@@ -58,9 +67,10 @@ const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) 
     { label: 'Settings', icon: <SettingsIcon />, path: '/teacher/settings' },
   ];
 
-  // Use teacher data if available, otherwise fallback to localStorage
-  const teacherName = teacherData?.name || localStorage.getItem('userFirstName') || 'Teacher';
+  // Helper to get teacher data
+  const teacherName = teacherData?.name || localStorage.getItem('userFirstName') || '';
   const teacherEmail = teacherData?.email || localStorage.getItem('userEmail') || '';
+  const firstName = teacherName.split(' ')[0] || '';
 
   return (
     <Drawer
@@ -78,21 +88,31 @@ const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) 
         },
       }}
     >
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2 }}>
-        {/* Home Icon */}
-        <Box sx={{ mb: 4, mt: 2 }}>
-          <IconButton 
-            onClick={() => onNavigate('/teacher-dashboard')}
-            sx={{ 
-              color: theme.palette.primary.main, 
-              backgroundColor: alpha(theme.palette.primary.main, 0.1),
-              '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.2) }
-            }}
-          >
-            <DashboardIcon />
-          </IconButton>
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        {/* Sidebar Header */}
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          p: 2,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          minHeight: 64,
+          mb: 2,
+        }}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Avatar sx={{ bgcolor: theme.palette.primary.main, width: 36, height: 36 }}>
+              {firstName.charAt(0).toUpperCase()}
+            </Avatar>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary', ml: 1 }}>
+              {firstName}
+            </Typography>
+          </Stack>
+          {isMobile && (
+            <IconButton onClick={onClose} size="small" sx={{ ml: 1 }} aria-label="Close sidebar">
+              <CloseIcon />
+            </IconButton>
+          )}
         </Box>
-
         {/* Navigation Menu */}
         <Box sx={{ flex: 1 }}>
           <List sx={{ '& .MuiListItem-root': { mb: 1 } }}>
@@ -129,7 +149,7 @@ const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) 
         <Box sx={{ borderTop: `1px solid ${theme.palette.divider}`, pt: 2 }}>
           <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
             <Avatar sx={{ bgcolor: theme.palette.primary.main, color: 'white' }}>
-              {teacherName.charAt(0).toUpperCase()}
+              {firstName.charAt(0).toUpperCase()}
             </Avatar>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography 
@@ -157,6 +177,17 @@ const ModernSidebar = ({ open, onClose, onNavigate, currentPath, teacherData }) 
               </Typography>
             </Box>
           </Stack>
+          {/* Logout Button */}
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<LogoutIcon />}
+            onClick={handleLogout}
+            fullWidth
+            sx={{ mt: 1, borderRadius: 2, textTransform: 'none' }}
+          >
+            Logout
+          </Button>
         </Box>
       </Box>
     </Drawer>
@@ -335,6 +366,14 @@ const TeacherDashboard = () => {
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
+  // Prevent admin from seeing teacher dashboard
+  useEffect(() => {
+    const userRole = localStorage.getItem('userRole');
+    if (userRole !== 'teacher') {
+      navigate('/login'); // or navigate to a safe default page
+    }
+  }, [navigate]);
+
   const [drawerOpen, setDrawerOpen] = useState(!isMobile);
   const [stats, setStats] = useState({
     totalQuizzes: 0,
@@ -518,6 +557,7 @@ const TeacherDashboard = () => {
         const teacher = teachers.find(t => t.email === userEmail);
         if (teacher) {
           setTeacherData(teacher);
+          localStorage.setItem('userFirstName', teacher.name || '');
         }
       }
     } catch (error) {
@@ -548,7 +588,7 @@ const TeacherDashboard = () => {
         onClose={() => setDrawerOpen(false)}
         onNavigate={handleNavigation}
         currentPath={location.pathname}
-        teacherData={teacherData}
+        teacherData={teacherData} // Pass real teacher data
       />
 
       {/* Main Content */}
@@ -557,55 +597,7 @@ const TeacherDashboard = () => {
         width: !isMobile && drawerOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%',
         minHeight: '100vh'
       }}>
-        {/* Top Header */}
-        <Box sx={{ 
-          p: { xs: 2, sm: 3, md: 4 }, 
-          bgcolor: 'background.paper',
-          borderBottom: (theme) => `1px solid ${theme.palette.divider}`
-        }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Box>
-              {isMobile && (
-                <IconButton
-                  onClick={() => setDrawerOpen(true)}
-                  sx={{ mb: 1, color: 'text.secondary' }}
-                >
-                  <MenuIcon />
-                </IconButton>
-              )}
-              <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
-                {getCurrentHour()} {displayName}!
-              </Typography>
-            </Box>
-            <Stack direction="row" alignItems="center" spacing={2}>
-              <Button
-                variant="outlined"
-                sx={{ 
-                  borderColor: 'divider',
-                  color: 'text.primary',
-                  textTransform: 'none',
-                  borderRadius: 2,
-                  display: { xs: 'none', sm: 'flex' }
-                }}
-              >
-                Personal Account
-              </Button>
-              <Badge badgeContent={3} color="error">
-                <IconButton sx={{ 
-                  bgcolor: 'primary.main', 
-                  color: 'white',
-                  '&:hover': { bgcolor: 'primary.dark' }
-                }}>
-                  <NotificationsIcon />
-                </IconButton>
-              </Badge>
-              <Avatar sx={{ bgcolor: 'secondary.main' }}>
-                {displayName.charAt(0).toUpperCase()}
-              </Avatar>
-            </Stack>
-          </Stack>
-        </Box>
-
+        {/* Dashboard Content starts here */}
         <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
           <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} sx={{ alignItems: 'flex-start' }}>
             {/* Left Column - Activities */}
@@ -912,42 +904,20 @@ const TeacherDashboard = () => {
 };
 
 // Layout wrapper for other teacher pages  
-export const TeacherLayout = ({ children }) => {
+export const TeacherLayout = ({ children, teacherData }) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const [drawerOpen, setDrawerOpen] = useState(!isMobile);
-  const [teacherData, setTeacherData] = useState(null);
-
-  useEffect(() => {
-    loadTeacherData();
-  }, []);
-
-  const loadTeacherData = async () => {
-    try {
-      const userEmail = localStorage.getItem('userEmail');
-      if (userEmail) {
-        // Find teacher by email
-        const response = await apiService.get('/api/teachers/');
-        const teachers = Array.isArray(response.data) ? response.data : (response.data.results || []);
-        const teacher = teachers.find(t => t.email === userEmail);
-        if (teacher) {
-          setTeacherData(teacher);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading teacher data:', error);
-    }
-  };
 
   const handleNavigation = (path) => {
     navigate(path);
     if (isMobile) setDrawerOpen(false);
   };
 
-  const displayName = teacherData?.name || localStorage.getItem('userFirstName') || 'Teacher';
+  const displayName = localStorage.getItem('userFirstName') || 'Teacher';
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -956,33 +926,93 @@ export const TeacherLayout = ({ children }) => {
         onClose={() => setDrawerOpen(false)}
         onNavigate={handleNavigation}
         currentPath={location.pathname}
-        teacherData={teacherData}
+        teacherData={teacherData} // Pass real teacher data
       />
 
       <Box sx={{ 
         flexGrow: 1,
         width: !isMobile && drawerOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%'
       }}>
-        <Box sx={{ 
-          p: { xs: 2, sm: 3 }, 
-          bgcolor: 'background.paper', 
-          borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <IconButton
-            onClick={() => setDrawerOpen(!drawerOpen)}
-            sx={{ color: 'text.secondary' }}
+        <Box
+          sx={{
+            p: { xs: 1.5, sm: 2.5 },
+            bgcolor: 'background.paper',
+            borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+            boxShadow: '0 2px 8px 0 rgba(0,0,0,0.04)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            minHeight: { xs: 56, sm: 64 },
+            position: 'relative',
+            width: '100%',
+            zIndex: 10,
+          }}
+        >
+          {/* Hamburger for mobile/tablet */}
+          {isMobile && (
+            <IconButton
+              onClick={() => setDrawerOpen(!drawerOpen)}
+              sx={{
+                color: 'text.secondary',
+                p: 1.2,
+                mr: 1,
+              }}
+              aria-label="Open sidebar"
+              size="large"
+            >
+              <MenuIcon fontSize="inherit" />
+            </IconButton>
+          )}
+          {/* Centered Title */}
+          <Typography
+            variant={isMobile ? 'h6' : 'h5'}
+            sx={{
+              color: 'text.primary',
+              fontWeight: 700,
+              textAlign: 'center',
+              flex: 1,
+              letterSpacing: 0.2,
+              userSelect: 'none',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              ml: isMobile ? 0 : 2,
+              mr: isMobile ? 0 : 2,
+            }}
           >
-            <MenuIcon />
-          </IconButton>
-          <Typography variant="h6" sx={{ color: 'text.primary', fontWeight: 600 }}>
             Teacher Portal
           </Typography>
-          <Avatar sx={{ width: 36, height: 36, bgcolor: 'primary.main' }}>
-            {displayName.charAt(0).toUpperCase()}
-          </Avatar>
+          {/* Right-side actions */}
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+            {/* Notification Bell */}
+            <IconButton aria-label="Notifications" sx={{ color: 'primary.main' }}>
+              <Badge badgeContent={3} color="error">
+                <NotificationsIcon />
+              </Badge>
+            </IconButton>
+            {/* Avatar */}
+            <IconButton aria-label="User profile" sx={{ p: 0.5 }}>
+              <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', fontSize: 16 }}>
+                {displayName.charAt(0).toUpperCase()}
+              </Avatar>
+            </IconButton>
+            {/* Personal Account button (desktop only) */}
+            {!isMobile && (
+              <Button
+                variant="outlined"
+                sx={{
+                  borderColor: 'divider',
+                  color: 'text.primary',
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  ml: 1,
+                }}
+                aria-label="Personal Account"
+              >
+                Personal Account
+              </Button>
+            )}
+          </Stack>
         </Box>
 
         <Container maxWidth="xl" sx={{ py: { xs: 2, sm: 3, md: 4 }, px: { xs: 2, sm: 3, md: 4 } }}>
