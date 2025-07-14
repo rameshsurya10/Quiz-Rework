@@ -12,6 +12,8 @@ from .serializers import DepartmentSerializer, DepartmentDetailSerializer, Depar
 from django.db.models import Count, Q
 import csv
 import io
+from teacher.models import Teacher
+from students.models import Student
 
 class DepartmentViewSet(viewsets.ModelViewSet):
     """API endpoint for Department management with bulk operations"""
@@ -203,9 +205,39 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         """
         Soft delete: set is_deleted=True for the department instead of deleting from DB.
-        Return a success message in the response.
+        Prevent deletion if any teacher or student is assigned to it.
         """
         instance = self.get_object()
+
+        # 1. Check teachers assigned to this department
+        teachers = Teacher.objects.filter(
+            department_ids__contains=[instance.department_id],
+            is_deleted=False
+        )
+        if teachers.exists():
+            teacher_names = ', '.join([t.name for t in teachers])
+            return Response(
+                {
+                    "error": f"Department cannot be deleted because teacher(s) ({teacher_names}) are assigned to it."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Check students assigned to this department
+        students = Student.objects.filter(
+            department_id=instance.department_id,
+            is_deleted=False
+        )
+        if students.exists():
+            student_names = ', '.join([s.name for s in students])
+            return Response(
+                {
+                    "error": f"Department cannot be deleted because student(s) ({student_names}) are assigned to it."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Perform soft delete
         instance.is_deleted = True
         instance.save()
         return Response({'message': 'Department deleted successfully'}, status=status.HTTP_200_OK)

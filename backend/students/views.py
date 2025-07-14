@@ -30,6 +30,7 @@ from datetime import timedelta
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from django.contrib.sites.shortcuts import get_current_site
+from django.db.models import Q
 
 
 
@@ -214,14 +215,21 @@ class StudentListView(generics.ListCreateAPIView):
         # Teacher: See students in their departments
         elif hasattr(user, 'role') and user.role == 'TEACHER':
             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
-            
             if not teacher:
                 return Student.objects.none()
+            departments = Department.objects.filter(department_id__in=teacher.department_ids)
+            if not departments.exists():
+                return Student.objects.none()
 
-            department_ids = teacher.department_ids or []
-
-            return Student.objects.filter(is_deleted=False, department_id__in=department_ids)
-
+            # Build a combined Q filter for matching class_name, section, and department_id
+            query = Q()
+            for dep in departments:
+                query |= Q( 
+                    class_name=dep.class_name,
+                    section=dep.section,
+                    department_id=dep.department_id
+                )
+            return Student.objects.filter(is_deleted=False).filter(query)
         # Other users: return none
         else:
             return Student.objects.none()
@@ -535,22 +543,18 @@ class SubmitQuizAttemptView(APIView):
             for submitted in submitted_questions:
                 qid = submitted.get("question_id")
                 qnum = submitted.get("question_number")
-                student_answer = str(submitted.get("answer", "")).strip()
+                student_answer_raw = str(submitted.get("answer", "")).strip()
                 key = (qid, qnum)
 
                 correct = question_map.get(key)
-                # ✅ FIX: Define student_answer_raw before using
-                student_answer_raw = str(submitted.get("answer", "")).strip()   
+
                 if correct:
                     correct_answer_raw = str(correct.get("correct_answer", "")).strip()
                     q_type = correct.get("type", "").lower()
 
-                    if q_type in ["fill", "oneline"]:
-                        student_answer = student_answer_raw.lower()
-                        correct_answer = correct_answer_raw.lower()
-                    else:
-                        student_answer = student_answer_raw
-                        correct_answer = correct_answer_raw
+                    # ✅ Case-insensitive comparison for all question types
+                    student_answer = student_answer_raw.lower()
+                    correct_answer = correct_answer_raw.lower()
 
                     is_correct = student_answer == correct_answer
                     if is_correct:
@@ -562,20 +566,19 @@ class SubmitQuizAttemptView(APIView):
                         "question": correct.get("question"),
                         "question_type": correct.get("type"),
                         "options": correct.get("options"),
-                        "answer": student_answer,
-                        "correct_answer": correct_answer,
+                        "answer": student_answer_raw,  # original case
+                        "correct_answer": correct_answer_raw,
                         "explanation": correct.get("explanation"),
                         "is_correct": is_correct
                     })
                 else:
-                    # fallback if question not found
                     evaluated_answers.append({
                         "question_id": qid,
                         "question_number": qnum,
                         "question": submitted.get("question", ""),
                         "question_type": submitted.get("question_type", ""),
                         "options": submitted.get("options", {}),
-                        "answer": submitted.get("answer"),
+                        "answer": student_answer_raw,
                         "correct_answer": "N/A",
                         "explanation": "Not found",
                         "is_correct": False

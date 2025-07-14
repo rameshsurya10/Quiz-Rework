@@ -55,6 +55,7 @@ const DepartmentSection = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openRestrictDialog, setOpenRestrictDialog] = useState(false); // NEW
   const [selectedDept, setSelectedDept] = useState(null);
   const [openFormDialog, setOpenFormDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -280,7 +281,18 @@ const DepartmentSection = () => {
                                   </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Delete">
-                                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); setSelectedDept(dept); setOpenDeleteDialog(true); }}>
+                                  <IconButton size="small" onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Check if department has teachers or students
+                                    const hasTeachers = (dept.teacher_count ?? (Array.isArray(dept.teachers) ? dept.teachers.length : 0)) > 0;
+                                    const hasStudents = (dept.student_count ?? (Array.isArray(dept.students) ? dept.students.length : 0)) > 0;
+                                    setSelectedDept(dept);
+                                    if (hasTeachers || hasStudents) {
+                                      setOpenRestrictDialog(true);
+                                    } else {
+                                      setOpenDeleteDialog(true);
+                                    }
+                                  }}>
                                     <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
                                   </IconButton>
                                 </Tooltip>
@@ -382,6 +394,21 @@ const DepartmentSection = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailDept(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add Restriction Dialog */}
+      <Dialog open={openRestrictDialog} onClose={() => setOpenRestrictDialog(false)}>
+        <DialogTitle>Cannot Delete Department</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This department has {selectedDept?.teacher_count ?? (Array.isArray(selectedDept?.teachers) ? selectedDept.teachers.length : 0)} teacher(s)
+            and {selectedDept?.student_count ?? (Array.isArray(selectedDept?.students) ? selectedDept.students.length : 0)} student(s).<br/>
+            Please remove all teachers and students from this department before deleting it.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenRestrictDialog(false)}>OK</Button>
         </DialogActions>
       </Dialog>
     </Container>

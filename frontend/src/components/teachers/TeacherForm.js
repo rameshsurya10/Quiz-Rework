@@ -498,7 +498,7 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                   {selectedIds.map((id) => {
                     const department = allDepartments.find(d => d.department_id === id);
-                    return <Chip key={id} label={department ? department.name : `ID: ${id}`} />;
+                    return <Chip key={id} label={department ? department.department_section : `ID: ${id}`} />;
                   })}
                 </Box>
               )}
@@ -531,7 +531,7 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
                   ...allDepartments.map((dept) => (
                     <MenuItem key={dept.department_id} value={dept.department_id}>
                       <Checkbox checked={formData.department_ids.indexOf(dept.department_id) > -1} />
-                      <ListItemText primary={dept.name} />
+                      <ListItemText primary={dept.department_section} />
                     </MenuItem>
                   )),
                   <Box

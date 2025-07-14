@@ -266,7 +266,7 @@ class QuizCreateSerializer(serializers.Serializer):
     pages = serializers.JSONField(required=False, default=list)
     book_name = serializers.CharField(max_length=255, required=False)
     class_name = serializers.CharField(max_length=50, required=False)
-    section = serializers.CharField(max_length=50, required=False)
+    section = serializers.CharField(max_length=50, allow_blank=True, allow_null=True, required=False)
     department_id = serializers.IntegerField(required=False, allow_null=True)
     quiz_date = CustomDateTimeField(required=False)
     uploadedfiles = serializers.JSONField(required=False, default=list)

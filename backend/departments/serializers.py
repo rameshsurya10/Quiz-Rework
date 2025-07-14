@@ -18,13 +18,22 @@ class DepartmentWithStudentsSerializer(serializers.ModelSerializer):
     student_count = serializers.SerializerMethodField()
     teachers = serializers.SerializerMethodField()
     teacher_count = serializers.SerializerMethodField()
+    department_section = serializers.SerializerMethodField()
 
     class Meta:
         model = Department
         fields = [
-            'department_id', 'name', 'code', 'teachers', 
-            'student_count', 'students', 'teacher_count'
+            'department_id', 'name', 'code', 'teachers', 'section', 'class_name',
+            'student_count', 'students', 'teacher_count','department_section'
         ]
+
+    def get_department_section(self, obj):
+        # If any field is missing, fallback to empty string
+        name = obj.name or ''
+        class_name = obj.class_name or ''
+        section = obj.section or ''
+        parts = [part for part in [name, class_name, section] if part]
+        return "-".join(parts) if parts else None
 
     def get_teachers(self, obj):
         from teacher.models import Teacher
@@ -61,14 +70,30 @@ class DepartmentWithStudentsSerializer(serializers.ModelSerializer):
         ).count()
 
     def get_students(self, obj):
-        students = Student.objects.filter(department_id=obj.department_id, is_deleted=False)
+        filters = {
+            'department_id': obj.department_id,
+            'class_name': obj.class_name,
+            'is_deleted': False
+        }
+
+        # Add section only if it is not None or empty
+        if obj.section not in [None, '', 'null']:
+            filters['section'] = obj.section
+
+        students = Student.objects.filter(**filters)
         return StudentInDepartmentSerializer(students, many=True).data
 
     def get_student_count(self, obj):
-        return Student.objects.filter(
-            department_id=obj.department_id,
-            is_deleted=False
-        ).count()
+        filters = {
+            'department_id': obj.department_id,
+            'class_name': obj.class_name,
+            'is_deleted': False
+        }
+
+        if obj.section not in [None, '', 'null']:
+            filters['section'] = obj.section
+
+        return Student.objects.filter(**filters).count()
 
 class DepartmentSerializer(serializers.ModelSerializer):
     """Basic Department serializer matching the model fields"""
@@ -80,11 +105,13 @@ class DepartmentSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True)
     last_modified_at = serializers.DateTimeField(read_only=True)
     teacher_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-
+    section = serializers.CharField(write_only=True, required=False, allow_null=True)
+    class_name = serializers.CharField(write_only=True, required=False, allow_null=True)
+    
     class Meta:
         model = Department
         fields = [
-            'department_id', 'uuid', 'name', 'code', 'description',
+            'department_id', 'uuid', 'name', 'code', 'description', 'section', 'class_name',
             'created_at', 'created_by', 'last_modified_at', 'last_modified_by', 'is_deleted', 'teacher_id'
         ]
         read_only_fields = ['department_id', 'uuid', 'created_at', 'last_modified_at', 'is_deleted']
