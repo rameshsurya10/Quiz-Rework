@@ -149,6 +149,8 @@ class StudentBulkUploadSerializer(serializers.Serializer):
                         department = Department.objects.create(
                             name=dept_name,
                             code=dept_code,
+                            section=section,
+                            class_name=class_name,
                             created_by=user,
                             last_modified_by=user
                         )
