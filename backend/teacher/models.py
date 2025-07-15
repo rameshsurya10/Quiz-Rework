@@ -11,6 +11,8 @@ class Teacher(models.Model):
     join_date = models.DateTimeField()
     name = models.CharField(max_length=255)
     email = models.EmailField(max_length=255, unique=True)
+    class_name = models.CharField(max_length=100, blank=True, null=True)
+    section = models.CharField(max_length=100, blank=True, null=True)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     last_modified_at = models.DateTimeField(auto_now=True)

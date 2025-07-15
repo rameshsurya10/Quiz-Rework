@@ -75,11 +75,6 @@ class DepartmentWithStudentsSerializer(serializers.ModelSerializer):
             'class_name': obj.class_name,
             'is_deleted': False
         }
-
-        # Add section only if it is not None or empty
-        if obj.section not in [None, '', 'null']:
-            filters['section'] = obj.section
-
         students = Student.objects.filter(**filters)
         return StudentInDepartmentSerializer(students, many=True).data
 
@@ -89,9 +84,6 @@ class DepartmentWithStudentsSerializer(serializers.ModelSerializer):
             'class_name': obj.class_name,
             'is_deleted': False
         }
-
-        if obj.section not in [None, '', 'null']:
-            filters['section'] = obj.section
 
         return Student.objects.filter(**filters).count()
 
@@ -144,9 +136,10 @@ class DepartmentSerializer(serializers.ModelSerializer):
 class DepartmentDetailSerializer(DepartmentSerializer):
     """Detailed Department serializer (extend as needed)"""
     teachers = serializers.SerializerMethodField()
+    students = serializers.SerializerMethodField()
 
     class Meta(DepartmentSerializer.Meta):
-        fields = DepartmentSerializer.Meta.fields + ['teachers']
+        fields = DepartmentSerializer.Meta.fields + ['teachers', 'students']
 
     def get_teachers(self, obj):
         from teacher.models import Teacher
@@ -157,10 +150,28 @@ class DepartmentDetailSerializer(DepartmentSerializer):
         return [
             {
                 'teacher_id': teacher.teacher_id,
-                'name': teacher.name
+                'name': teacher.name,
+                'section' : teacher.section,
+                'class_name' : teacher.class_name
             }
             for teacher in teachers
         ]
+
+    def get_students(self, obj):
+        from students.models import Student
+        try:
+            students = Student.objects.filter(department_id=obj.department_id, is_deleted=False)
+            return [
+                {
+                'student_id': student.student_id,
+                'name': student.name,
+                'section': student.section,
+                'class_name': student.class_name
+            }
+            for student in students
+        ]
+        except Exception as e:
+            return [{'error': str(e)}]
 
 class BulkUploadStudentSerializer(serializers.Serializer):
     """Serializer for bulk student upload"""

@@ -38,30 +38,41 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         - Admins see all departments.
         - Teachers see only their assigned departments.
         """
-        user = request.user
+        try:
+            user = request.user
 
-        if hasattr(user, 'role') and user.role == 'TEACHER':
-            from teacher.models import Teacher
-            try:
-                teacher = Teacher.objects.get(email=user.email, is_deleted=False)
-                department_ids = teacher.department_ids or []
-                queryset = Department.objects.filter(
-                    department_id__in=department_ids,
-                    is_deleted=False
-                )
-            except Teacher.DoesNotExist:
-                queryset = Department.objects.none()
-        else:
-            queryset = Department.objects.filter(is_deleted=False)
+            if hasattr(user, 'role') and user.role == 'TEACHER':
+                from teacher.models import Teacher
+                try:
+                    teacher = Teacher.objects.get(email=user.email, is_deleted=False)
+                    department_ids = teacher.department_ids or []
+                    queryset = Department.objects.filter(
+                        department_id__in=department_ids,
+                        is_deleted=False
+                    )
+                except Teacher.DoesNotExist:
+                    queryset = Department.objects.none()
+            else:
+                queryset = Department.objects.filter(is_deleted=False)
 
-        # Important: always pass context so serializer can access request.user
-        serializer = DepartmentWithStudentsSerializer(queryset, many=True, context={'request': request})
-        return Response(serializer.data)
+            # Important: always pass context so serializer can access request.user
+            serializer = DepartmentWithStudentsSerializer(queryset, many=True, context={'request': request})
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {
+                    "error": "Internal Server Error",
+                    "message": str(e),
+                    "title": "Internal Server Error"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def get_serializer_class(self):
         """Return different serializers for list and detail views"""
         if self.action == 'retrieve':
             return DepartmentDetailSerializer
+        print("DepartmentDetailSerializer:",DepartmentDetailSerializer)
         return DepartmentSerializer
     
     @action(detail=False, methods=['post'], url_path='create-department', url_name='create-department')
@@ -147,8 +158,6 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             'error_count': error_count,
             'errors': errors,
         })
-    
-
     
     @action(detail=True, methods=['get'], url_path='dashboard')
     def dashboard(self, request, pk=None):
@@ -241,3 +250,35 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         instance.is_deleted = True
         instance.save()
         return Response({'message': 'Department deleted successfully'}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'], url_path='class')
+    def ClassBasedDepartmentView(self, request, pk=None):
+        """
+        GET /api/departments/<class_name>/class/?section=A
+        Filters departments based on class_name (path param) and optional section (query param)
+        Returns: department_id, name, code
+        If no match, returns empty list [].
+        """
+        try:
+            class_name = pk
+            section = request.query_params.get('section')
+
+            if not class_name:
+                return Response({"error": "class_name is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            filters = {'class_name': class_name, 'is_deleted': False}
+            if section:
+                filters['section'] = section
+            departments = Department.objects.filter(**filters).values('department_id', 'name', 'code','section','class_name')
+            
+            # Always returns a list: [] if nothing matches
+            return Response(list(departments), status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {
+                    "error": "Internal Server Error",
+                    "message": str(e),
+                    "title": "Internal Server Error"
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

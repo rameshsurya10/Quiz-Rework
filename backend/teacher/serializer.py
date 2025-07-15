@@ -20,6 +20,8 @@ class TeacherSerializer(serializers.ModelSerializer):
             "departments",           # ← computed via IDs
             "students",
             "student_count",
+            "class_name",
+            "section",
             "email", "phone", "join_date", "is_deleted",
             "created_at", "last_modified_at",
             "created_by", "last_modified_by"

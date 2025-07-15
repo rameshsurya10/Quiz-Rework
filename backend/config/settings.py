@@ -260,18 +260,18 @@ if SUPABASE_URL and SUPABASE_KEY:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('SUPABASE_DB_NAME', 'postgres'),
-            'USER': os.getenv('SUPABASE_DB_USER', 'postgres'),
-            'PASSWORD': os.getenv('SUPABASE_DB_PASSWORD'),
-            'HOST': os.getenv('SUPABASE_DB_HOST'),
-            'PORT': os.getenv('SUPABASE_DB_PORT', '5432'),
+            'NAME': os.getenv('DB_NAME', 'postgres'),
+            'USER': os.getenv('DB_USER', 'postgres'),
+            'PASSWORD': os.getenv('DB_PASSWORD'),
+            'HOST': os.getenv('DB_HOST'),
+            'PORT': os.getenv('DB_PORT', '5432'),
         }
     }
 
 # PDF settings
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_DOCUMENT_TYPES = ['application/pdf']
-SITE_DOMAIN = "https://qna.kol.tel" 
+SITE_DOMAIN = "http://localhost:8000" 
 # "https://qna.kol.tel" 
 # "http://localhost:8000" 
 # "https://69.62.78.175:443"
