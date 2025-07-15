@@ -11,7 +11,11 @@ import {
   CircularProgress,
   Typography,
   OutlinedInput,
-  Chip
+  Chip,
+  RadioGroup,
+  FormLabel,
+  Radio,
+  FormControlLabel,
 } from '@mui/material';
 import { teacherApi } from '../../services/api'; // Assuming teacherApi is set up for /api/teachers/
 
@@ -20,6 +24,8 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
     name: '',
     code: '',
     description: '',
+    class_name: '', // Add class_name to form state
+    sections: '', // New field for sections
   });
   const [selectedTeacherIds, setSelectedTeacherIds] = useState([]); // Multiple teacher IDs
   const [teachers, setTeachers] = useState([]);
@@ -31,7 +37,7 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
       setLoadingTeachers(true);
       try {
         // Ensure teacherApi.getAll() fetches from /api/teachers/ and returns array with teacher_id and name
-        const response = await teacherApi.getAll(); 
+        const response = await teacherApi.getAll();
         setTeachers(response.data.results || response.data || []);
       } catch (error) {
         console.error('Error fetching teachers:', error);
@@ -49,6 +55,8 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
         name: department.name || '',
         code: department.code || '',
         description: department.description || '',
+        class_name: department.class_name || '', // Pre-fill if editing
+        sections: department.sections || '', // Pre-fill if editing
       });
       // If editing, and department has HOD info (e.g., department.teacher_id), set it
       // This part depends on how HOD info is passed for an existing department
@@ -58,7 +66,7 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
         setSelectedTeacherIds(department.teacher_ids || []);
       }
     } else {
-      setFormData({ name: '', code: '', description: '' });
+      setFormData({ name: '', code: '', description: '', class_name: '', sections: '' });
       setSelectedTeacherIds([]);
     }
   }, [department]);
@@ -80,7 +88,8 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Subject name is required.';
     if (!formData.code.trim()) newErrors.code = 'Subject code is required.';
-    // Add more validation as needed (e.g., code format)
+    if (!formData.class_name) newErrors.class_name = 'Standard is required.';
+    // Optionally validate sections if required
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -92,6 +101,8 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
         name: formData.name.trim(),
         code: formData.code.trim(),
         description: formData.description.trim(),
+        class_name: formData.class_name, // Add class_name to payload
+        sections: formData.sections, // Add sections to payload
       };
       if (selectedTeacherIds && selectedTeacherIds.length > 0) {
         payload.teacher_ids = selectedTeacherIds.map((id) => parseInt(id, 10));
@@ -119,6 +130,16 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
       />
       <TextField
         fullWidth
+        label="Sections"
+        name="sections"
+        value={formData.sections}
+        onChange={handleInputChange}
+        margin="normal"
+        placeholder="e.g. A, B, C"
+        variant="outlined"
+      />
+      <TextField
+        fullWidth
         label="Subject Code"
         name="code"
         value={formData.code}
@@ -129,6 +150,20 @@ const DepartmentForm = ({ department = null, onSubmit, onCancel, isSubmitting = 
         required
         variant="outlined"
       />
+      <FormControl component="fieldset" margin="normal" required error={!!errors.class_name}>
+        <FormLabel component="legend">Standard *</FormLabel>
+        <RadioGroup
+          row
+          name="class_name"
+          value={formData.class_name}
+          onChange={handleInputChange}
+        >
+          <FormControlLabel value="10" control={<Radio />} label="X" />
+          <FormControlLabel value="11" control={<Radio />} label="XI" />
+          <FormControlLabel value="12" control={<Radio />} label="XII" />
+        </RadioGroup>
+        {errors.class_name && <FormHelperText>{errors.class_name}</FormHelperText>}
+      </FormControl>
       <TextField
         fullWidth
         label="Description (Optional)"

@@ -15,7 +15,8 @@ import {
   Typography,
   Checkbox,
   ListItemText,
-  InputAdornment
+  InputAdornment,
+  FormControlLabel
 } from '@mui/material';
 import { departmentApi, teacherApi } from '../../services/api';
 import { getUserFromToken } from '../../utils/auth';
@@ -74,6 +75,8 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
     department_ids: [], // Always use IDs in state
     join_date: '',
     join_time: '',
+    section: '', // New field for section
+    standard: '', // New field for standard (roman)
   });
 
   const [errors, setErrors] = useState({});
@@ -180,6 +183,8 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
         department_ids: teacher.departments?.map(dept => dept.department_id).filter(id => id != null) || [],
         join_date: teacherJoinDate ? teacherJoinDate.toISOString().split('T')[0] : '',
         join_time: teacherJoinDate ? teacherJoinDate.toISOString().split('T')[1].slice(0, 5) : '',
+        section: teacher.section || '',
+        standard: teacher.standard || '',
       });
     } else {
       // For create mode, use the user's selected timezone
@@ -212,6 +217,8 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
         department_ids: [],
         join_date: today,
         join_time: timePart,
+        section: '',
+        standard: '',
       });
     }
   }, [teacher, isEditMode]);
@@ -272,6 +279,7 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
     if (!formData.country_code) newErrors.country_code = 'Country code is required';
     if (!formData.join_date) newErrors.join_date = 'Join date is required';
     if (!formData.join_time) newErrors.join_time = 'Join time is required';
+    if (!formData.standard) newErrors.standard = 'Standard is required';
     
     // Prevent past datetime
     if (formData.join_date && formData.join_time) {
@@ -314,6 +322,7 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
     // Apply the offset to the localDate
     const finalDate = new Date(localDate.getTime() - offset);
     
+    const romanToNumber = { X: '10', XI: '11', XII: '12' };
     const basePayload = {
       name: formData.name,
       email: formData.email,
@@ -326,6 +335,8 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
     const finalPayload = {
       ...basePayload,
       department_ids: formData.department_ids,
+      section: formData.section,
+      class_name: romanToNumber[formData.standard] || '', // Map standard to class_name
     };
 
     try {
@@ -381,6 +392,39 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField fullWidth label="Email Address" name="email" type="email" value={formData.email} onChange={handleInputChange} error={!!errors.email} helperText={errors.email} required />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Section"
+            name="section"
+            value={formData.section}
+            onChange={handleInputChange}
+            placeholder="e.g. A, B, C"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FormControl component="fieldset" error={!!errors.standard} required>
+            <Typography variant="subtitle1" sx={{ mb: 1 }}>Standard *</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2 }}>
+              <FormControlLabel
+                value="X"
+                control={<Checkbox checked={formData.standard === 'X'} onChange={() => setFormData(prev => ({ ...prev, standard: 'X' }))} />}
+                label="X"
+              />
+              <FormControlLabel
+                value="XI"
+                control={<Checkbox checked={formData.standard === 'XI'} onChange={() => setFormData(prev => ({ ...prev, standard: 'XI' }))} />}
+                label="XI"
+              />
+              <FormControlLabel
+                value="XII"
+                control={<Checkbox checked={formData.standard === 'XII'} onChange={() => setFormData(prev => ({ ...prev, standard: 'XII' }))} />}
+                label="XII"
+              />
+            </Box>
+            {errors.standard && <FormHelperText>{errors.standard}</FormHelperText>}
+          </FormControl>
         </Grid>
         <Grid item xs={12} sm={3}>
           <FormControl fullWidth error={!!errors.country_code} required>
@@ -498,7 +542,7 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                   {selectedIds.map((id) => {
                     const department = allDepartments.find(d => d.department_id === id);
-                    return <Chip key={id} label={department ? department.department_section : `ID: ${id}`} />;
+                    return <Chip key={id} label={department ? department.name : `ID: ${id}`} />;
                   })}
                 </Box>
               )}
@@ -531,7 +575,7 @@ const TeacherForm = ({ onSuccess, onCancel, teacher }) => {
                   ...allDepartments.map((dept) => (
                     <MenuItem key={dept.department_id} value={dept.department_id}>
                       <Checkbox checked={formData.department_ids.indexOf(dept.department_id) > -1} />
-                      <ListItemText primary={dept.department_section} />
+                      <ListItemText primary={dept.name} />
                     </MenuItem>
                   )),
                   <Box
