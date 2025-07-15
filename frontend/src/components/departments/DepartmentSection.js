@@ -68,7 +68,19 @@ const DepartmentSection = () => {
       setLoading(true);
       const deptRes = await departmentApi.getAll();
       const depts = deptRes?.data?.results || deptRes?.data || [];
-      setDepartments(Array.isArray(depts) ? depts : []);
+      // Fetch details for each department to get student count
+      const deptsWithCounts = await Promise.all(
+        depts.map(async (dept) => {
+          try {
+            const detailRes = await departmentApi.getById(dept.department_id);
+            const students = detailRes.data.students || [];
+            return { ...dept, student_count: students.length };
+          } catch (e) {
+            return { ...dept, student_count: 0 };
+          }
+        })
+      );
+      setDepartments(Array.isArray(deptsWithCounts) ? deptsWithCounts : []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
       showSnackbar('Failed to load data. Please try again.', 'error');
@@ -168,6 +180,15 @@ const DepartmentSection = () => {
     visible: { y: 0, opacity: 1, transition: { duration: 0.5 } },
   };
 
+  const fetchDepartmentDetails = async (departmentId) => {
+    try {
+      const res = await departmentApi.getById(departmentId);
+      setDetailDept(res.data);
+    } catch (error) {
+      showSnackbar('Failed to load department details.', 'error');
+      setDetailDept(null);
+    }
+  };
 
 
   return (
@@ -228,17 +249,21 @@ const DepartmentSection = () => {
               <>
                 <Grid container spacing={3}>
                   {paginatedDepartments.map((dept, index) => {
-                    const studentCount = dept.student_count ?? 0;
+                    // Fix: Use array length if student_count is missing
+                    const studentCount = dept.student_count ?? (Array.isArray(dept.students) ? dept.students.length : 0);
                     const teacherCount = dept.teacher_count ?? (Array.isArray(dept.teachers) ? dept.teachers.length : 0);
                     
                     return (
-                      <Grid item key={dept.id} xs={12} sm={6} md={4}>
+                      <Grid item key={dept.department_id} xs={12} sm={6} md={4}>
                         <motion.div
                           variants={itemVariants}
                           style={{ height: '100%' }}
                         >
                           <Paper 
-                            onClick={() => setDetailDept(dept)}
+                            onClick={() => {
+                              setDetailDept(null); // show spinner while loading
+                              fetchDepartmentDetails(dept.department_id);
+                            }}
                             sx={{ 
                               borderRadius: 3, 
                               height: '100%', 

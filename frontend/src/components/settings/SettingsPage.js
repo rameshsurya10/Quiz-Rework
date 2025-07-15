@@ -74,6 +74,21 @@ const SettingsPage = () => {
   const [currentPlan, setCurrentPlan] = useState('professional');
   const [profileImage, setProfileImage] = useState(null);
 
+  // Set default theme: Light mode, Default appearance, High Contrast off
+  useEffect(() => {
+    if (mode !== 'light') {
+      toggleMode('light');
+    }
+    if (appearance !== 'default') {
+      changeAppearance('default');
+    }
+    if (highContrast !== false) {
+      toggleHighContrast();
+    }
+    // Only run this on first mount
+    // eslint-disable-next-line
+  }, []);
+
   // Options lists generated once
   const timezoneOptions = React.useMemo(getTimezoneOptions, []);
 
@@ -510,11 +525,6 @@ const SettingsPage = () => {
                 iconPosition="start"
             />
             <Tab 
-                icon={<PaletteIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />} 
-                label="Appearance" 
-                iconPosition="start"
-            />
-            <Tab 
                 icon={<SecurityIcon sx={{ fontSize: { xs: '18px', sm: '20px' } }} />} 
                 label="Security" 
                 iconPosition="start"
@@ -559,17 +569,6 @@ const SettingsPage = () => {
               />
             </TabPanel>
             <TabPanel value={tabValue} index={3}>
-              <AppearanceSettings 
-                mode={mode}
-                toggleMode={toggleMode}
-                appearance={appearance}
-                changeAppearance={changeAppearance}
-                highContrast={highContrast}
-                toggleHighContrast={toggleHighContrast}
-                cardStyles={getCardStyles()}
-              />
-            </TabPanel>
-            <TabPanel value={tabValue} index={4}>
               <SecuritySettings 
                 settings={settings}
                 handleChange={handleChange}
@@ -577,7 +576,7 @@ const SettingsPage = () => {
                 cardStyles={getCardStyles()}
               />
             </TabPanel>
-            <TabPanel value={tabValue} index={5}>
+            <TabPanel value={tabValue} index={4}>
               <RegionSettings 
                 settings={settings}
                 handleChange={handleChange}
@@ -781,98 +780,6 @@ const NotificationSettings = ({ settings, handleChange, cardStyles }) => (
         </CardContent>
     </Card>
 );
-
-const AppearanceSettings = ({ mode, toggleMode, appearance, changeAppearance, highContrast, toggleHighContrast, cardStyles }) => {
-  const theme = useTheme();
-  return (
-    <Grid container spacing={3}>
-      {/* Theme Mode */}
-      <Grid item xs={12} md={6}>
-        <Card sx={cardStyles}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>Theme Mode</Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'space-around', mt: 2 }}>
-              <Button 
-                variant={mode === 'light' ? 'contained' : 'outlined'} 
-                onClick={() => toggleMode('light')}
-                startIcon={<LightModeIcon />}
-                sx={{ p: 2, flexDirection: 'column', height: 100, width: '45%' }}
-              >
-                Light
-              </Button>
-              <Button 
-                variant={mode === 'dark' ? 'contained' : 'outlined'} 
-                onClick={() => toggleMode('dark')}
-                startIcon={<DarkModeIcon />}
-                sx={{ p: 2, flexDirection: 'column', height: 100, width: '45%' }}
-              >
-                Dark
-              </Button>
-            </Box>
-          </CardContent>
-        </Card>
-      </Grid>
-      
-      {/* High Contrast Mode */}
-      <Grid item xs={12} md={6}>
-        <Card sx={cardStyles}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>Accessibility</Typography>
-            <FormGroup>
-              <FormControlLabel
-                control={<Switch checked={highContrast} onChange={toggleHighContrast} />}
-                label="High Contrast Mode"
-              />
-            </FormGroup>
-            <Typography variant="body2" color="text.secondary">
-              Increases text and background contrast for better readability.
-            </Typography>
-          </CardContent>
-        </Card>
-      </Grid>
-      
-      {/* Appearance Style */}
-      <Grid item xs={12}>
-        <Card sx={cardStyles}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>UI Appearance</Typography>
-            <FormControl component="fieldset" fullWidth>
-                <RadioGroup row name="appearance" value={appearance} onChange={(e) => changeAppearance(e.target.value)}>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} sm={4}>
-                        <FormControlLabel value="default" control={<Radio />} label={
-                          <Box>
-                            <Typography>Default</Typography>
-                            <Typography variant="caption" color="textSecondary">Modern and clean</Typography>
-                          </Box>
-                        } />
-                      </Grid>
-                      <Grid item xs={12} sm={4}>
-                        <FormControlLabel value="royal" control={<Radio />} label={
-                          <Box>
-                            <Typography>Royal</Typography>
-                            <Typography variant="caption" color="textSecondary">Elegant and formal</Typography>
-                          </Box>
-                        } />
-                      </Grid>
-                      <Grid item xs={12} sm={4}>
-                        <FormControlLabel value="classic" control={<Radio />} label={
-                          <Box>
-                            <Typography>Classic</Typography>
-                            <Typography variant="caption" color="textSecondary">Sharp and simple</Typography>
-                          </Box>
-                        } />
-                      </Grid>
-                    </Grid>
-                </RadioGroup>
-            </FormControl>
-          </CardContent>
-        </Card>
-      </Grid>
-    </Grid>
-  );
-};
-
 
 const SecuritySettings = ({ settings, handleChange, onOpenConfirm, cardStyles }) => (
     <Grid container spacing={3}>
