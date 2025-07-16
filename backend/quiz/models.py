@@ -18,6 +18,7 @@ class Quiz(models.Model):
         ('fill', 'Fill in the Blank'),
         ('truefalse', 'True/False'),
         ('oneline', 'One Line Answer'),
+        ('match', 'Match the Following'),
         ('mixed', 'Mixed Types'),
     ]
     
