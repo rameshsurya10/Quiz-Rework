@@ -25,6 +25,7 @@ import { ConfirmationDialog } from '../../common';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { quizApi, departmentApi } from '../../services/api';
 import { quizService } from '../../services/quizService';
+import MatchTheFollowingPreview from './MatchTheFollowingPreview';
 
 const StyledCard = styled(Card)(({ theme }) => ({
   height: '100%',
@@ -802,7 +803,7 @@ const TeacherQuizSection = () => {
           transition={{ duration: 0.5, delay: index * 0.1 }}
           whileHover={{ y: -5 }}
         >
-          <StyledCard>
+          <StyledCard sx={{ background: '#fff', color: '#18181B' }}>
             <CardContent sx={{ flexGrow: 1, p: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                 <Avatar 
@@ -947,33 +948,36 @@ const TeacherQuizSection = () => {
     <Container maxWidth="lg" sx={{ py: 3 }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, background: 'whitesmoke' }}>
           <Typography
             variant="h4"
             sx={{
               fontWeight: 700,
-              background: 'linear-gradient(135deg, #4ecdc4, #44a08d)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
+              color: '#471396',
+              background: 'none',
+              WebkitBackgroundClip: 'unset',
+              WebkitTextFillColor: 'unset',
             }}
           >
             Quiz Management
           </Typography>
           <Button
             variant="contained"
-            startIcon={<AddIcon />}
+            startIcon={<AddIcon sx={{ color: '#471396' }} />} // icon matches text color
             onClick={handleCreateNew}
             sx={{
               borderRadius: 3,
               px: 3,
               py: 1.5,
-              background: 'linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%)',
+              background: 'whitesmoke', // keep background whitesmoke
+              color: '#471396', // text color
               textTransform: 'none',
               fontWeight: 600,
-              boxShadow: '0 8px 24px rgba(78, 205, 196, 0.3)',
+              boxShadow: '0 8px 24px rgba(71,19,150,0.10)',
               '&:hover': {
-                boxShadow: '0 12px 32px rgba(78, 205, 196, 0.4)',
-                transform: 'translateY(-2px)',
+                background: '#B13BFF', // hover background
+                color: '#fff', // hover text color
+                '& .MuiSvgIcon-root': { color: '#fff' }, // icon color on hover
               },
             }}
           >
@@ -1371,6 +1375,13 @@ const TeacherQuizSection = () => {
                           {String(question.correct_answer || 'No answer provided')}
                         </Typography>
                       </Box>
+                    </Box>
+                  )}
+
+                  {/* Match The Following */}
+                  {question.type === 'match' && (
+                    <Box sx={{ mt: 2 }}>
+                      <MatchTheFollowingPreview question={question} />
                     </Box>
                   )}
 

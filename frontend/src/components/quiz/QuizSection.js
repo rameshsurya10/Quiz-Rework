@@ -22,6 +22,7 @@ import { ConfirmationDialog } from '../../common';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import { quizApi, departmentApi } from '../../services/api';
 import { quizService } from '../../services/quizService';
+import MatchTheFollowingPreview from './MatchTheFollowingPreview';
 
 const QuizStyledCard = styled(Card)(({ theme }) => ({
   height: '100%',
@@ -870,7 +871,7 @@ const QuizSection = () => {
                 </Typography>
                 {getStatusChip(quiz.is_published)}
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, minHeight: '40px' }}>
+              <Typography variant="body2" sx={{ color: '#18181B', mb: 2, minHeight: '40px' }}>
                 {quiz.description || 'No description available.'}
               </Typography>
               
@@ -1239,6 +1240,11 @@ const QuizSection = () => {
                           </Box>
                         )}
 
+                        {question.type === 'match' && (
+                          <Box sx={{ mt: 2 }}>
+                            <MatchTheFollowingPreview question={question} />
+                          </Box>
+                        )}
                         {question.explanation && (
                           <Box sx={{ mt: 2, p: 2, backgroundColor: alpha(theme.palette.info.light, 0.1), borderRadius: 1 }}>
                             <Typography variant="body2" color="textSecondary" sx={{ mb: 1, fontWeight: 'bold' }}>Explanation:</Typography>
@@ -1260,7 +1266,6 @@ const QuizSection = () => {
                             )}
                           </Box>
                         )}
-                        
                         {question.source_page && (
                           <Typography variant="caption" color="textSecondary" sx={{ display: 'block', textAlign: 'right', mt: 1 }}>
                             Source: Page {question.source_page}
