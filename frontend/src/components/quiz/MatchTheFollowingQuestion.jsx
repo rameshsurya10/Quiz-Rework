@@ -4,12 +4,21 @@ import { useDrag, useDrop } from 'react-dnd';
 
 const ITEM_TYPE = 'MATCH_ITEM';
 
+// Utility to get display label
+function getDisplayLabel(label) {
+  if (typeof label === 'object' && label !== null) {
+    return label.option_text || label.label || JSON.stringify(label);
+  }
+  return label;
+}
+
 // Draggable left item
 function DraggableLeft({ item, isMatched, onDrag }) {
   const [{ isDragging }, drag] = useDrag({
     type: ITEM_TYPE,
     item: { id: item.id },
-    canDrag: !isMatched,
+    // Allow dragging even if matched
+    canDrag: true,
     collect: (monitor) => ({
       isDragging: !!monitor.isDragging(),
     }),
@@ -26,14 +35,14 @@ function DraggableLeft({ item, isMatched, onDrag }) {
         border: isMatched ? '2px solid #4caf50' : '1px solid #ccc',
         display: 'flex',
         alignItems: 'center',
-        cursor: isMatched ? 'not-allowed' : 'grab',
+        cursor: 'grab',
         minWidth: 120,
         gap: 1,
       }}
-      aria-disabled={isMatched}
+      aria-disabled={false}
     >
-      {item.image && <Avatar src={item.image} alt={item.label} sx={{ mr: 1 }} />}
-      <Typography variant="subtitle1">{item.label}</Typography>
+      {item.image && <Avatar src={item.image} alt={getDisplayLabel(item.label)} sx={{ mr: 1 }} />}
+      <Typography variant="subtitle1">{getDisplayLabel(item.label)}</Typography>
     </Paper>
   );
 }
@@ -43,7 +52,7 @@ function DroppableRight({ item, onDrop, isMatched, matchedLabel }) {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: ITEM_TYPE,
     drop: (dragged) => onDrop(dragged.id, item.id),
-    canDrop: () => !isMatched,
+    canDrop: () => true, // Always allow drop
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
       canDrop: !!monitor.canDrop(),
@@ -65,8 +74,8 @@ function DroppableRight({ item, onDrop, isMatched, matchedLabel }) {
         position: 'relative',
       }}
     >
-      {item.image && <Avatar src={item.image} alt={item.label} sx={{ mr: 1 }} />}
-      <Typography variant="subtitle1">{item.label}</Typography>
+      {item.image && <Avatar src={item.image} alt={getDisplayLabel(item.label)} sx={{ mr: 1 }} />}
+      <Typography variant="subtitle1">{getDisplayLabel(item.label)}</Typography>
       {isMatched && (
         <Chip
           label={matchedLabel}
@@ -95,12 +104,19 @@ const MatchTheFollowingQuestion = ({
   });
 
   const handleDrop = useCallback((leftId, rightId) => {
-    // Prevent double-matching
-    if (matches[leftId] || rightToLeft[rightId]) return;
-    const updated = { ...matches, [leftId]: rightId };
+    // Remove any previous match for this rightId
+    const updated = { ...matches };
+    // Remove any left that was previously matched to this rightId
+    Object.keys(updated).forEach((l) => {
+      if (updated[l] === rightId) {
+        delete updated[l];
+      }
+    });
+    // Remove any previous right for this leftId
+    updated[leftId] = rightId;
     setMatches(updated);
     if (onMatch) onMatch(updated);
-  }, [matches, rightToLeft, onMatch]);
+  }, [matches, onMatch]);
 
   return (
     <Box sx={{ width: '100%', maxWidth: 500, mx: 'auto', mt: 2 }}>
@@ -124,7 +140,7 @@ const MatchTheFollowingQuestion = ({
               key={item.id}
               item={item}
               isMatched={!!rightToLeft[item.id]}
-              matchedLabel={rightToLeft[item.id] ? leftItems.find(l => l.id === rightToLeft[item.id])?.label : ''}
+              matchedLabel={rightToLeft[item.id] ? getDisplayLabel(leftItems.find(l => l.id === rightToLeft[item.id])?.label) : ''}
               onDrop={handleDrop}
             />
           ))}
@@ -142,7 +158,7 @@ const MatchTheFollowingQuestion = ({
               return (
                 <Chip
                   key={leftId}
-                  label={`${left?.label} → ${right?.label}`}
+                  label={`${getDisplayLabel(left?.label)} → ${getDisplayLabel(right?.label)}`}
                   color="primary"
                   sx={{ fontWeight: 500 }}
                 />
