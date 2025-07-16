@@ -11,6 +11,8 @@ from openai import OpenAI
 import json
 from supabase import create_client, Client
 import random
+import os
+
 
 
 logger = logging.getLogger(__name__)
@@ -115,6 +117,31 @@ class DocumentProcessingService:
             'updated_at': document.updated_at,
         }
 
+    def shuffle_match_right_labels(column_left_labels, column_right_labels, correct_answer):
+        """
+        Shuffle only the values of column_right_labels.
+        Then remap correct_answer using values instead of keys.
+        """
+        # Extract original right values
+        right_values = list(column_right_labels.values())
+        random.shuffle(right_values)
+
+        # Build new right column with shuffled values
+        shuffled_column_right = {str(i + 1): val for i, val in enumerate(right_values)}
+
+        # Reverse map of new right column: value -> new key
+        value_to_key = {v: k for k, v in shuffled_column_right.items()}
+
+        # Build new correct_answer mapping actual terms
+        new_correct_answer = {}
+        for left_key, left_term in column_left_labels.items():
+            original_right_value = correct_answer.get(left_term)
+            if original_right_value not in value_to_key:
+                continue  # skip if unmatched
+            new_correct_answer[left_term] = original_right_value
+
+        return shuffled_column_right, new_correct_answer
+
     def generate_questions_from_text(self, text, question_type, quiz_type, num_questions):
         import math
         import logging
@@ -212,7 +239,7 @@ class DocumentProcessingService:
         import logging
         logger = logging.getLogger(__name__)
 
-        # Step 1: Text processing (same as before)
+        # Handle multi-page text
         text_sections = []
         current_section = []
         current_page = None
@@ -236,10 +263,8 @@ class DocumentProcessingService:
             text_sections = [('all', text)]
 
         # Sample pages from start, middle, and end
-        num_samples = 3  # you can increase this to 5 for more spread
+        num_samples = 3
         total_sections = len(text_sections)
-        sampled_sections = []
-
         if total_sections <= num_samples:
             sampled_sections = text_sections
         else:
@@ -259,20 +284,11 @@ class DocumentProcessingService:
             sections_text = sections_text[:max_content_length] + "\n[Content truncated]"
             logger.warning(f"Content truncated to {max_content_length} characters")
 
+        # Build prompt
         if question_type == 'mixed':
-            type_instruction = "a mix of 'mcq', 'fill', 'truefalse', 'oneline'"
-            format_instruction = """
-            Each question must have:
-            - "question", "type", "options", "correct_answer", "explanation", "question_number", "source_page"
-            For 'mcq', options should include "A", "B", "C", "D". For others, options should be empty.
-            """
+            type_instruction = "a mix of 'mcq', 'fill', 'truefalse', 'oneline', and 'match'"
         else:
             type_instruction = f"only questions of type '{question_type}'"
-            format_instruction = """
-            Each question must include:
-            - "question", "type", "options", "correct_answer", "explanation", "question_number", "source_page"
-            For non-MCQ types, use empty options.
-            """
 
         base_prompt = f"""
         You are an expert quiz generator. Based on the following content, generate exactly {num_questions} questions.
@@ -281,34 +297,47 @@ class DocumentProcessingService:
         Content:
         {sections_text}
 
-        {format_instruction}
+        Each question must include:
+        - "question", "type", "options", "correct_answer", "explanation", "question_number", "source_page"
+
+        Specific formatting per question type:
+        🔹 For 'mcq':
+        - "options" must be a dict with 4 choices (e.g., {{"A": "...", "B": "...", "C": "...", "D": "..."}})
+        - "correct_answer" must be one of the values from options.
+
+        🔹 For 'fill', 'truefalse', 'oneline':
+        - "options" must be {{}}
+        - "correct_answer" is a string answer.
+
+        🔹 For 'match':
+        - "type" must be exactly 'match'
+        - "options" must be an empty dictionary {{}}
+        - "column_left_labels": dict of labeled terms to match from (e.g., {{"A": "Oxygen", "B": "Hydrogen"}})
+        - "column_right_labels": dict of labeled matching items (e.g., {{"1": "Gas", "2": "Metal"}})
+        - "correct_answer": dict mapping left label values to right label values (e.g., {{"Oxygen": "Gas"}})
+        - "explanation" should explain how the matches are related.
+
         Format the output strictly as:
         {{
-            "questions": [
-                {{
-                    "question": "...",
-                    "type": "mcq",
-                    "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
-                    "correct_answer": "...",
-                    "explanation": "...",
-                    "question_number": 1,
-                    "source_page": "..."
-                }},
-                ...
-            ]
+            "questions": [ {{...}}, {{...}}, ... ]
         }}
         """
 
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that creates quiz questions strictly based on the provided content."},
+                {"role": "system", "content": "You are a professional quiz question generator that outputs in JSON format."},
                 {"role": "user", "content": base_prompt}
             ],
-            temperature=0.3,
+            temperature=0.7,
+            max_tokens=2000,
+            response_format={"type": "json_object"}
         )
 
         content = response.choices[0].message.content
+        logger.info("--- Received raw response from OpenAI ---")
+        logger.info(content)
+
         if content.startswith("```json"):
             content = content[7:]
             if content.endswith("```"):
@@ -322,18 +351,36 @@ class DocumentProcessingService:
 
         questions = parsed.get('questions', [])
         validated_questions = []
-        type_cycle = ['mcq', 'truefalse', 'fill', 'oneline']
+        type_cycle = ['mcq', 'fill', 'truefalse', 'oneline', 'match']
 
         for i, q in enumerate(questions):
             qtype = q.get('type') or (type_cycle[i % len(type_cycle)] if question_type == 'mixed' else question_type)
 
-            # Validate fields
+            # Force correct type for match if it includes match fields
+            if all(k in q for k in ['column_left_labels', 'column_right_labels', 'correct_answer']):
+                qtype = 'match'
             q['type'] = qtype
-            q['options'] = q.get('options', {}) if qtype == 'mcq' else {}
-            if qtype == 'mcq' and (not q.get('correct_answer') or q['correct_answer'] not in q['options']):
-                q['correct_answer'] = next(iter(q['options']), "A")
-            elif not q.get('correct_answer'):
-                q['correct_answer'] = "Answer" if qtype != 'truefalse' else "True"
+
+            if qtype == 'mcq':
+                q['options'] = q.get('options', {})
+                if not isinstance(q['options'], dict) or not q['options']:
+                    q['options'] = {"A": "Option A", "B": "Option B", "C": "Option C", "D": "Option D"}
+                if q.get('correct_answer') not in q['options'].values():
+                    q['correct_answer'] = list(q['options'].values())[0]
+
+            elif qtype in ['fill', 'truefalse', 'oneline']:
+                q['options'] = {}
+
+            elif qtype == 'match':
+                if not isinstance(q.get("column_left_labels"), dict) or not isinstance(q.get("column_right_labels"), dict):
+                    logger.warning(f"⚠️ Invalid match labels in question #{start_question_number + i}")
+                    continue
+                if not isinstance(q.get("correct_answer"), dict):
+                    logger.warning(f"⚠️ Invalid match correct_answer in question #{start_question_number + i}")
+                    continue
+                q['options'] = {}
+
+            q['correct_answer'] = q.get('correct_answer', "Answer" if qtype != 'truefalse' else "True")
             q['explanation'] = q.get('explanation', "Based on the provided content.")
             q['question'] = q.get('question', f"Question {i+1}")
             q['question_number'] = start_question_number + i
@@ -342,14 +389,7 @@ class DocumentProcessingService:
             validated_questions.append(q)
 
         logger.info(f"✅ Batch generated {len(validated_questions)} questions starting from #{start_question_number}")
-        # 🔁 Fix MCQ correct_answer to be full sentence instead of just "A", "B", etc.
-        for q in validated_questions:
-            if q["type"] == "mcq":
-                answer_key = q.get("correct_answer")
-                if answer_key in q.get("options", {}):
-                    q["correct_answer"] = q["options"][answer_key]
         return validated_questions[:num_questions]
-
 
     def process_single_document(self, uploaded_file, quiz, user, page_range=None):
         """
@@ -384,8 +424,8 @@ class DocumentProcessingService:
 
             # Load file from Supabase bucket
             logger.info(f"Downloading file from Supabase bucket")
-            supabase_url = "https://jlrirnwhigtmognookoe.supabase.co"
-            supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpscmlybndoaWd0bW9nbm9va29lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc4MjA3MjcsImV4cCI6MjA2MzM5NjcyN30.sqDr7maHEmd2xKoH3JA5UoUddcQaWrj8Lab6AMdDLSk"
+            supabase_url = os.environ.get('SUPABASE_URL')
+            supabase_key = os.environ.get('SUPABASE_KEY')
             supabase = create_client(supabase_url, supabase_key)
             file_path = f"{quiz.quiz_id}/{uploaded_file.name}"
             file_data = supabase.storage.from_("fileupload").download(file_path)

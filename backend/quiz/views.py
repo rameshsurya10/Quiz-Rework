@@ -44,8 +44,8 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-supabase_url = "https://jlrirnwhigtmognookoe.supabase.co"
-supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpscmlybndoaWd0bW9nbm9va29lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc4MjA3MjcsImV4cCI6MjA2MzM5NjcyN30.sqDr7maHEmd2xKoH3JA5UoUddcQaWrj8Lab6AMdDLSk"
+supabase_url = os.environ.get('SUPABASE_URL')
+supabase_key = os.environ.get('SUPABASE_KEY')
 SUPABASE_BUCKET = "fileupload"  # Your bucket name
 
 def get_supabase_client():
@@ -149,11 +149,20 @@ class QuizListCreateView(generics.ListCreateAPIView):
                 teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
                 if not teacher:
                     return Response({"message": "Teacher record not found"}, status=404)
+
                 department_ids = teacher.department_ids or []
+                class_name = str(teacher.class_name).strip() if teacher.class_name else None
+                section = str(teacher.section).strip() if teacher.section else None
+
                 quiz_queryset = base_queryset.filter(
-                    Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
+                    department_id__in=department_ids
                 )
 
+                if class_name:
+                    quiz_queryset = quiz_queryset.filter(class_name__iexact=class_name)
+                if section:
+                    quiz_queryset = quiz_queryset.filter(section__iexact=section)
+     
             elif role == 'STUDENT':
                 students = Student.objects.filter(email=user.email, is_deleted=False).all()
                 if not students.exists():
@@ -394,105 +403,10 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return Quiz.objects.filter(is_deleted=False)
     
-    # def list(self, request, *args, **kwargs):
-    #     try:
-    #         user = self.request.user
-    #         now = timezone.now()
-    #         base_queryset = Quiz.objects.filter(is_deleted=False)
-    #         role = getattr(user, 'role', '').upper()
-
-    #         if role == 'ADMIN':
-    #             quiz_queryset = base_queryset
-
-    #         elif role == 'TEACHER':
-    #             teacher = Teacher.objects.filter(email=user.email, is_deleted=False).first()
-    #             if not teacher:
-    #                 return Response({"message": "Teacher record not found"}, status=404)
-    #             department_ids = teacher.department_ids or []
-    #             quiz_queryset = base_queryset.filter(
-    #                 Q(creator=user.get_full_name()) | Q(department_id__in=department_ids)
-    #             )
-
-    #         elif role == 'STUDENT':
-    #             student = Student.objects.filter(email=user.email, is_deleted=False).first()
-    #             if not student:
-    #                 return Response({"message": "Student record not found"}, status=404)
-    #             quiz_queryset = base_queryset.filter(department_id=student.department_id, is_published=True)
-
-    #         else:
-    #             return Response({"message": "Unauthorized role"}, status=403)
-
-    #         # Make sure all quiz dates are timezone-aware
-    #         def get_aware_date(quiz_date):
-    #             if quiz_date and timezone.is_naive(quiz_date):
-    #                 return timezone.make_aware(quiz_date)
-    #             return quiz_date
-
-    #         # Get current date without time for date comparison
-    #         current_date = now.date()
-
-    #         # Filter quizzes with proper date handling
-    #         current_quizzes = []
-    #         upcoming_quizzes = []
-    #         past_quizzes = []
-
-    #         for quiz in quiz_queryset:
-    #             quiz_date = get_aware_date(quiz.quiz_date)
-    #             if not quiz_date:
-    #                 continue
-
-    #             quiz_date_only = quiz_date.date()
-                
-    #             if quiz_date_only == current_date:
-    #                 current_quizzes.append(quiz)
-    #             elif quiz_date_only > current_date:
-    #                 upcoming_quizzes.append(quiz)
-    #             else:
-    #                 past_quizzes.append(quiz)
-
-    #         # Sort the lists
-    #         current_quizzes.sort(key=lambda x: x.quiz_date)
-    #         upcoming_quizzes.sort(key=lambda x: x.quiz_date)
-    #         past_quizzes.sort(key=lambda x: x.quiz_date, reverse=True)
-
-    #         # Serialize the quizzes
-    #         serializer = QuizSerializer()
-    #         response_data = {
-    #             "current_quizzes": [
-    #                 serializer.to_representation(quiz) 
-    #                 for quiz in current_quizzes
-    #             ],
-    #             "upcoming_quizzes": [
-    #                 serializer.to_representation(quiz)
-    #                 for quiz in upcoming_quizzes
-    #             ],
-    #             "past_quizzes": [
-    #                 serializer.to_representation(quiz)
-    #                 for quiz in past_quizzes
-    #             ]
-    #         }
-
-    #         return Response(response_data)
-
-    #     except Exception as e:
-    #         import logging
-    #         logger = logging.getLogger(__name__)
-    #         logger.error(f"Error in quiz listing: {str(e)}", exc_info=True)
-    #         return Response(
-    #             {"error": "An error occurred while fetching quizzes. Please try again."},
-    #             status=status.HTTP_500_INTERNAL_SERVER_ERROR
-    #         )
-    
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
             return QuizUpdateSerializer
         return QuizSerializer
-    
-    # def get_serializer_context(self):
-    #     """Add request to serializer context"""
-    #     context = super().get_serializer_context()
-    #     context['request'] = self.request
-    #     return context
     
     def retrieve(self, request, *args, **kwargs):
         """Retrieve quiz with limited questions and show extra ones in additional_question_list"""
@@ -519,55 +433,60 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         all_questions = Question.objects.filter(quiz=instance).order_by('question_id')
         max_questions = instance.no_of_questions or 0
 
-        def extract_individual_questions(q):
-            """Extracts individual questions whether stored as JSON string or normal."""
+        def extract_individual_questions(q, role):
+            """Extracts individual questions with role-based field visibility."""
             result = []
 
-            if q.question_type == 'mixed' or isinstance(q.question, str):
-                try:
+            def clean_question(item, question_id):
+                question_data = {
+                    "question_id": question_id,
+                    "question_type": item.get("type", "mcq"),
+                    "question": item.get("question", ""),
+                    "options": item.get("options", {}) if item.get("type") == "mcq" else {},
+                    "question_number": item.get("question_number", ""),
+                    "column_left_labels": item.get("column_left_labels", {}),
+                    "column_right_labels": item.get("column_right_labels", {}),
+                }
+
+                # Only show these fields if user is not a student
+                if role != "STUDENT":
+                    question_data["correct_answer"] = item.get("correct_answer", "")
+                    question_data["explanation"] = item.get("explanation", "")
+                    question_data["source_page"] = item.get("source_page", "")
+
+                return question_data
+
+            try:
+                if q.question_type == 'mixed' or isinstance(q.question, str):
                     parsed = json.loads(q.question)
 
                     if isinstance(parsed, list):
                         for item in parsed:
-                            result.append({
-                                "question_id": q.question_id,
-                                "question_type": item.get("type", "mcq"),
-                                "question": item.get("question", ""),
-                                "options": item.get("options", {}) if item.get("type") == "mcq" else {},
-                                "correct_answer": item.get("correct_answer", ""),
-                                "explanation": item.get("explanation", ""),
-                                "source_page": item.get("source_page", ""),
-                                "question_number": item.get("question_number", "")
-                            })
+                            result.append(clean_question(item, q.question_id))
                     elif isinstance(parsed, dict):
-                        item = parsed
-                        result.append({
-                            "question_id": q.question_id,
-                            "question_type": item.get("type", "mcq"),
-                            "question": item.get("question", ""),
-                            "options": item.get("options", {}) if item.get("type") == "mcq" else {},
-                            "correct_answer": item.get("correct_answer", ""),
-                            "explanation": item.get("explanation", ""),
-                            "source_page": item.get("source_page", "")
-                        })
-                except json.JSONDecodeError:
-                    pass  # Invalid JSON, skip
-            else:
-                result.append({
-                    "question_id": q.question_id,
-                    "question_type": q.question_type,
-                    "question": q.question,
-                    "options": q.options or {},
-                    "correct_answer": q.correct_answer or "",
-                    "explanation": q.explanation or "",
-                    "source_page": ""
-                })
+                        result.append(clean_question(parsed, q.question_id))
+                else:
+                    item = {
+                        "type": q.question_type,
+                        "question": q.question,
+                        "options": q.options or {},
+                        "correct_answer": q.correct_answer or "",
+                        "explanation": q.explanation or "",
+                        "source_page": "",
+                        "column_left_labels": {},
+                        "column_right_labels": {},
+                    }
+                    result.append(clean_question(item, q.question_id))
+
+            except json.JSONDecodeError:
+                pass  # Invalid JSON
+
             return result
 
-        # 🔄 Flatten all questions
+        # 🔄 Flatten all questions with role-based visibility
         flattened_questions = []
         for q in all_questions:
-            flattened_questions.extend(extract_individual_questions(q))
+            flattened_questions.extend(extract_individual_questions(q, role))
 
         # 📤 Split current vs additional
         current_questions = flattened_questions[:max_questions]
@@ -1341,11 +1260,16 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 3. Require deep analytical thinking
                 4. Focus on nuanced technical details
                 """
-        },      
+        },   
+        'match': {
+                'easy': "Use simple and well-known examples (like country-capital, fruit-color). Do not use uncommon items.",
+                'medium': "Use academic-level pairings, like authors and their books, or scientific terms and definitions.",
+                'hard': "Use technical or subject-specific match sets (e.g., algorithms and their time complexity, laws and discoverers)."
+                }, 
         'mixed': {
             'easy': """
                 Generate a mix of easy questions about code that:
-                1. Include multiple choice, fill-in-the-blank, true/false, and one-line questions
+                1. Include multiple choice, fill-in-the-blank, true/false, and one-line, match questions
                 2. Test basic understanding of concepts
                 3. Have clear and unambiguous answers
                 4. Are suitable for beginners
@@ -1353,7 +1277,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 """,
             'medium': """
                 Generate a mix of medium difficulty questions about code that:
-                1. Include multiple choice, fill-in-the-blank, true/false, and one-line questions
+                1. Include multiple choice, fill-in-the-blank, true/false, and one-line, match questions
                 2. Test intermediate understanding of concepts
                 3. May include some complex scenarios
                 4. Require some analytical thinking
@@ -1361,7 +1285,7 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
                 """,
             'hard': """
                 Generate a mix of hard questions about code that:
-                1. Include multiple choice, fill-in-the-blank, true/false, and one-line questions
+                1. Include multiple choice, fill-in-the-blank, true/false, and one-line, match questions
                 2. Test advanced understanding of concepts
                 3. Include complex scenarios and edge cases
                 4. Require deep analytical thinking
@@ -1410,324 +1334,6 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
             # Use the centralized utility
             return extract_text_from_file(file_obj)
 
-    def generate_questions_from_content(self, content, question_type, quiz_type, num_questions):
-        try:
-            # Initialize OpenAI client
-            client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            
-            # Define format based on question type
-            format_examples = {
-                'multiple_choice': {
-                    "question_id": 1,
-                    "question": "What is the purpose of the CustomPagination class.",
-                    "A": "To define the structure of API responses",
-                    "B": "To customize the pagination behavior for quizzes",
-                    "C": "To handle user authentication in API requests",
-                    "D": "To validate input data for quiz creation",
-                    "answer": "B",
-                    "explanation": "The CustomPagination class is created to customize the pagination behavior specifically for quizzes, setting the page size and other parameters for paginated responses."
-                },
-                'fill_in_blank': {
-                    "question_id": 1,
-                    "question": "In Django REST Framework, to serialize multiple objects you use: serializer = QuizSerializer([BLANK])",
-                    "correct_answer": "page, many=True",
-                    "explanation": "The correct answer is 'page, many=True' because when serializing multiple objects in DRF, we need to specify 'many=True' to indicate we're serializing a collection of objects."
-                },
-                'true_false': {
-                    "question_id": 1,
-                    "question": "The CustomPagination class is used to handle user authentication in Django REST Framework.",
-                    "answer": "False",
-                    "explanation": "False. The CustomPagination class is used to customize how quiz results are paginated, not for authentication. It controls the number of items per page and maximum page size."
-                },
-                'one_line': {
-                    "question_id": 1,
-                    "question": "What is the main purpose of Django REST Framework's serializers?",
-                    "correct_answer": "To convert complex data types to Python data types that can be easily rendered into JSON",
-                    "explanation": "Serializers in DRF are used to convert complex data types (like Django models) into Python data types that can be easily converted to JSON, and vice versa."
-                }
-            }
-            
-            # Define all possible question types and difficulties
-            all_question_types = ['multiple_choice', 'fill_in_blank', 'true_false', 'one_line']
-            all_difficulties = ['easy', 'medium', 'hard']
-            
-            # Initialize list to store all questions
-            all_questions = []
-            max_retries = 3  # Maximum number of retries for generating questions
-            
-            def generate_single_question(q_type, difficulty):
-                """Helper function to generate a single question with retries"""
-                for attempt in range(max_retries):
-                    try:
-                        extra_guidelines = ""
-                        if q_type == "fill_in_blank":
-                            extra_guidelines += "The correct answer must be 1 or 2 words only. Do not generate full sentence answers.\n"
-                        elif q_type == "true_false":
-                            extra_guidelines += (
-                                    "The correct_answer must be strictly 'True' or 'False'. "
-                                    "Do NOT write 'Not specified', 'Cannot determine', 'Unclear', or similar phrases. "
-                                    "If the information is missing or ambiguous, skip the question.\n"
-                                )
-                        prompt = f"""Generate 1 {q_type} question based on the following code content.
-                        
-                        Code Content:
-                        {content[:2000]}
-                        
-                        Question Type: {q_type}
-                        Number of Questions: 1
-                        Quiz Difficulty: {difficulty}
-                        
-                        Guidelines:
-                        {self.QUESTION_TYPE_PROMPTS[q_type][difficulty]}
-                        
-                        Use this format:
-                        {json.dumps(format_examples[q_type], indent=2)}
-                        
-                        Your response must be a valid JSON object with a 'questions' array containing exactly 1 question.
-                        The question should be at {difficulty} difficulty level.
-                        """
-                        
-                        response = client.chat.completions.create(
-                            model="gpt-4o",
-                            messages=[
-                                {"role": "system", "content": f"You are a professional quiz question generator. Generate exactly 1 {q_type} question at {difficulty} difficulty level."},
-                                {"role": "user", "content": prompt}
-                            ],
-                            temperature=0.7,
-                            max_tokens=2000
-                        )
-                        
-                        try:
-                            response_data = json.loads(response.choices[0].message.content.strip())
-                            questions = response_data.get('questions', []) if isinstance(response_data, dict) else response_data
-                            
-                            if not questions:
-                                continue
-                                
-                            # Add difficulty level and question type to each question
-                            for question in questions:
-                                question['difficulty'] = difficulty
-                                question['question_type'] = q_type
-                            
-                            return questions
-                        except json.JSONDecodeError:
-                            import re
-                            json_match = re.search(r'\[.*\]', response.choices[0].message.content.strip(), re.DOTALL)
-                            if json_match:
-                                try:
-                                    questions = json.loads(json_match.group())
-                                    if not questions:
-                                        continue
-                                    # Add difficulty level and question type to each question
-                                    for question in questions:
-                                        question['difficulty'] = difficulty
-                                        question['question_type'] = q_type
-                                    return questions
-                                except json.JSONDecodeError:
-                                    cleaned_text = re.sub(r'[\n\r\t]', '', json_match.group())
-                                    questions = json.loads(cleaned_text)
-                                    if not questions:
-                                        continue
-                                    # Add difficulty level and question type to each question
-                                    for question in questions:
-                                        question['difficulty'] = difficulty
-                                        question['question_type'] = q_type
-                                    return questions
-                    except Exception as e:
-                        if attempt == max_retries - 1:
-                            raise e
-                        continue
-                return None
-            
-            # If quiz type is mixed, we need to distribute questions across difficulties
-            if quiz_type == 'mixed':
-                # Calculate base number of questions per difficulty
-                base_questions = num_questions // 3
-                remaining = num_questions % 3
-                
-                # Create a list of difficulties with their target counts
-                difficulty_counts = {
-                    'easy': base_questions,
-                    'medium': base_questions,
-                    'hard': base_questions
-                }
-                
-                # Distribute remaining questions
-                for i in range(remaining):
-                    difficulty = all_difficulties[i]
-                    difficulty_counts[difficulty] += 1
-                
-                # Generate questions for each difficulty level
-                for difficulty, count in difficulty_counts.items():
-                    questions_generated = 0
-                    while questions_generated < count:
-                        # If question_type is specified, use that type for all questions
-                        q_type = question_type if question_type != 'mixed' else random.choice(all_question_types)
-                        questions = generate_single_question(q_type, difficulty)
-                        if questions:
-                            all_questions.extend(questions)
-                            questions_generated += len(questions)
-            else:
-                # If quiz type is not mixed, generate all questions at the specified difficulty
-                while len(all_questions) < num_questions:
-                    # If question_type is specified, use that type for all questions
-                    q_type = question_type if question_type != 'mixed' else random.choice(all_question_types)
-                    questions = generate_single_question(q_type, quiz_type)
-                    if questions:
-                        all_questions.extend(questions)
-            
-            # Shuffle the questions to mix difficulty levels
-            random.shuffle(all_questions)
-            
-            # Ensure we have exactly the requested number of questions
-            if len(all_questions) > num_questions:
-                all_questions = all_questions[:num_questions]
-            
-            # Validate questions
-            validated_questions = []
-            
-            for question in all_questions:
-                if not question or not isinstance(question, dict):
-                    continue
-
-                # Common fields for all types
-                if 'question_id' not in question or 'question' not in question:
-                    continue
-
-                # Get the actual question type for this question
-                actual_question_type = question.get('question_type', question_type)
-
-                # Type-specific validation
-                if actual_question_type == 'multiple_choice':
-                    required_fields = ['A', 'B', 'C', 'D', 'answer']
-                    if not all(field in question for field in required_fields):
-                        continue
-                    if question['answer'] not in ['A', 'B', 'C', 'D']:
-                        continue
-
-                elif actual_question_type == 'fill_in_blank':
-                    if '[BLANK]' not in question['question']:
-                        continue
-                    if 'correct_answer' not in question:
-                        continue
-                    answer_words = str(question['correct_answer']).strip().split()
-                    if len(answer_words) > 2:
-                        continue    
-
-                elif actual_question_type == 'true_false':
-                    if 'answer' not in question:
-                        continue
-                    answer = str(question['answer']).strip().capitalize()
-                    if answer not in ['True', 'False']:
-                        continue
-                    question['answer'] = answer
-
-                elif actual_question_type == 'one_line':
-                    if 'correct_answer' not in question:
-                        continue
-
-                # All types need explanation
-                if 'explanation' not in question:
-                    continue
-
-                # Validate question_id is numeric
-                if not isinstance(question['question_id'], int):
-                    question['question_id'] = len(validated_questions) + 1
-
-                validated_questions.append(question)
-
-            if not validated_questions:
-                raise ValueError("No valid questions found in response")
-
-            # If we don't have enough validated questions, try generating more
-            while len(validated_questions) < num_questions:
-                # Try generating one more question
-                if quiz_type == 'mixed':
-                    # Count current questions by difficulty
-                    difficulty_counts = {'easy': 0, 'medium': 0, 'hard': 0}
-                    for q in validated_questions:
-                        difficulty_counts[q['difficulty']] += 1
-                    
-                    # Find the difficulty with the least questions
-                    min_difficulty = min(difficulty_counts.items(), key=lambda x: x[1])[0]
-                    difficulty = min_difficulty
-                else:
-                    difficulty = quiz_type
-                
-                # If question_type is specified, use that type for all questions
-                q_type = question_type if question_type != 'mixed' else random.choice(all_question_types)
-                questions = generate_single_question(q_type, difficulty)
-                
-                if questions:
-                    for question in questions:
-                        # Validate the new question
-                        if not question or not isinstance(question, dict):
-                            continue
-                        if 'question_id' not in question or 'question' not in question:
-                            continue
-                        
-                        actual_question_type = question.get('question_type', question_type)
-                        
-                        # Type-specific validation
-                        if actual_question_type == 'multiple_choice':
-                            required_fields = ['A', 'B', 'C', 'D', 'answer']
-                            if not all(field in question for field in required_fields):
-                                continue
-                            if question['answer'] not in ['A', 'B', 'C', 'D']:
-                                continue
-                        elif actual_question_type == 'fill_in_blank':
-                            if '[BLANK]' not in question['question']:
-                                continue
-                            if 'correct_answer' not in question:
-                                continue
-                        elif actual_question_type == 'true_false':
-                            answer = question.get('answer') or question.get('correct_answer', '')
-                            answer = str(answer).strip().lower()
-                            explanation_text = str(question.get('explanation', '')).lower()
-
-                            # Reject if vague answers
-                            vague_phrases = ['not specified', 'cannot determine', 'not provided', 'unclear', 'unknown', 'not mentioned']
-                            if 'not' in answer or any(phrase in answer for phrase in vague_phrases) or any(phrase in explanation_text for phrase in vague_phrases):
-                                continue
-                            
-                            if answer in ['true', 'false']:
-                                question['correct_answer'] = answer.capitalize()
-                            elif 'true' in explanation_text:
-                                question['correct_answer'] = 'True'
-                            elif 'false' in explanation_text:
-                                question['correct_answer'] = 'False'
-                            else:
-                                continue  # skip if we still don't have a clear answer
-
-                            # Remove "?" from the end of true/false questions
-                            question_text = question['question'].strip()
-                            if question_text.endswith('?'):
-                                question['question'] = question_text.rstrip('?').strip()
-
-                            question['answer'] = question['correct_answer']
-
-                        elif actual_question_type == 'one_line':
-                            if 'correct_answer' not in question:
-                                continue
-                        
-                        if 'explanation' not in question:
-                            continue
-                        
-                        question['question_id'] = len(validated_questions) + 1
-                        validated_questions.append(question)
-                        
-                        if len(validated_questions) >= num_questions:
-                            break
-
-            # Ensure question IDs are sequential
-            for i, question in enumerate(validated_questions, 1):
-                question['question_id'] = i
-
-            return validated_questions
-
-        except Exception as e:
-            raise Exception(f"Error generating questions: {str(e)}")
-
     def get(self, request, quiz_id, format=None):
         """
         Generate questions from the most recently uploaded file using quiz settings
@@ -1767,8 +1373,9 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
             # Get file content
             content = self.get_file_content(file_info)
             
-            # Generate questions using quiz settings
-            questions = self.generate_questions_from_content(content, question_type, quiz_type, num_questions)
+            # Generate questions using the document processing service
+            service = DocumentProcessingService()
+            questions = service.generate_questions_from_text(content, question_type, quiz_type, num_questions)
             
             # Get file info
             file_info = quiz.uploadedfiles[-1]  # Get the last uploaded file
@@ -1833,8 +1440,9 @@ class QuizQuestionGenerateFromExistingFileView(APIView):
             # Get file content
             content = self.get_file_content(file_info)
             
-            # Generate questions
-            questions = self.generate_questions_from_content(content, question_type, quiz_type, num_questions)
+            # Generate questions using the document processing service
+            service = DocumentProcessingService()
+            questions = service.generate_questions_from_text(content, question_type, quiz_type, num_questions)
             
             return Response({
                 "quiz_id": quiz.quiz_id,
@@ -1888,6 +1496,18 @@ class QuizQuestionGenerateByTypeView(APIView):
         'fill_in_blank': "Generate a fill in the blank question with the correct answer.",
         'short_answer': "Generate a short answer question with a detailed answer.",
         'essay': "Generate an essay question that requires detailed explanation.",
+        'match': """Generate a 'match the following' question.
+        Requirements:
+        - Return ONLY a valid JSON list of 1 object.
+        - Use 'question' for the question text.
+        - Use 'column_left_labels' for the first column (e.g., {"A": "...", "B": "..."}).
+        - Use 'column_right_labels' for the second column (e.g., {"1": "...", "2": "..."}).
+        - Use 'correct_answer' as a dictionary that maps terms to their matched descriptions.
+        - Use 'options': {} exactly.
+        - Include 'explanation', 'source_page', and 'question_number' fields.
+        Respond only with JSON.
+        """
+
     }
 
     def get_quiz(self, quiz_id):
@@ -2024,7 +1644,16 @@ class QuizQuestionsView(APIView):
                                 # Ensure fill questions have [BLANK] in the question
                                 if q.get('type') == 'fill' and '[BLANK]' not in q.get('question', ''):
                                     q['question'] = q.get('question', '') + " [BLANK]" 
-                        
+                                
+                                # ✅ Handle Match the Following
+                                if q.get('type') == 'match':
+                                    if 'column_left_labels' not in q and 'correct_answer' in q:
+                                        q['column_left_labels'] = {k: f"Item {k}" for k in q['correct_answer'].keys()}
+                                    if 'column_right_labels' not in q and 'correct_answer' in q:
+                                        q['column_right_labels'] = {v: f"Item {v}" for v in q['correct_answer'].values()}
+                                    if 'options' not in q:
+                                        q['options'] = {}
+                                        
                         # Return the parsed and validated JSON
                         return Response({
                             "quiz_id": quiz_id,
@@ -2105,6 +1734,10 @@ class QuizQuestionsView(APIView):
                             return Response({
                                 "error": f"MCQ question {i+1} is missing 'options'"
                             }, status=status.HTTP_400_BAD_REQUEST)
+
+                        if q.get("type") == "match":
+                            if not all(k in q for k in ["column_left_labels", "column_right_labels", "correct_answer"]):
+                                return Response({"error": "Invalid match question structure."}, status=400)
                 
                 # Store the questions as a JSON string
                 question = Question.objects.create(
