@@ -33,7 +33,14 @@ import {
   Divider,
   Avatar,
   CircularProgress,
-  Backdrop
+  Backdrop,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   NavigateNext as NextIcon,
@@ -51,11 +58,14 @@ import {
   Lightbulb as LightbulbIcon,
   Schedule as ScheduleIcon,
   Assignment as AssignmentIcon,
-  HelpOutline as HelpOutlineIcon
+  ArrowForward as ArrowForwardIcon
 } from '@mui/icons-material';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { quizApi } from '../../services/api';
+import { quizService } from '../../services/quizService';
+import MatchTheFollowingQuestion from './MatchTheFollowingQuestion';
 
 // Persistent Quiz Session Manager
 class QuizSessionManager {
@@ -209,6 +219,7 @@ const StudentQuizView = () => {
   const theme = useTheme();
   const submissionStarted = useRef(false);
   const securityViolationTimeout = useRef(null);
+  const lastMatchedRef = useRef({});
   
   // Initialize session manager
   const [sessionManager] = useState(() => new QuizSessionManager(quizId));
@@ -235,8 +246,25 @@ const StudentQuizView = () => {
   const [quizSession, setQuizSession] = useState(null);
   const [wasRefreshed, setWasRefreshed] = useState(false);
 
+  // DnD item types
+  const ITEM_TYPE = 'MATCH_LEFT';
+
+  // State for drag animation
+  const [draggingLeft, setDraggingLeft] = useState(null);
+  const [hoveredRight, setHoveredRight] = useState(null);
+
   const getUnansweredQuestions = useCallback(() => {
-    return questions.filter(q => !answers[q.uniqueId] || answers[q.uniqueId].trim() === '');
+    return questions.filter(q => {
+      const ans = answers[q.uniqueId];
+      if (typeof ans === 'string') {
+        return ans.trim() === '';
+      } else if (typeof ans === 'object' && ans !== null) {
+        // For match questions, consider unanswered if no matches
+        return Object.keys(ans).length === 0;
+      } else {
+        return !ans;
+      }
+    });
   }, [questions, answers]);
 
   const showAlert = useCallback((message, severity = 'warning', duration = 4000) => {
@@ -775,7 +803,25 @@ const StudentQuizView = () => {
   };
 
   const getAnsweredQuestionsCount = () => {
-    return Object.keys(answers).filter(key => answers[key] && answers[key].trim() !== '').length;
+    return Object.keys(answers).filter(key => {
+      const ans = answers[key];
+      if (typeof ans === 'string') {
+        return ans.trim() !== '';
+      } else if (typeof ans === 'object' && ans !== null) {
+        return Object.keys(ans).length > 0;
+      } else {
+        return !!ans;
+      }
+    }).length;
+  };
+
+  // Handler for making a match
+  const handleMatch = (leftVal, rightVal) => {
+    const updated = { ...lastMatchedRef.current, [leftVal]: rightVal };
+    lastMatchedRef.current = updated; // Update the ref
+    handleAnswerChange(questions[currentQuestion].uniqueId, updated);
+    setDraggingLeft(null);
+    setHoveredRight(null);
   };
 
   // Enhanced input component for different question types
@@ -845,37 +891,41 @@ const StudentQuizView = () => {
               value={answers[question.uniqueId] || ''}
               onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
             >
-              {mcqOptions.map((option, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <FormControlLabel
-                    value={option}
-                    control={<Radio sx={{ color: theme.palette.primary.main }} />}
-                    label={option}
-                    sx={{
-                      color: 'black',
-                      margin: 1,
-                      padding: 2,
-                      borderRadius: 2,
-                      backgroundColor: answers[question.uniqueId] === option 
-                        ? alpha(theme.palette.primary.main, 0.1)
-                        : alpha('#fff', 0.7),
-                      border: `2px solid ${answers[question.uniqueId] === option 
-                        ? theme.palette.primary.main 
-                        : 'transparent'}`,
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                        transform: 'translateX(4px)',
-                      }
-                    }}
-                  />
-                </motion.div>
-              ))}
+              {mcqOptions.map((option, index) => {
+                // If option is an object, use option.option_text
+                const displayOption = typeof option === 'object' && option !== null ? option.option_text : option;
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <FormControlLabel
+                      value={displayOption}
+                      control={<Radio sx={{ color: theme.palette.primary.main }} />}
+                      label={displayOption}
+                      sx={{
+                        color: 'black',
+                        margin: 1,
+                        padding: 2,
+                        borderRadius: 2,
+                        backgroundColor: answers[question.uniqueId] === displayOption 
+                          ? alpha(theme.palette.primary.main, 0.1)
+                          : alpha('#fff', 0.7),
+                        border: `2px solid ${answers[question.uniqueId] === displayOption 
+                          ? theme.palette.primary.main 
+                          : 'transparent'}`,
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                          transform: 'translateX(4px)',
+                        }
+                      }}
+                    />
+                  </motion.div>
+                );
+              })}
             </RadioGroup>
           </FormControl>
         );
@@ -975,42 +1025,62 @@ const StudentQuizView = () => {
             value={answers[question.uniqueId] || ''}
             onChange={(e) => handleAnswerChange(question.uniqueId, e.target.value)}
           >
-            {options.map((option, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <FormControlLabel
-                  value={option}
-                  control={<Radio sx={{ color: theme.palette.primary.main }} />}
-                  label={option}
-                  sx={{
-                    color: 'black',
-                    margin: 1,
-                    padding: 2,
-                    borderRadius: 2,
-                    backgroundColor: answers[question.uniqueId] === option 
-                      ? alpha(theme.palette.primary.main, 0.1)
-                      : alpha('#fff', 0.7),
-                    border: `2px solid ${answers[question.uniqueId] === option 
-                      ? theme.palette.primary.main 
-                      : 'transparent'}`,
-                    transition: 'all 0.3s ease',
-                    '&:hover': {
-                      backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                      transform: 'translateX(4px)',
-                    }
-                  }}
-                />
-              </motion.div>
-            ))}
+            {options.map((option, index) => {
+              const displayOption = typeof option === 'object' && option !== null ? option.option_text : option;
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                >
+                  <FormControlLabel
+                    value={displayOption}
+                    control={<Radio sx={{ color: theme.palette.primary.main }} />}
+                    label={displayOption}
+                    sx={{
+                      color: 'black',
+                      margin: 1,
+                      padding: 2,
+                      borderRadius: 2,
+                      backgroundColor: answers[question.uniqueId] === displayOption 
+                        ? alpha(theme.palette.primary.main, 0.1)
+                        : alpha('#fff', 0.7),
+                      border: `2px solid ${answers[question.uniqueId] === displayOption 
+                        ? theme.palette.primary.main 
+                        : 'transparent'}`,
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                        transform: 'translateX(4px)',
+                      }
+                    }}
+                  />
+                </motion.div>
+              );
+            })}
           </RadioGroup>
         </FormControl>
       );
     }
     
+    // Match the following questions
+    if (questionType.includes('match')) {
+      const leftLabels = question.column_left_labels || {};
+      const rightLabels = question.column_right_labels || {};
+      const leftItems = Object.entries(leftLabels).map(([id, label]) => ({ id, label, image: undefined }));
+      const rightItems = Object.entries(rightLabels).map(([id, label]) => ({ id, label, image: undefined }));
+      const currentMatch = answers[question.uniqueId] || {};
+      return (
+        <MatchTheFollowingQuestion
+          leftItems={leftItems}
+          rightItems={rightItems}
+          initialMatches={currentMatch}
+          onMatch={(updatedMatches) => handleAnswerChange(question.uniqueId, updatedMatches)}
+        />
+      );
+    }
+
     // Default text area for long answers
     return (
       <TextField
