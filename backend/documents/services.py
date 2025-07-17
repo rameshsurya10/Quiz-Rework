@@ -12,11 +12,9 @@ import json
 from supabase import create_client, Client
 import random
 import os
-
-
+openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 logger = logging.getLogger(__name__)
-
 
 class DocumentProcessingService:
     """Service for processing uploaded documents"""
@@ -142,7 +140,7 @@ class DocumentProcessingService:
 
         return shuffled_column_right, new_correct_answer
 
-    def generate_questions_from_text(self, text, question_type, quiz_type, num_questions):
+    def generate_questions_from_text(self, text, question_type, quiz_type, num_questions, existing_questions: set = None):
         import math
         import logging
         import re
@@ -152,88 +150,105 @@ class DocumentProcessingService:
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         logger = logging.getLogger(__name__)
 
-        # --- 1. Extract pages from text ---
-        text_sections = []
-        current_section = []
-        current_page = None
-
-        for line in text.split('\n'):
-            if line.startswith('==================== PAGE '):
-                if current_section and current_page:
-                    text_sections.append((current_page, '\n'.join(current_section)))
-                current_section = []
-                match = re.search(r'PAGE (\d+)', line)
-                if match:
-                    current_page = match.group(1)
-            elif line.startswith('==================== END OF PAGE'):
-                continue
-            else:
-                current_section.append(line)
-
-        if current_section and current_page:
-            text_sections.append((current_page, '\n'.join(current_section)))
-
-        # --- 2. Sample diverse pages randomly ---
-        num_samples = min(5, len(text_sections))
-        if len(text_sections) <= num_samples:
-            sampled_sections = text_sections
-        else:
-            # 🔁 Randomly shuffle and pick diverse pages
-            random.seed()  # system time
-            indices = random.sample(range(len(text_sections)), num_samples)
-            sampled_sections = [text_sections[i] for i in sorted(indices)]
-
-        logger.info(f"📖 Sampled page sections: {[s[0] for s in sampled_sections]}")
-
-        # --- 3. Distribute questions evenly ---
-        per_section = num_questions // len(sampled_sections)
-        remaining = num_questions % len(sampled_sections)
+        if existing_questions is None:
+            existing_questions = set()
 
         all_questions = []
-        question_number = 1
-        seen_questions = set()
+        start_question_number = 1
 
-        def is_duplicate(text):
-            clean = text.lower().strip()
-            return any(clean in existing or existing in clean for existing in seen_questions)
-
-        # --- 4. Generate and deduplicate ---
-        for idx, (page_num, content) in enumerate(sampled_sections):
-            q_count = per_section + (1 if idx < remaining else 0)
-            if not content.strip():
-                continue
-
-            logger.info(f"✏️ Generating {q_count} questions from page {page_num}")
-            try:
-                questions = self._generate_question_batch(
-                    client=client,
-                    text=f"Content from page {page_num}:\n{content}",
-                    question_type=question_type,
-                    quiz_type=quiz_type,
-                    num_questions=q_count,
-                    start_question_number=question_number,
-                    override_source_page=page_num
+        if quiz_type == 'mixed' or question_type == 'mixed':
+            question_types_to_generate = self.QUESTION_TYPES_ROTATION
+            num_question_types = len(question_types_to_generate)
+            
+            for i in range(num_questions):
+                q_type = question_types_to_generate[i % num_question_types]
+                batch = self._generate_question_batch(
+                    client,
+                    text,
+                    q_type, 
+                    quiz_type, # This is the difficulty dict
+                    1, # Generate 1 question at a time
+                    existing_questions=existing_questions,
+                    start_question_number=start_question_number + i
                 )
+                if batch:
+                    all_questions.extend(batch)
+        else:
+            all_questions = self._generate_question_batch(
+                client, 
+                text, 
+                question_type, 
+                quiz_type, 
+                num_questions,
+                existing_questions=existing_questions,
+                start_question_number=start_question_number
+            )
 
-                unique_batch = []
-                for q in questions:
-                    question_text = q.get("question", "")
-                    if not is_duplicate(question_text):
-                        seen_questions.add(question_text.lower().strip())
-                        q["question_number"] = question_number
-                        unique_batch.append(q)
-                        question_number += 1
-                    else:
-                        logger.info(f"🚫 Duplicate skipped: {question_text}")
+        return all_questions
 
-                all_questions.extend(unique_batch)
+    QUESTION_TYPES_ROTATION = ["mcq", "fill", "truefalse", "oneline", "match"]
 
-            except Exception as e:
-                logger.error(f"❌ Error generating for page {page_num}: {e}")
+    @staticmethod
+    def get_prompt_for_question_type_and_difficulty(content, question_type, difficulty, language):
+        # This is now a simple, static method for generating a prompt string.
+        # All complex logic has been moved to other methods.
+        return f"""Generate one {question_type} question in {language} from the following content with {difficulty} difficulty:
 
-        return all_questions[:num_questions]
+        Content:
+        {content}
 
-    def _generate_question_batch(self, client, text, question_type, quiz_type, num_questions, start_question_number=1, override_source_page=None):
+        Respond in JSON format:
+        {{
+        "question_type": "{question_type}",
+        "question": "...",
+        "options": {{}},
+        "correct_answer": "...",
+        "explanation": "...",
+        "question_number": 1
+        }}"""
+
+    @staticmethod
+    def _detect_language(text: str) -> str:
+        """Detects the language of a given text snippet."""
+        try:
+            from langdetect import detect
+            lang_code = detect(text)
+            return "Tamil" if lang_code == "ta" else "English"
+        except Exception:
+            return "English"
+
+    @staticmethod
+    def _split_text_by_page(text: str) -> list[tuple[str, str]]:
+        """Splits the extracted text into a list of (page_number, page_content) tuples."""
+        pages = []
+        # Regex to find page markers and capture the page number and the content until the next marker
+        pattern = re.compile(r"==================== PAGE (\d+) ====================(.*?)(?=(?:==================== PAGE|==================== END OF DOCUMENT))", re.DOTALL)
+        matches = pattern.finditer(text)
+        for match in matches:
+            page_number = match.group(1).strip()
+            page_content = match.group(2).strip()
+            if page_content:
+                pages.append((page_number, page_content))
+        return pages
+
+    @staticmethod
+    def _is_valid_question(q: dict) -> bool:
+        """Validates the structure and content of a generated question dictionary."""
+        if not isinstance(q, dict):
+            return False
+        if "question" not in q or not q["question"]:
+            return False
+        if q.get("question_type") == "truefalse":
+            return q.get("correct_answer") in ["True", "False"]
+        if q.get("question_type") == "match":
+            return (
+                isinstance(q.get("column_left_labels"), dict) and
+                isinstance(q.get("column_right_labels"), dict) and
+                isinstance(q.get("correct_answer"), dict)
+            )
+        return True
+
+    def _generate_question_batch(self, client, text, question_type, quiz_type, num_questions, existing_questions: set, start_question_number=1, override_source_page=None):
         import re
         import json
         import logging
@@ -284,28 +299,32 @@ class DocumentProcessingService:
             sections_text = sections_text[:max_content_length] + "\n[Content truncated]"
             logger.warning(f"Content truncated to {max_content_length} characters")
 
-        # Build prompt
-        if question_type == 'mixed':
-            type_instruction = "a mix of 'mcq', 'fill', 'truefalse', 'oneline', and 'match'"
-        else:
-            type_instruction = f"only questions of type '{question_type}'"
+        # Determine difficulty from the quiz_type dictionary, defaulting to 'easy'
+        difficulty = next(iter(quiz_type)) if isinstance(quiz_type, dict) and quiz_type else 'easy'
 
+        # Build prompt for a single question
         base_prompt = f"""
-        You are an expert quiz generator. Based on the following content, generate exactly {num_questions} questions.
-        Difficulty: {quiz_type}. Types: {type_instruction}.
+        You are an expert quiz generator. Based on the following content, generate exactly ONE question.
+        The question type must be: '{question_type}'.
+        The difficulty must be: '{difficulty}'.
 
         Content:
         {sections_text}
 
-        Each question must include:
+        The question must include:
         - "question", "type", "options", "correct_answer", "explanation", "question_number", "source_page"
 
         Specific formatting per question type:
         🔹 For 'mcq':
         - "options" must be a dict with 4 choices (e.g., {{"A": "...", "B": "...", "C": "...", "D": "..."}})
-        - "correct_answer" must be one of the values from options.
+        - "correct_answer" must be the full text of the correct option, not just the letter (e.g., "Magnesium oxide").
 
-        🔹 For 'fill', 'truefalse', 'oneline':
+        🔹 For 'fill':
+        - The question text MUST include a blank space for the answer, like '_____________'.
+        - "options" must be {{}}
+        - "correct_answer" is the string that fills the blank.
+ 
+        🔹 For 'truefalse', 'oneline':
         - "options" must be {{}}
         - "correct_answer" is a string answer.
 
@@ -317,9 +336,9 @@ class DocumentProcessingService:
         - "correct_answer": dict mapping left label values to right label values (e.g., {{"Oxygen": "Gas"}})
         - "explanation" should explain how the matches are related.
 
-        Format the output strictly as:
+        Format the output strictly as a single JSON object inside a 'questions' list:
         {{
-            "questions": [ {{...}}, {{...}}, ... ]
+            "questions": [ {{...}} ]
         }}
         """
 
@@ -345,51 +364,28 @@ class DocumentProcessingService:
 
         try:
             parsed = json.loads(content)
+            questions = parsed.get('questions', [])
+            final_questions = []
+            for i, q in enumerate(questions):
+                question_text = q.get("question", "").strip()
+                if question_text in existing_questions:
+                    logger.warning(f"Skipping duplicate question: {question_text}")
+                    continue
+
+                if self._is_valid_question(q):
+                    q['question_number'] = start_question_number + i
+                    if 'source_page' not in q or not q['source_page']:
+                        q['source_page'] = primary_page
+                    final_questions.append(q)
+                    existing_questions.add(question_text)
+                else:
+                    logger.warning(f"Skipping invalid question from batch: {q}")
+        
+            return final_questions
+
         except json.JSONDecodeError:
             logger.error("Failed to parse JSON:\n" + content)
-            raise
-
-        questions = parsed.get('questions', [])
-        validated_questions = []
-        type_cycle = ['mcq', 'fill', 'truefalse', 'oneline', 'match']
-
-        for i, q in enumerate(questions):
-            qtype = q.get('type') or (type_cycle[i % len(type_cycle)] if question_type == 'mixed' else question_type)
-
-            # Force correct type for match if it includes match fields
-            if all(k in q for k in ['column_left_labels', 'column_right_labels', 'correct_answer']):
-                qtype = 'match'
-            q['type'] = qtype
-
-            if qtype == 'mcq':
-                q['options'] = q.get('options', {})
-                if not isinstance(q['options'], dict) or not q['options']:
-                    q['options'] = {"A": "Option A", "B": "Option B", "C": "Option C", "D": "Option D"}
-                if q.get('correct_answer') not in q['options'].values():
-                    q['correct_answer'] = list(q['options'].values())[0]
-
-            elif qtype in ['fill', 'truefalse', 'oneline']:
-                q['options'] = {}
-
-            elif qtype == 'match':
-                if not isinstance(q.get("column_left_labels"), dict) or not isinstance(q.get("column_right_labels"), dict):
-                    logger.warning(f"⚠️ Invalid match labels in question #{start_question_number + i}")
-                    continue
-                if not isinstance(q.get("correct_answer"), dict):
-                    logger.warning(f"⚠️ Invalid match correct_answer in question #{start_question_number + i}")
-                    continue
-                q['options'] = {}
-
-            q['correct_answer'] = q.get('correct_answer', "Answer" if qtype != 'truefalse' else "True")
-            q['explanation'] = q.get('explanation', "Based on the provided content.")
-            q['question'] = q.get('question', f"Question {i+1}")
-            q['question_number'] = start_question_number + i
-            q['source_page'] = q.get('source_page', str(primary_page))
-
-            validated_questions.append(q)
-
-        logger.info(f"✅ Batch generated {len(validated_questions)} questions starting from #{start_question_number}")
-        return validated_questions[:num_questions]
+            return []
 
     def process_single_document(self, uploaded_file, quiz, user, page_range=None):
         """
@@ -498,39 +494,62 @@ class DocumentProcessingService:
             document.save()
             logger.info(f"Successfully extracted {len(extracted_text)} characters of text from specified pages")
 
-            # Step 3: Generate questions from the extracted text
+            # Step 3: Generate questions from the extracted text, one per page
             target_questions = quiz.no_of_questions or 5
-            total_questions_to_generate = target_questions + 5
+            logger.info(f"Targeting {target_questions} questions for quiz {quiz.quiz_id}")
 
-            logger.info(f"Generating {total_questions_to_generate} questions for quiz {quiz.quiz_id}")
+            pages = self._split_text_by_page(extracted_text)
+            if not pages:
+                logger.error("Could not split extracted text into pages.")
+                document.processing_status = 'failed'
+                document.processing_error = 'Failed to parse pages from extracted text.'
+                document.save()
+                return {"success": False, "error": "Failed to parse pages from text."}
 
-            # 🔁 Scale quiz_type (difficulty breakdown) if it's a dict
-            if isinstance(quiz.quiz_type, dict):
-                original_total = sum(quiz.quiz_type.values())
-                scaled_quiz_type = {}
+            logger.info(f"Split text into {len(pages)} pages. Randomizing for question generation.")
+            random.shuffle(pages)
 
-                for level, count in quiz.quiz_type.items():
-                    scaled = round((count / original_total) * total_questions_to_generate)
-                    scaled_quiz_type[level] = scaled
+            questions = []
+            existing_questions = set()
+            current_question_number = 1
 
-                # 🎯 Adjust rounding to match total exactly
-                diff = total_questions_to_generate - sum(scaled_quiz_type.values())
-                if diff != 0:
-                    key_to_adjust = max(scaled_quiz_type, key=scaled_quiz_type.get)
-                    scaled_quiz_type[key_to_adjust] += diff
-            else:
-                    # Fallback if just a string like "easy"
-                scaled_quiz_type = {quiz.quiz_type: total_questions_to_generate}
+            # Determine question types to generate
+            question_types_to_generate = self.QUESTION_TYPES_ROTATION if quiz.question_type == 'mixed' else [quiz.question_type]
+            type_index = 0
 
-            logger.info(f"Final scaled difficulty distribution: {scaled_quiz_type}")
+            for page_num, page_content in pages:
+                if len(questions) >= target_questions:
+                    logger.info(f"Reached target of {target_questions} questions. Stopping generation.")
+                    break
 
-            # Generate questions with page-specific context
-            questions = self.generate_questions_from_text(
-                extracted_text,
-                question_type=quiz.question_type,
-                quiz_type=scaled_quiz_type, 
-                num_questions=total_questions_to_generate
-            )
+                q_type = question_types_to_generate[type_index % len(question_types_to_generate)]
+                type_index += 1
+
+                logger.info(f"Generating one '{q_type}' question from page {page_num}")
+
+                # Use _generate_question_batch to get one question
+                batch = self._generate_question_batch(
+                    client=openai_client,
+                    text=page_content,
+                    question_type=q_type,
+                    quiz_type=quiz.quiz_type, # Use original difficulty, not scaled dict
+                    num_questions=1,
+                    existing_questions=existing_questions,
+                    start_question_number=current_question_number,
+                    override_source_page=page_num
+                )
+
+                if batch:
+                    new_question = batch[0]
+                    questions.append(new_question)
+                    current_question_number += 1
+                    logger.info(f"Successfully generated question #{len(questions)} from page {page_num}")
+                else:
+                    logger.warning(f"Could not generate a valid question from page {page_num}. Trying next page.")
+
+            # Trim questions to the exact target number
+            if len(questions) > target_questions:
+                questions = questions[:target_questions]
 
             if not questions:
                 logger.error("Question generation failed - no questions returned")

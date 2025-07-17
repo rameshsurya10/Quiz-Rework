@@ -97,8 +97,8 @@ class DepartmentSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True)
     last_modified_at = serializers.DateTimeField(read_only=True)
     teacher_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
-    section = serializers.CharField(write_only=True, required=False, allow_null=True)
-    class_name = serializers.CharField(write_only=True, required=False, allow_null=True)
+    section = serializers.CharField(required=False, allow_null=True)
+    class_name = serializers.CharField(required=False, allow_null=True)
     
     class Meta:
         model = Department

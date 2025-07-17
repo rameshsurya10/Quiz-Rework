@@ -2,6 +2,8 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.contrib.postgres.fields import JSONField
+
 
 User = get_user_model()
 
@@ -88,8 +90,8 @@ class Question(models.Model):
         db_column='quiz_id'
     )
     # question = models.TextField()
-    # question = models.JSONField()
-    question = models.TextField(blank=True, null=True) 
+    question = models.JSONField()
+    # question = models.TextField(blank=True, null=True) 
     question_type = models.CharField(max_length=50)
     difficulty = models.CharField(max_length=50)
     options = models.JSONField(null=True, blank=True)
