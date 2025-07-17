@@ -409,14 +409,15 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         return QuizSerializer
     
     def retrieve(self, request, *args, **kwargs):
-        """Retrieve quiz with limited questions and show extra ones in additional_question_list"""
+        """Retrieve a quiz and list structured questions from JSON field."""
         instance = self.get_object()
+        from datetime import datetime, timedelta
         serializer = self.get_serializer(instance)
         data = serializer.data
         user = request.user
-        role = getattr(user, 'role', None)
-        from datetime import timedelta
-        # Restrict student access based on time
+        role = getattr(user, 'role', '').upper()
+
+        # 🚫 Restrict access time for STUDENT role
         if role == 'STUDENT':
             student = Student.objects.filter(email=user.email, is_deleted=False).first()
             now = datetime.now()
@@ -430,75 +431,69 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                     "message": f"⏳ Quiz is not available right now. Please check your scheduled quiz time in your local timezone: {quiz_time}."
                 }, status=403)
 
+        # 📥 Fetch and prepare all questions
         all_questions = Question.objects.filter(quiz=instance).order_by('question_id')
         max_questions = instance.no_of_questions or 0
 
-        def extract_individual_questions(q, role):
-            """Extracts individual questions with role-based field visibility."""
+        def clean_question_data(item, question_id):
+            """Clean a single question item based on role."""
+            base = {
+                "question_id": question_id,
+                "question_number": item.get("question_number", ""),
+                "question_type": item.get("type", "mcq"),
+                "question": item.get("question", ""),
+                "options": item.get("options", {}) if item.get("type") == "mcq" else {},
+                "column_left_labels": item.get("column_left_labels", {}),
+                "column_right_labels": item.get("column_right_labels", {}),
+            }
+
+            if role != "STUDENT":
+                base.update({
+                    "correct_answer": item.get("correct_answer", ""),
+                    "explanation": item.get("explanation", ""),
+                    "source_page": item.get("source_page", ""),
+                })
+
+            return base
+
+        def extract_questions(q):
+            """Parse question field (could be JSON string, dict, or list)."""
             result = []
-
-            def clean_question(item, question_id):
-                question_data = {
-                    "question_id": question_id,
-                    "question_type": item.get("type", "mcq"),
-                    "question": item.get("question", ""),
-                    "options": item.get("options", {}) if item.get("type") == "mcq" else {},
-                    "question_number": item.get("question_number", ""),
-                    "column_left_labels": item.get("column_left_labels", {}),
-                    "column_right_labels": item.get("column_right_labels", {}),
-                }
-
-                # Only show these fields if user is not a student
-                if role != "STUDENT":
-                    question_data["correct_answer"] = item.get("correct_answer", "")
-                    question_data["explanation"] = item.get("explanation", "")
-                    question_data["source_page"] = item.get("source_page", "")
-
-                return question_data
-
             try:
-                if q.question_type == 'mixed' or isinstance(q.question, str):
-                    parsed = json.loads(q.question)
+                question_data = q.question
+                if isinstance(question_data, str):
+                    question_data = json.loads(question_data)
 
-                    if isinstance(parsed, list):
-                        for item in parsed:
-                            result.append(clean_question(item, q.question_id))
-                    elif isinstance(parsed, dict):
-                        result.append(clean_question(parsed, q.question_id))
-                else:
-                    item = {
-                        "type": q.question_type,
-                        "question": q.question,
-                        "options": q.options or {},
-                        "correct_answer": q.correct_answer or "",
-                        "explanation": q.explanation or "",
-                        "source_page": "",
-                        "column_left_labels": {},
-                        "column_right_labels": {},
-                    }
-                    result.append(clean_question(item, q.question_id))
-
-            except json.JSONDecodeError:
-                pass  # Invalid JSON
+                if isinstance(question_data, list):
+                    for item in question_data:
+                        result.append(clean_question_data(item, q.question_id))
+                elif isinstance(question_data, dict):
+                    result.append(clean_question_data(question_data, q.question_id))
+            except (ValueError, TypeError, json.JSONDecodeError):
+                pass  # skip if not valid JSON
 
             return result
 
-        # 🔄 Flatten all questions with role-based visibility
-        flattened_questions = []
+        # 🧾 Flatten all parsed questions
+        flattened = []
         for q in all_questions:
-            flattened_questions.extend(extract_individual_questions(q, role))
+            flattened.extend(extract_questions(q))
 
-        # 📤 Split current vs additional
-        current_questions = flattened_questions[:max_questions]
-        additional_questions = flattened_questions[max_questions:]
+        # ✂️ Split current vs additional questions
+        current_questions = flattened[:max_questions]
+        additional_questions = flattened[max_questions:]
 
-        # 📦 Final structured response
-        data["current_questions"] = current_questions
-        data["additional_question_list"] = additional_questions
-        data["total_questions"] = len(flattened_questions)
-        data["returned_questions"] = len(current_questions)
-        data["balance_questions"] = len(additional_questions)
-        data.pop("questions", None)  # Remove serialized .questions field if present
+        # 📤 Final response structure
+        data.update({
+            "current_questions": current_questions,
+            "additional_question_list": additional_questions,
+            "total_questions": len(flattened),
+            "returned_questions": len(current_questions),
+            "balance_questions": len(additional_questions),
+        })
+
+        # Remove raw questions field if it's just a JSON string
+        data.pop("questions", None)
 
         return Response(data)
         
@@ -757,70 +752,74 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
 class QuizQuestionGenerateView(APIView):
     """
-    API endpoint to generate questions for a quiz using OpenAI and LangGraph
+    API endpoint to generate questions for a quiz. 
+    This now uses the centralized DocumentProcessingService.
     """
     permission_classes = [permissions.IsAuthenticated]
 
-    def get(self, request, quiz_id):
-        import openai
-        import os
-        try:
-            from langgraph.graph import Graph
-        except ImportError:
-            return Response({"error": "LangGraph not installed."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Set OpenAI API key (for openai>=1.0.0, pass to client)
-        api_key = os.environ.get('OPENAI_API_KEY')
-        if not api_key:
-            return Response({"error": "OpenAI API key not set in environment."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        client = openai.OpenAI(api_key=api_key)
-
+    def post(self, request, quiz_id):
+        # Step 1: Retrieve the quiz object
         quiz = get_object_or_404(Quiz, quiz_id=quiz_id)
-        if not quiz.uploadedfiles or len(quiz.uploadedfiles) == 0:
-            return Response({"error": "No uploaded files found for this quiz."}, status=status.HTTP_404_NOT_FOUND)
 
-        # For simplicity, use the first uploaded file
-        file_info = quiz.uploadedfiles[0]
-        file_path = file_info.get('path')
-        if not file_path:
-            return Response({"error": "File path not found in uploaded file info."}, status=status.HTTP_404_NOT_FOUND)
+        # Step 2: Get parameters from the request body
+        num_questions = request.data.get('num_questions', 10)
+        quiz_type = request.data.get('quiz_type', 'mixed')  # 'mixed', 'mcq', etc.
+        question_type = request.data.get('question_type', 'mcq') # Fallback for non-mixed
 
-        # Try to read the file content (always look in backend/upload/)
-        abs_file_path = os.path.join(settings.BASE_DIR, 'backend', file_path)
-        if not os.path.exists(abs_file_path):
-            return Response({"error": f"File does not exist on server: {abs_file_path}"}, status=status.HTTP_404_NOT_FOUND)
-        import os
-        file_ext = os.path.splitext(abs_file_path)[1].lower()
-        try:
-            if file_ext == '.pdf':
-                from pypdf import PdfReader
-                pdf = PdfReader(abs_file_path)
-                file_content = "\n".join(page.extract_text() or '' for page in pdf.pages)
-            elif file_ext == '.txt':
-                with open(abs_file_path, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
+        # Step 3: Find the associated document and extract its text
+        # This assumes the document text is stored in a related model or needs to be extracted
+        # from a file. For this example, we'll look for a Document associated with the quiz.
+        document = Document.objects.filter(quiz=quiz).first()
+        if not document or not document.extracted_text:
+            # As a fallback, try to extract text from the first uploaded file if not already processed
+            if quiz.uploadedfiles and len(quiz.uploadedfiles) > 0:
+                try:
+                    service = DocumentProcessingService()
+                    # This is a simplified call; in a real scenario, you might need the file object
+                    # For now, we assume the text can be extracted or is already there.
+                    # This part might need more robust implementation based on file storage.
+                    # Let's assume the text is in `document.extracted_text` for now.
+                    return Response({"error": "Document text not processed. Please upload the document again."}, status=status.HTTP_400_BAD_REQUEST)
+                except Exception as e:
+                    return Response({"error": f"Could not process document: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             else:
-                return Response({"error": f"Unsupported file type: {file_ext}"}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({"error": f"Could not read file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({"error": "No document or extracted text found for this quiz."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Use OpenAI to generate questions
+        file_content = document.extracted_text
+
+        # Step 4: Use the DocumentProcessingService to generate questions
         try:
-            prompt = f"Generate 5 quiz questions based on the following content:\n{file_content}"
-            client = openai.OpenAI()
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "system", "content": "You are a quiz generator."},
-                          {"role": "user", "content": prompt}]
+            service = DocumentProcessingService()
+            generated_questions = service.generate_questions_from_text(
+                text=file_content,
+                question_type=question_type,
+                quiz_type=quiz_type,
+                num_questions=num_questions
             )
-            questions = response.choices[0].message.content
-        except Exception as e:
-            return Response({"error": f"OpenAI API error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+            if not generated_questions:
+                return Response({"error": "Failed to generate questions. The document might not have enough content."}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            logger.error(f"Error during question generation for quiz {quiz_id}: {str(e)}")
+            return Response({"error": f"An error occurred during question generation: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Step 5: Save the generated questions to the quiz
+        # This assumes `quiz.questions` is a JSONField or similar
+        if isinstance(quiz.questions, list):
+            # Append new questions to existing ones if needed, or replace
+            quiz.questions.extend(generated_questions)
+        else:
+            quiz.questions = generated_questions
+        
+        quiz.save()
+
+        # Step 6: Return the newly generated questions
         return Response({
             "quiz_id": quiz.quiz_id,
-            "questions": questions
-        })
+            "message": f"{len(generated_questions)} questions generated and saved successfully.",
+            "questions": generated_questions
+        }, status=status.HTTP_200_OK)
 
 class QuizPublishView(APIView):
     """
