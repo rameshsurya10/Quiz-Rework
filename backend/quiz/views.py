@@ -37,7 +37,8 @@ from documents.models import Document, DocumentVector
 
 from documents.services import DocumentProcessingService
 from django.utils.dateparse import parse_datetime
-from supabase import create_client, Client
+from supabase import create_client, Client, ClientOptions
+import httpx
 from quiz.utils import *
 from openai import OpenAI
 from django.utils import timezone
@@ -86,7 +87,10 @@ class QuizFileUploadView(APIView):
 
             # ✅ Upload to Supabase
             file_path = f"{quiz.quiz_id}/{new_file_name}"
-            supa = create_client(supabase_url, supabase_key)
+            # Set a longer timeout for the upload
+            timeout = httpx.Timeout(60.0, connect=10.0)  # 60s read, 10s connect
+            client_options = ClientOptions(httpx_client=httpx.Client(timeout=timeout))
+            supa = create_client(supabase_url, supabase_key, options=client_options)
             supa.storage.from_("fileupload").upload(file_path, compressed_file_data.read())
 
             # Reset pointer before processing
@@ -565,20 +569,21 @@ class QuizRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
             # 4. Add new questions to the same `mixed` question row
             if add_question:
-                mixed_q = existing_questions.filter(question_type="mixed").first()
+                # Try to get existing mixed question for this quiz
+                mixed_q = Question.objects.filter(quiz=quiz, question_type="mixed").first()
 
-                if mixed_q:
-                    try:
-                        existing_q_data = json.loads(mixed_q.question)
-                        if not isinstance(existing_q_data, list):
-                            existing_q_data = [existing_q_data]
-                    except Exception:
-                        existing_q_data = []
-                else:
-                    # Edge case: if mixed question does not exist, create it ONCE
+                if not mixed_q:
+                    # Create one only if it doesn't exist
                     mixed_q = Question.objects.create(
                         quiz=quiz, question_type="mixed", question="[]"
                     )
+
+                # Ensure it's a list even if originally a single dict
+                try:
+                    existing_q_data = json.loads(mixed_q.question)
+                    if not isinstance(existing_q_data, list):
+                        existing_q_data = [existing_q_data]
+                except Exception:
                     existing_q_data = []
 
                 for new_q in incoming_questions:
@@ -918,7 +923,7 @@ class QuizPublishView(APIView):
 
                                 <div class="info-box">
                                     <strong>Quiz Title:</strong> {quiz.title}<br>
-                                    <strong>Assigned On:</strong> {quiz.published_at.strftime('%Y-%m-%d %I:%M %p')}
+                                    <strong>Assigned On:</strong> {quiz.quiz_date.strftime('%Y-%m-%d %I:%M %p')}
                                 </div>
 
                                 <p>👉 Copy the link below to join your quiz:</p>

@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from datetime import datetime, date
 from .models import Question
 import json
+from dateutil import parser
 
 User = get_user_model()
 
@@ -22,63 +23,18 @@ class FileUploadSerializer(serializers.Serializer):
     file_size = serializers.IntegerField(required=False)
 
 class CustomDateTimeField(serializers.DateTimeField):
-    def to_internal_value(self, data):
-        # Simple approach - try a few common formats
-        formats = [
-            '%Y-%m-%dT%H:%M',       # 2025-07-01T10:30
-            '%Y-%m-%d %H:%M',       # 2025-07-01 10:30
-            '%Y-%m-%d',             # 2025-07-01
-        ]
-        
-        # Try standard formats first
-        for fmt in formats:
-            try:
-                dt = datetime.strptime(data, fmt)
-                return timezone.make_aware(dt, timezone=timezone.get_current_timezone())
-            except (ValueError, TypeError):
-                pass
-        
-        # Special handling for AM/PM formats
+    def to_internal_value(self, value):
+        if value is None:
+            return None
         try:
-            # Handle formats like "2025-07-01T10:30AM" or "2025-07-01T10:30PM"
-            if 'T' in data:
-                date_part, time_part = data.split('T', 1)
-                
-                # Check for AM/PM indicators
-                time_only = time_part
-                am_pm = None
-                
-                if 'AM' in time_part:
-                    time_only = time_part.replace('AM', '')
-                    am_pm = 'AM'
-                elif 'PM' in time_part:
-                    time_only = time_part.replace('PM', '')
-                    am_pm = 'PM'
-                elif 'am' in time_part.lower():
-                    time_only = time_part.lower().replace('am', '')
-                    am_pm = 'AM'
-                elif 'pm' in time_part.lower():
-                    time_only = time_part.lower().replace('pm', '')
-                    am_pm = 'PM'
-                
-                if am_pm:
-                    # Make sure time_only is properly formatted (e.g., "10:30")
-                    if ':' not in time_only:
-                        # Handle case where time might be "1030" without a colon
-                        if len(time_only.strip()) == 4:
-                            time_only = f"{time_only[:2]}:{time_only[2:]}"
-                        else:
-                            raise ValueError("Invalid time format")
-                    
-                    # Format the datetime string
-                    formatted_data = f"{date_part} {time_only.strip()} {am_pm}"
-                    dt = datetime.strptime(formatted_data, '%Y-%m-%d %I:%M %p')
-                    return timezone.make_aware(dt, timezone=timezone.get_current_timezone())
-        except Exception as e:
-            print(f"Error parsing date: {str(e)}")
-        
-        # If all parsing attempts fail, raise an error
-        raise serializers.ValidationError("Invalid date format. Please use YYYY-MM-DDTHH:MM or YYYY-MM-DDTHH:MMAM/PM format.")
+            # Use dateutil.parser to flexibly parse the date string
+            dt = parser.parse(value)
+            # Make the datetime object timezone-aware if it's naive
+            if timezone.is_naive(dt):
+                return timezone.make_aware(dt)
+            return dt
+        except (ValueError, TypeError):
+            raise serializers.ValidationError(f"'{value}' has an invalid date format.")
 
 class SlimQuestionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -254,6 +210,7 @@ class AvailableQuizSerializer(serializers.ModelSerializer):
         ]
 
 class QuizCreateSerializer(serializers.Serializer):
+    quiz_date = CustomDateTimeField(required=False)
     """Serializer for quiz creation, handling specific payload keys."""
     quiz_id = serializers.IntegerField(read_only=True)
     title = serializers.CharField(max_length=255)

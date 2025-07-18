@@ -390,13 +390,13 @@ class DocumentProcessingService:
     def process_single_document(self, uploaded_file, quiz, user, page_range=None):
         """
         Process a single uploaded file, generate questions, and associate with a quiz.
-        
+
         Args:
             uploaded_file: The uploaded file object
             quiz: Quiz instance to associate document with
             user: User who uploaded the file
             page_range: Optional string specifying page ranges (e.g., "1-5,7,10-15") or single page number (e.g., "3")
-            
+
         Returns:
             Dict containing processing results
         """
@@ -404,7 +404,8 @@ class DocumentProcessingService:
         import logging
         from .utils import _extract_text_from_pdf_content, _parse_page_ranges_str
         logger = logging.getLogger(__name__)
-        
+
+        document = None  # Initialize document to None
         try:
             # Step 1: Create a Document record
             logger.info(f"Creating document record for {uploaded_file.name}")
@@ -425,86 +426,44 @@ class DocumentProcessingService:
             supabase = create_client(supabase_url, supabase_key)
             file_path = f"{quiz.quiz_id}/{uploaded_file.name}"
             file_data = supabase.storage.from_("fileupload").download(file_path)
-            
+
             # Get total pages for validation
             from pypdf import PdfReader
             import io
             pdf_reader = PdfReader(io.BytesIO(file_data))
             total_pages = len(pdf_reader.pages)
             logger.info(f"PDF has {total_pages} total pages")
-            
+
             # Validate page ranges if provided
             if page_range:
                 validation_result = validate_page_range(page_range, total_pages)
                 if not validation_result['valid']:
-                    logger.error(f"Page validation failed: {validation_result['message']}")
-                    document.processing_status = 'failed'
-                    document.processing_error = validation_result['message']
-                    document.save()
-                    return {"success": False, "error": validation_result['message']}
-                
-                # Use adjusted ranges if available
+                    raise ValueError(validation_result['message'])
                 page_range = validation_result['adjusted_ranges'] or page_range
                 logger.info(f"Using validated page range: {page_range}")
-            
-            # Parse page ranges first
+
+            # Parse page ranges
             page_ranges = _parse_page_ranges_str(page_range) if page_range else None
             logger.info(f"Parsed page ranges: {page_ranges}")
-            
-            # Extract text using the PDF-specific function with page ranges
+
+            # Extract text
             logger.info(f"Extracting text with page range: {page_range}")
             extracted_text = _extract_text_from_pdf_content(file_data, page_ranges)
-            
             if not extracted_text or extracted_text.startswith('[Error'):
-                logger.error("Text extraction failed - no text extracted")
-                document.processing_status = 'failed'
-                document.processing_error = 'Failed to extract text from file.'
-                document.save()
-                return {"success": False, "error": "Failed to extract text."}
+                raise ValueError('Failed to extract text from file.')
 
-            # Validate that text contains page markers for the requested pages
-            if page_range:
-                # Check if the extracted text contains the requested page content
-                requested_pages = []
-                if page_ranges:
-                    for page_item in page_ranges:
-                        if isinstance(page_item, tuple):
-                            start, end = page_item
-                            requested_pages.extend(range(start, end + 1))
-                        else:
-                            requested_pages.append(page_item)
-                
-                # Verify that at least one requested page has content
-                found_pages = []
-                for page_num in requested_pages:
-                    if f"==================== PAGE {page_num} ====================" in extracted_text:
-                        found_pages.append(page_num)
-                
-                if not found_pages:
-                    logger.error(f"No content found for requested pages: {page_range}")
-                    document.processing_status = 'failed'
-                    document.processing_error = f'No content found for requested pages: {page_range}'
-                    document.save()
-                    return {"success": False, "error": f"No content found for requested pages: {page_range}"}
-                
-                logger.info(f"Successfully found content for pages: {found_pages}")
-
-            # Clean the extracted text but preserve page markers for question generation
             document.extracted_text = extracted_text
             document.save()
-            logger.info(f"Successfully extracted {len(extracted_text)} characters of text from specified pages")
+            logger.info(f"Successfully extracted {len(extracted_text)} characters of text.")
 
-            # Step 3: Generate questions from the extracted text, one per page
-            target_questions = quiz.no_of_questions or 5
+            # Step 3: Generate questions
+            # Add 5 additional questions as requested
+            target_questions = (quiz.no_of_questions or 0) + 5
             logger.info(f"Targeting {target_questions} questions for quiz {quiz.quiz_id}")
 
             pages = self._split_text_by_page(extracted_text)
             if not pages:
-                logger.error("Could not split extracted text into pages.")
-                document.processing_status = 'failed'
-                document.processing_error = 'Failed to parse pages from extracted text.'
-                document.save()
-                return {"success": False, "error": "Failed to parse pages from text."}
+                raise ValueError('Failed to parse pages from extracted text.')
 
             logger.info(f"Split text into {len(pages)} pages. Randomizing for question generation.")
             random.shuffle(pages)
@@ -512,27 +471,23 @@ class DocumentProcessingService:
             questions = []
             existing_questions = set()
             current_question_number = 1
-
-            # Determine question types to generate
             question_types_to_generate = self.QUESTION_TYPES_ROTATION if quiz.question_type == 'mixed' else [quiz.question_type]
             type_index = 0
 
             for page_num, page_content in pages:
                 if len(questions) >= target_questions:
-                    logger.info(f"Reached target of {target_questions} questions. Stopping generation.")
+                    logger.info(f"Reached target of {target_questions} questions.")
                     break
 
                 q_type = question_types_to_generate[type_index % len(question_types_to_generate)]
                 type_index += 1
 
                 logger.info(f"Generating one '{q_type}' question from page {page_num}")
-
-                # Use _generate_question_batch to get one question
                 batch = self._generate_question_batch(
                     client=openai_client,
                     text=page_content,
                     question_type=q_type,
-                    quiz_type=quiz.quiz_type, # Use original difficulty, not scaled dict
+                    quiz_type=quiz.quiz_type,
                     num_questions=1,
                     existing_questions=existing_questions,
                     start_question_number=current_question_number,
@@ -540,12 +495,47 @@ class DocumentProcessingService:
                 )
 
                 if batch:
-                    new_question = batch[0]
-                    questions.append(new_question)
-                    current_question_number += 1
+                    questions.extend(batch)
+                    current_question_number += len(batch)
                     logger.info(f"Successfully generated question #{len(questions)} from page {page_num}")
-                else:
-                    logger.warning(f"Could not generate a valid question from page {page_num}. Trying next page.")
+
+            if len(questions) > target_questions:
+                questions = questions[:target_questions]
+
+            if not questions:
+                raise ValueError('Failed to generate any questions from the text.')
+
+            # Step 4: Save questions
+            logger.info(f"Saving {len(questions)} questions to the database.")
+            Question.objects.create(
+                quiz=quiz,
+                document=document,
+                question=json.dumps(questions),
+                question_type=quiz.question_type,
+                difficulty=quiz.quiz_type,
+                created_by=user.email
+            )
+
+            document.is_processed = True
+            document.processing_status = 'success'
+            document.storage_path = f"{quiz.quiz_id}/{uploaded_file.name}"
+            document.save()
+
+            return {
+                "success": True,
+                "document_id": document.id,
+                "questions_generated": len(questions),
+                "pages_processed": page_range,
+                "page_ranges_used": str(page_ranges) if page_ranges else "all",
+            }
+
+        except Exception as e:
+            logger.error(f"Error processing document {uploaded_file.name}: {str(e)}", exc_info=True)
+            if document:
+                document.processing_status = 'failed'
+                document.processing_error = str(e)
+                document.save()
+            return {"success": False, "error": str(e)}
 
             # Trim questions to the exact target number
             if len(questions) > target_questions:
