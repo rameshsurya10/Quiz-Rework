@@ -115,30 +115,52 @@ class DocumentProcessingService:
             'updated_at': document.updated_at,
         }
 
-    def shuffle_match_right_labels(column_left_labels, column_right_labels, correct_answer):
+    @staticmethod
+    def _finalize_match_question(q: dict) -> dict:
         """
-        Shuffle only the values of column_right_labels.
-        Then remap correct_answer using values instead of keys.
+        Finalizes a 'match' question by shuffling the right column, remapping the
+        correct answer to a key-based format, and populating the options field.
         """
-        # Extract original right values
-        right_values = list(column_right_labels.values())
-        random.shuffle(right_values)
+        left_labels = q.get("column_left_labels", {})
+        right_labels = q.get("column_right_labels", {})
+        correct_answer_from_ai = q.get("correct_answer", {})
 
-        # Build new right column with shuffled values
-        shuffled_column_right = {str(i + 1): val for i, val in enumerate(right_values)}
+        if not all([left_labels, right_labels, correct_answer_from_ai]):
+            logger.warning(f"Skipping finalization for invalid match question: {q}")
+            return q
 
-        # Reverse map of new right column: value -> new key
-        value_to_key = {v: k for k, v in shuffled_column_right.items()}
+        # --- Create value-to-key mappings for robust lookups ---
+        left_value_to_key = {v: k for k, v in left_labels.items()}
+        right_value_to_key = {v: k for k, v in right_labels.items()}
 
-        # Build new correct_answer mapping actual terms
-        new_correct_answer = {}
-        for left_key, left_term in column_left_labels.items():
-            original_right_value = correct_answer.get(left_term)
-            if original_right_value not in value_to_key:
-                continue  # skip if unmatched
-            new_correct_answer[left_term] = original_right_value
+        # --- Shuffle the right column labels ---
+        shuffled_right_values = list(right_labels.values())
+        random.shuffle(shuffled_right_values)
+        shuffled_right_labels = {str(i + 1): val for i, val in enumerate(shuffled_right_values)}
+        shuffled_right_value_to_key = {v: k for k, v in shuffled_right_labels.items()}
 
-        return shuffled_column_right, new_correct_answer
+        # --- Standardize the correct_answer to a value-to-value format ---
+        final_correct_answer = {}
+        for left_key, left_value in left_labels.items():
+            # Find the AI's answer for the current left item.
+            # It could be keyed by the left-side key ('A') or the left-side value ('Term A').
+            ai_answer = correct_answer_from_ai.get(left_key) or correct_answer_from_ai.get(left_value)
+
+            if ai_answer:
+                # Determine the correct right-side *value*.
+                # If the AI gave a key (e.g., "4"), look up its value in the original right_labels.
+                # If the AI gave a value (e.g., "Precipitation reaction"), use it directly.
+                correct_right_value = right_labels.get(ai_answer, ai_answer)
+
+                # Map the left-side value to the correct right-side value.
+                final_correct_answer[left_value] = correct_right_value
+
+        q["column_right_labels"] = shuffled_right_labels
+        q["correct_answer"] = final_correct_answer
+        q["options"] = shuffled_right_labels  # Populate options with the shuffled right column
+
+        logger.info(f"Finalized match question. New correct_answer: {final_correct_answer}")
+        return q
 
     def generate_questions_from_text(self, text, question_type, quiz_type, num_questions, existing_questions: set = None):
         import math
@@ -376,6 +398,11 @@ class DocumentProcessingService:
                     q['question_number'] = start_question_number + i
                     if 'source_page' not in q or not q['source_page']:
                         q['source_page'] = primary_page
+
+                    # Finalize and standardize 'match' questions after generation
+                    if q.get("type") == "match":
+                        q = self._finalize_match_question(q)
+
                     final_questions.append(q)
                     existing_questions.add(question_text)
                 else:
